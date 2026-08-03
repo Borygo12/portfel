@@ -150,8 +150,6 @@
   <div class="brand">News<span>Trader</span></div>
   <a class="navlink active" href="/bot">Panel</a>
   <a class="navlink" href="/earnings">Earnings</a>
-  <a class="navlink" href="/trades">Tready <span id="nav-trades-count"></span></a>
-  <a class="navlink" href="/backtest">Backtesty</a>
   <a class="navlink" href="/live">Wystąpienia na żywo</a>
   <a class="navlink" href="/brain">🧠 Mózg AI</a>
   <a class="navlink" href="/settings">Ustawienia</a>
@@ -164,37 +162,24 @@
   <div class="hero">
     <div class="card">
       <h2>Sterowanie</h2>
-      <div style="margin-bottom:12px">
-        <label style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);display:block;margin-bottom:5px">Konto brokera</label>
-        <select id="account-select" onchange="switchAccount(this.value)"
-          style="width:100%;background:var(--elev);border:1px solid var(--border2);color:var(--text);border-radius:9px;padding:9px 11px;font-size:13px;font-weight:600">
-          <option value="saxo_demo">🟡 Saxo — DEMO (test)</option>
-          <option value="saxo_live">🔴 Saxo — LIVE (realne)</option>
-          <option value="xm_demo">🟡 XM — DEMO</option>
-          <option value="xm_live">🔴 XM — LIVE</option>
-        </select>
-        <div style="font-size:10.5px;color:var(--dim);margin-top:5px">Zmiana konta wraca do trybu obserwacji.</div>
-      </div>
       <button id="power" class="power start" onclick="togglePower()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
         <span id="power-label">START</span>
       </button>
-      <div class="obs-toggle">
-        <span>Tryb obserwacji<br><small style="color:var(--dim)">analizuj i pokazuj, ale nie handluj</small></span>
-        <label class="switch"><input type="checkbox" id="observe"><span class="slider-ui"></span></label>
-      </div>
-
       <div class="leds">
         <div class="led-row"><span id="led-bot" class="led"></span><span class="led-label">Bot</span><span id="led-bot-v" class="led-val">—</span></div>
-        <div class="led-row"><span id="led-broker" class="led"></span><span class="led-label">Broker</span><span id="led-broker-v" class="led-val">—</span></div>
         <div class="led-row"><span id="led-mode" class="led"></span><span class="led-label">Tryb</span><span id="led-mode-v" class="led-val">—</span></div>
       </div>
     </div>
 
     <div class="card">
-      <h2>Konto</h2>
-      <div class="acct" id="acct"><div class="empty">łączenie z brokerem…</div></div>
-      <div style="margin-top:16px" class="poslist" id="pos-mini"></div>
+      <h2>Co się działo z kursem po analizach</h2>
+      <div class="acct" id="acct"><div class="empty">jeszcze bez pomiarów</div></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:14px;line-height:1.5">
+        Bot zapisuje kurs w chwili analizy i sprawdza go ponownie po godzinie i po dniu.
+        „Zgodnych" znaczy tyle, że kurs poszedł w stronę wydźwięku wiadomości — to opis
+        tego, co się stało, nie ocena żadnej rekomendacji.
+      </div>
     </div>
   </div>
 
@@ -203,21 +188,15 @@
     <div>
       <div class="card" style="margin-bottom:18px">
         <h2>Szybkie parametry</h2>
-        <div class="param"><label>Agresywność portfela <output id="o-agg"></output></label>
-          <input type="range" id="p-agg" min="0" max="100" step="5"></div>
-        <div class="param"><label>Próg siły sygnału <output id="o-strength"></output></label>
+        <div class="param"><label>Próg siły wydźwięku <output id="o-strength"></output></label>
           <input type="range" id="p-strength" min="30" max="95" step="5"></div>
-        <div class="param"><label>% kapitału na pozycję <output id="o-pct"></output></label>
-          <input type="range" id="p-pct" min="5" max="50" step="5"></div>
-        <div class="param"><label>Dźwignia (auto-limit brokera) <output id="o-lev"></output></label>
-          <input type="range" id="p-lev" min="1" max="30" step="1"></div>
         <button class="btn btn-save" onclick="saveParams()">Zapisz parametry</button>
         <div style="font-size:11px;color:var(--dim);margin-top:8px">Pełne ustawienia → <a href="/settings" style="color:var(--accent)">Ustawienia</a></div>
       </div>
       <div class="card">
         <h2>Awaryjne</h2>
-        <button class="btn btn-kill" onclick="kill()">KILL SWITCH — zamknij wszystko</button>
-        <button class="btn btn-resume" id="btn-resume" onclick="resume()" style="display:none">Wznów po kill switchu</button>
+        <button class="btn btn-kill" onclick="kill()">STOP AWARYJNY — zatrzymaj nasłuch</button>
+        <button class="btn btn-resume" id="btn-resume" onclick="resume()" style="display:none">Wznów nasłuch</button>
       </div>
       <div class="card" style="margin-top:18px">
         <h2>Źródła informacji (nasłuch)</h2>
@@ -229,11 +208,18 @@
 
     <div class="card">
       <div class="feed-head">
-        <h2>Strumień newsów i decyzje bota</h2>
+        <h2>Strumień newsów i analizy</h2>
         <span class="live-dot"><span id="feed-led" class="led"></span> <span id="feed-status">bezczynny</span></span>
       </div>
-      <div class="feed" id="feed"><div class="empty">Kliknij START, aby bot zaczął nasłuchiwać newsów.<br>Każdy wykryty news pojawi się tutaj z decyzją: BUY / SHORT / SKIP, wynikiem i uzasadnieniem.</div></div>
+      <div class="feed" id="feed"><div class="empty">Kliknij START, aby bot zaczął nasłuchiwać newsów.<br>Każdy wykryty news pojawi się tutaj z wydźwiękiem, siłą i uzasadnieniem.</div></div>
     </div>
+  </div>
+  <div style="margin-top:22px;padding:14px 16px;border:1px solid var(--border2);border-radius:12px;
+              color:var(--dim);font-size:11.5px;line-height:1.6">
+    Materiał ma charakter wyłącznie informacyjny i edukacyjny. Nie stanowi porady inwestycyjnej,
+    rekomendacji ani oferty kupna lub sprzedaży jakichkolwiek instrumentów finansowych.
+    Analizy przygotowuje model językowy i mogą zawierać błędy. Decyzje inwestycyjne podejmujesz
+    na własną odpowiedzialność.
   </div>
 </main>
 <div id="toast"></div>
@@ -245,10 +231,7 @@ const esc = t => { const d = document.createElement("div"); d.textContent = t ==
 let running = false, paramsLoaded = false;
 
 const sliders = [
-  ["p-agg", "o-agg", "aggressiveness", v => v >= 70 ? v + " · grubo" : v >= 40 ? v + " · średnio" : v + " · z wyczuciem"],
   ["p-strength", "o-strength", "min_signal_strength", v => v],
-  ["p-pct", "o-pct", "position_pct_of_equity", v => v + "%"],
-  ["p-lev", "o-lev", "max_leverage", v => v + "x"],
 ];
 sliders.forEach(([sid, oid, , show]) => $(sid).addEventListener("input", () => $(oid).textContent = show($(sid).value)));
 
@@ -274,43 +257,27 @@ async function refresh() {
   $("led-bot-v").textContent = running ? "DZIAŁA" : "ZATRZYMANY";
   $("led-bot-v").style.color = running ? "var(--green)" : "var(--red)";
 
-  const bconn = s.broker.connected;
-  setLed($("led-broker"), bconn ? (s.broker.demo ? "amber" : "green") : "red", true, false);
-  $("led-broker-v").textContent = bconn ? (s.broker.demo ? "DEMO" : "LIVE") : "BRAK";
-  $("led-broker-v").style.color = bconn ? (s.broker.demo ? "var(--amber)" : "var(--green)") : "var(--red)";
-  if (s.broker.account && document.activeElement !== $("account-select")) $("account-select").value = s.broker.account;
-
   let modeCls, modeTxt;
   if (p.kill_switch) { modeCls = "red"; modeTxt = "KILL SWITCH"; }
   else if (!running) { modeCls = ""; modeTxt = "OFFLINE"; }
-  else if (p.trading_enabled) { modeCls = "green"; modeTxt = "HANDEL NA ŻYWO"; }
-  else { modeCls = "amber"; modeTxt = "OBSERWACJA"; }
+  else { modeCls = "green"; modeTxt = "NASŁUCH I ANALIZA"; }
   setLed($("led-mode"), modeCls, !!modeCls, false);
   $("led-mode-v").textContent = modeTxt;
   $("btn-resume").style.display = p.kill_switch ? "block" : "none";
 
-  // konto
-  $("acct").innerHTML = bconn ? `
-    <div class="kpi"><div class="k">Saldo</div><div class="v num">${fmt(s.account.balance)} <small style="font-size:12px;color:var(--muted)">${s.account.currency||""}</small></div></div>
-    <div class="kpi"><div class="k">Dostępne</div><div class="v num">${fmt(s.account.available)}</div></div>
-    <div class="kpi"><div class="k">P&L otwarte</div><div class="v num ${(s.account.pnl||0)>=0?"pos":"neg"}">${fmt(s.account.pnl)}</div></div>
-    <div class="kpi"><div class="k">Pozycje</div><div class="v num">${s.positions.length}</div></div>`
-    : brokerErrorHtml(s.broker);
-
-  // mini pozycje
-  $("nav-trades-count").textContent = s.positions.length ? `(${s.positions.length})` : "";
-  $("pos-mini").innerHTML = s.positions.map(x => `
-    <div class="posrow" onclick="location.href='/position?id=${x.dealId}'">
-      <span class="sym">${esc(x.name||x.epic)}</span>
-      <span class="dir ${x.direction}">${x.direction}</span>
-      <span class="num" style="margin-left:auto;color:var(--muted)">${fmt(x.size)}</span>
-      <span class="num ${(x.pnl||0)>=0?"pos":"neg"}" style="min-width:70px;text-align:right">${fmt(x.pnl)} €</span>
-    </div>`).join("");
+  // skuteczność: ile analiz i jak zachował się kurs
+  const o = s.outcomes || {};
+  const h1 = (o.horizons || {})["1h"] || {}, h1d = (o.horizons || {})["1d"] || {};
+  const pct = v => v == null ? "—" : v + "%";
+  $("acct").innerHTML = `
+    <div class="kpi"><div class="k">Analiz z pomiarem</div><div class="v num">${o.total || 0}</div></div>
+    <div class="kpi"><div class="k">Zgodnych po 1h</div><div class="v num">${pct(h1.aligned_pct)}</div></div>
+    <div class="kpi"><div class="k">Zgodnych po 1d</div><div class="v num">${pct(h1d.aligned_pct)}</div></div>
+    <div class="kpi"><div class="k">Średni ruch 1h</div><div class="v num">${h1.avg_move_pct == null ? "—" : h1.avg_move_pct + "%"}</div></div>`;
 
   // parametry (raz)
   if (!paramsLoaded) {
     sliders.forEach(([sid, oid, key, show]) => { $(sid).value = p[key]; $(oid).textContent = show(p[key]); });
-    $("observe").checked = !p.trading_enabled;
     paramsLoaded = true;
   }
 
@@ -408,33 +375,32 @@ function renderFeed(signals) {
   if (!signals || !signals.length) return;
   $("feed").innerHTML = signals.map(x => {
     const sig = x.signal || {}, r = x.result || {}, v = x.verify;
-    let decision = x.decision;
-    if (!decision) {  // stare wpisy bez pola decision — wyznacz z sygnału
-      decision = (sig.tradable && sig.targets && sig.targets.length) || sig.ticker
-        ? (sig.direction === "short" ? "SHORT" : "BUY") : "SKIP";
+    // wydźwięk wiadomości dla wskazanej spółki — opis wymowy newsa, nie zalecenie
+    let tone = x.tone;
+    if (!tone) {  // stare wpisy sprzed zmiany
+      tone = (sig.tradable && sig.targets && sig.targets.length) || sig.ticker
+        ? (sig.direction === "short" ? "negatywny" : "pozytywny") : "brak";
     }
-    if (r.action === "after_hours" || r.action === "ignored") decision = "SKIP";
-    const cls = r.action === "after_hours" ? "after_hours" : decision === "BUY" ? "buy" : decision === "SHORT" ? "short" : "skip";
+    if (r.action === "after_hours" || r.action === "ignored") tone = "brak";
+    const label = tone === "pozytywny" ? "POZYTYWNY" : tone === "negatywny" ? "NEGATYWNY" : "NEUTRALNY";
+    const cls = r.action === "after_hours" ? "after_hours" : tone === "pozytywny" ? "buy" : tone === "negatywny" ? "short" : "skip";
     const tickers = (sig.targets && sig.targets.length)
       ? sig.targets.map(t => `${esc(t.ticker)} ${t.direction==="short"?"▼":"▲"}`).join(" · ")
       : "";
     const typeChip = sig.signal_type && sig.signal_type !== "direct"
       ? `<span class="typechip">${esc(sig.signal_type)}</span>` : "";
 
-    // status egzekucji
+    // co bot zrobił z tą wiadomością
     let exec = "";
     const a = r.action;
-    if (a === "opened") exec = `<span class="exec-tag exec-opened">✓ ZLECENIE ZŁOŻONE</span>`;
-    else if (a === "after_hours") exec = `<span class="exec-tag exec-obs">⏸ PO SESJI — pominięto</span>`;
-    else if (a === "skipped" && (r.why||"").includes("obserwacj")) exec = `<span class="exec-tag exec-obs">👁 OBSERWACJA — nie handluję</span>`;
-    else if (a === "closed_by_verifier") exec = `<span class="exec-tag exec-err">✗ WERYFIKATOR ZAMKNĄŁ</span>`;
-    else if (a === "ignored" || a === "skipped") exec = `<span class="exec-tag exec-off">— nie gramy</span>`;
-    else if (a === "auto_tp") exec = `<span class="exec-tag exec-opened">💰 AUTO TAKE-PROFIT</span>`;
-    else if (a === "halted") exec = `<span class="exec-tag exec-err">⛔ LIMIT DZIENNY</span>`;
+    if (a === "analyzed") exec = `<span class="exec-tag exec-opened">✓ PRZEANALIZOWANE — mierzę kurs</span>`;
+    else if (a === "after_hours") exec = `<span class="exec-tag exec-obs">⏸ PO SESJI — bez pomiaru</span>`;
+    else if (a === "questioned") exec = `<span class="exec-tag exec-err">⚠ DRUGI MODEL PODWAŻA</span>`;
+    else if (a === "ignored") exec = `<span class="exec-tag exec-off">— pominięte</span>`;
 
     const whyLine = r.why ? `<span>${esc(r.why)}</span>` : "";
-    const sizingLine = r.sizing ? `<div class="sig-reason" style="margin-top:4px">📏 ${esc(r.sizing)}</div>` : "";
-    const verifyLine = v ? `<div class="sig-reason" style="margin-top:4px">🔍 weryfikacja (${v.keep?"trzymaj":"zamknij"}, ${v.confidence??"—"}): ${esc(v.reason)}</div>` : "";
+    const sizingLine = "";
+    const verifyLine = v ? `<div class="sig-reason" style="margin-top:4px">🔍 druga opinia (${v.keep?"potwierdza":"podważa"}, ${v.confidence??"—"}): ${esc(v.reason)}</div>` : "";
 
     const src = x.source || "truth_social";
     let srcLabel = "Truth Social";
@@ -447,7 +413,7 @@ function renderFeed(signals) {
 
     return `<div class="signal ${cls}">
       <div class="sig-top">
-        <span class="badge ${decision}">${decision}</span>
+        <span class="badge ${cls === "buy" ? "BUY" : cls === "short" ? "SHORT" : ""}">${label}</span>
         ${sig.strength!=null ? `<span class="score">${sig.strength}</span>` : ""}
         ${tickers ? `<span class="tickers">${tickers}</span>` : ""}
         ${typeChip}
@@ -462,48 +428,10 @@ function renderFeed(signals) {
   }).join("");
 }
 
-function brokerErrorHtml(broker) {
-  const isSaxo = (broker.account || "").startsWith("saxo");
-  const tokenIssue = /wygas|zaloguj|token|refresh/i.test(broker.error || "");
-  const msg = broker.error ? "Błąd brokera: " + esc(broker.error) : "Brak połączenia z brokerem — sprawdź .env";
-  const btn = (isSaxo && (tokenIssue || !broker.error))
-    ? `<button class="btn btn-save" style="margin-top:12px" id="saxo-login-btn" onclick="saxoLogin()">🔑 Zaloguj do Saxo</button>
-       <div id="saxo-login-msg" style="font-size:11.5px;color:var(--dim);margin-top:8px"></div>` : "";
-  return `<div class="empty" style="padding:22px 0">${msg}${btn}</div>`;
-}
-
-async function saxoLogin() {
-  const btn = $("saxo-login-btn"), msg = $("saxo-login-msg");
-  if (btn) { btn.disabled = true; btn.textContent = "Otwieram okno logowania…"; }
-  try {
-    const r = await (await fetch("/api/broker/login", { method: "POST" })).json();
-    if (!r.ok) { if (msg) msg.textContent = r.why || "Nie udało się rozpocząć logowania."; if (btn){btn.disabled=false;btn.textContent="🔑 Zaloguj do Saxo";} return; }
-    window.open(r.authorize_url, "_blank");
-    if (msg) msg.textContent = "Zaloguj się w oknie Saxo (kod SMS). Panel połączy się sam po zatwierdzeniu…";
-    pollSaxoLogin();
-  } catch { if (msg) msg.textContent = "Błąd połączenia z panelem."; if (btn){btn.disabled=false;btn.textContent="🔑 Zaloguj do Saxo";} }
-}
-
-async function pollSaxoLogin() {
-  for (let i = 0; i < 100; i++) {   // do ~5 min
-    await new Promise(r => setTimeout(r, 3000));
-    let st; try { st = await (await fetch("/api/broker/login/status")).json(); } catch { continue; }
-    const msg = $("saxo-login-msg");
-    if (st.ok) { toast("Zalogowano do Saxo ✓"); paramsLoaded = false; refresh(); return; }
-    if (!st.active) { if (msg && st.error) msg.textContent = "Logowanie nieudane: " + st.error; const b=$("saxo-login-btn"); if(b){b.disabled=false;b.textContent="🔑 Zaloguj do Saxo";} return; }
-  }
-}
-
-async function switchAccount(acct) {
-  await fetch("/api/account", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ account: acct }) });
-  toast("Konto: " + acct + " (obserwacja)");
-  paramsLoaded = false; setTimeout(refresh, 300);
-}
 async function togglePower() {
   if (!running) {
-    const observe = $("observe").checked;
-    await fetch("/api/bot/start", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ observe }) });
-    toast(observe ? "Bot wystartował w trybie obserwacji" : "Bot wystartował — handel na żywo");
+    await fetch("/api/bot/start", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({}) });
+    toast("Bot nasłuchuje newsów");
   } else {
     await fetch("/api/bot/stop", { method: "POST" });
     toast("Bot zatrzymany");
@@ -518,13 +446,13 @@ async function saveParams() {
   toast("Parametry zapisane");
 }
 async function kill() {
-  if (!confirm("KILL SWITCH: zatrzymać bota i zamknąć WSZYSTKIE pozycje?")) return;
+  if (!confirm("Zatrzymać nasłuch newsów?")) return;
   await fetch("/api/kill", { method: "POST" });
-  toast("Kill switch aktywowany"); paramsLoaded = false; refresh();
+  toast("Nasłuch zatrzymany"); paramsLoaded = false; refresh();
 }
 async function resume() {
   await fetch("/api/resume", { method: "POST" });
-  toast("Wznowiono (kill switch wyłączony)"); refresh();
+  toast("Nasłuch wznowiony"); refresh();
 }
 function toast(m) { const t = $("toast"); t.textContent = m; t.style.opacity = 1; setTimeout(()=>t.style.opacity=0, 2600); }
 function clock() { $("nav-clock").textContent = new Date().toLocaleTimeString("pl-PL"); }

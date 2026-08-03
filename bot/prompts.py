@@ -14,9 +14,12 @@ Struktura finalnego promptu systemowego (build_system):
   7. sekcja "strict"       — zasady surowości (edytowalna)
   8. sekcja "polish"       — doklejana tylko dla źródła gpw_espi (edytowalna)
 
-Kategorie i autorytet mają MNOŻNIKI wielkości pozycji, stosowane w
-strategy.position_multiplier() — czyli to, JAK bot gra sygnał danej kategorii,
-regulujesz suwakiem, bez dotykania promptu.
+Kategorie i autorytet mają WAGI — regulują, jak mocno dana kategoria newsa albo
+ranga autora wzmacniają wydźwięk, bez dotykania samego promptu.
+
+WAŻNE: bot opisuje WYDŹWIĘK wiadomości i jej możliwy wpływ na kurs. Nie wydaje
+rekomendacji kupna ani sprzedaży — pola "direction" long/short są wewnętrznym
+zapisem kierunku oczekiwanego wpływu, a nie zaleceniem dla użytkownika.
 """
 
 import json
@@ -163,23 +166,23 @@ Jeśli podmiot NIE jest spółką notowaną na GPW (osoba fizyczna, TFI, mała
 instytucja płatnicza, zagraniczny ubezpieczyciel bez polskiego tickera) ->
 tradable=false, nie mamy czym zagrać.""",
 
-    "verify": """Jesteś starszym analitykiem weryfikującym decyzję tradingową, która WŁAŚNIE ZOSTAŁA WYKONANA.
-Bot na podstawie newsa otworzył już pozycję. Twoim zadaniem NIE jest ostrożność —
-to portfel wysokiego ryzyka, momentum na newsach, i świadomie łapiemy okazje wcześniej niż rynek.
+    "verify": """Jesteś starszym analitykiem sprawdzającym analizę wykonaną przez inny model.
+Dostajesz treść wiadomości i przypisany jej wydźwięk. Oceniasz rzetelność tej analizy,
+nie opłacalność jakiejkolwiek transakcji — nikt tu niczego nie kupuje ani nie sprzedaje.
 
-Domyślnie pozycję TRZYMAMY. Rekomenduj zamknięcie TYLKO gdy wejście to WYRAŹNY błąd, np.:
-- zły ticker / spółka (model pierwszego etapu pomylił firmę),
-- odwrotny kierunek (pozytywny post potraktowany jako short albo odwrotnie),
-- post w ogóle nie dotyczy tej spółki ani rynku (halucynacja sygnału),
-- informacja ewidentnie stara / już dawno wyceniona.
+Domyślnie analizę POTWIERDZAMY. Zgłoś zastrzeżenie TYLKO przy WYRAŹNYM błędzie, np.:
+- zły ticker / spółka (pierwszy model pomylił firmę),
+- odwrócony wydźwięk (pozytywna wiadomość opisana jako negatywna albo odwrotnie),
+- wiadomość w ogóle nie dotyczy tej spółki ani rynku (halucynacja),
+- informacja ewidentnie stara, dawno opisana przez rynek.
 
-Sam fakt, że sygnał jest "ryzykowny", "spekulacyjny" albo "niepewny" NIE jest powodem do zamknięcia —
-takie właśnie trady chcemy brać. W razie wątpliwości: TRZYMAJ.
+Sam fakt, że wymowa wiadomości jest niepewna albo spekulacyjna, NIE jest błędem analizy —
+niepewność opisujemy, a nie ukrywamy. W razie wątpliwości: POTWIERDŹ.
 
 Odpowiedz WYŁĄCZNIE JSON:
 {
-  "keep": bool,          // true = trzymaj pozycję (domyślne), false = zamknij (tylko wyraźny błąd)
-  "confidence": 0-100,   // twoja pewność co do decyzji keep
+  "keep": bool,          // true = analiza rzetelna (domyślne), false = wyraźny błąd
+  "confidence": 0-100,   // twoja pewność co do tej oceny
   "reason": string       // 1 zdanie po polsku
 }""",
 
@@ -195,14 +198,14 @@ SECTION_META = [
     ("signal_types", "Typy sygnałów (direct/thematic/macro/crypto)", "Reguły wyboru typu i tickerów. Tu mieszka logika krypto vs akcje."),
     ("strict", "Zasady surowości", "Kiedy odrzucać: powtórki, spekulacje, memy."),
     ("polish", "Dodatek polski (GPW/ESPI)", "Doklejany TYLKO dla źródła gpw_espi."),
-    ("verify", "Weryfikator (etap 2)", "Mocny model sprawdza trade PO otwarciu pozycji."),
+    ("verify", "Druga opinia (etap 2)", "Mocniejszy model sprawdza rzetelność analizy."),
     ("summary", "Streszczanie długich raportów", "Kompresja długich tekstów (SEC) przed analizą."),
 ]
 
 # ---------------------------------------------------------------- kategorie
 
 # Rozszerzona lista news_type — im mniej trafia do "other", tym lepiej sterujemy botem.
-# mult = mnożnik wielkości pozycji dla tej kategorii (edytowalny w /brain).
+# mult = waga wydźwięku dla tej kategorii (edytowalna w /brain).
 DEFAULT_CATEGORIES = {
     "endorsement":  {"label": "Pochwała / wezwanie do kupna", "mult": 1.0, "enabled": True,
                      "desc": "ktoś ważny chwali spółkę lub wzywa do kupna -> long"},

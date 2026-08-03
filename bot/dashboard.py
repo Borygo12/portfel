@@ -20,11 +20,10 @@ import threading                 # noqa: E402
 import time                      # noqa: E402
 
 import analyzer                  # noqa: E402
-import backtest as bt            # noqa: E402
+import outcomes                  # noqa: E402
 import prompts                   # noqa: E402
 import runner                     # noqa: E402
 import state                     # noqa: E402
-import trader                    # noqa: E402
 from config import load_params, save_params  # noqa: E402
 from live import calendar as live_cal       # noqa: E402
 from live import manager as live_manager    # noqa: E402
@@ -36,7 +35,7 @@ _DIR = os.path.dirname(__file__)
 _STARTED_AT = int(time.time())          # do rozpoznania, czy panel wstał po restarcie
 
 # ---------------- dostęp z sieci (telefon) ----------------
-# Panel steruje botem tradingowym, więc z LAN/VPN wpuszczamy TYLKO z tokenem.
+# Panel steruje botem i pokazuje prywatny portfel, więc z LAN/VPN wpuszczamy TYLKO z tokenem.
 # Z localhost (przeglądarka na tym komputerze) wszystko działa jak dotąd, bez zmian.
 
 _TOKEN_FILE = os.path.join(_DIR, "portfolio_data", "api_token.txt")
@@ -152,16 +151,6 @@ def vendor_lwc():
                         media_type="application/javascript")
 
 
-@app.get("/trades")
-def trades_page():
-    return _page("trades.html")
-
-
-@app.get("/backtest")
-def backtest_page():
-    return _page("backtest.html")
-
-
 @app.get("/settings")
 def settings_page():
     return _page("settings.html")
@@ -170,11 +159,6 @@ def settings_page():
 @app.get("/ict")
 def ict_page():
     return _page("ict.html")
-
-
-@app.get("/position")
-def position_page():
-    return _page("position.html")
 
 
 @app.get("/live")
@@ -387,11 +371,9 @@ def live_session_get(event_id: str, transcript_after: int = 0, analyses_after: i
 
 @app.post("/api/bot/start")
 def bot_start(body: dict | None = None):
-    # obserwacja = analizuj i pokazuj decyzje, ale nie składaj zleceń
-    observe = bool((body or {}).get("observe"))
-    save_params({"trading_enabled": not observe, "kill_switch": False})
+    save_params({"kill_switch": False})
     started = runner.start()
-    return {"started": started, "observe": observe}
+    return {"started": started}
 
 
 @app.post("/api/bot/stop")
@@ -399,90 +381,22 @@ def bot_stop():
     return {"stopped": runner.stop()}
 
 
-@app.get("/api/position/{position_id}")
-def position_get(position_id: str):
-    details = trader.position_details(position_id, load_params())
-    return details or {"error": "pozycja nie istnieje (mogła się już zamknąć)"}
-
-
-@app.post("/api/position/{position_id}/close")
-def position_close(position_id: str):
-    ok = trader.close_position(position_id)
-    state.set_hold(position_id, False)
-    return {"closed": ok}
-
-
-@app.post("/api/position/{position_id}/hold")
-def position_hold(position_id: str, body: dict):
-    state.set_hold(position_id, bool(body.get("hold")))
-    return {"held": bool(body.get("hold"))}
-
-
-@app.get("/api/backtest/sources")
-def backtest_sources():
-    return {"sources": bt.available_sources()}
-
-
-@app.post("/api/backtest/start")
-def backtest_start(body: dict):
-    started = bt.start(body["date"], body.get("sources") or ["truth_social"],
-                       bool(body.get("force")))
-    return {"started": started}
-
-
-@app.post("/api/backtest/cancel")
-def backtest_cancel():
-    return {"cancelled": bt.cancel()}
-
-
-@app.get("/api/backtest/status")
-def backtest_status():
-    return {"state": bt.state, "aggregate": bt.aggregate_stats()}
-
-
-@app.post("/api/backtest/chart")
-def backtest_chart(body: dict):
-    return bt.simulate_trade(body["ticker"], body.get("direction") or "long",
-                             body["post_time"], with_bars=True)
+@app.get("/api/outcomes")
+def outcomes_list():
+    """Jak zachował się kurs po wcześniejszych analizach — fakty, nie zalecenia."""
+    return {"stats": outcomes.stats(), "recent": outcomes.recent(100)}
 
 
 @app.get("/api/state")
 def get_state():
-    broker = {"connected": False, "demo": trader.client.demo,
-              "account": load_params().get("active_account", "saxo_live")}
-    account, positions = {}, []
-    if trader.client.configured:
-        try:
-            account = trader.client.get_account()
-            positions = trader.client.get_positions()
-            broker["connected"] = True
-        except Exception as e:  # MT5 ConnectionError, requests, itp.
-            broker["error"] = str(e)
     return {
         "server_time": time.time(),
         "params": load_params(),
         "bot_alive": runner.is_running(),  # źródło prawdy: pętla w tym procesie (START/STOP)
         "bot_status": runner.status(),
-        "broker": broker,
-        "account": account,
-        "positions": positions,
         "signals": state.recent_signals(60),
+        "outcomes": outcomes.stats(),
     }
-
-
-@app.get("/api/trades")
-def trades_list():
-    """Aktywne pozycje wzbogacone o wskaźniki (dla sekcji Tready)."""
-    params = load_params()
-    out = []
-    if trader.client.configured:
-        try:
-            for p in trader.client.get_positions():
-                d = trader.position_details(p.get("dealId"), params)
-                out.append(d or p)
-        except Exception as e:
-            return {"error": str(e), "trades": []}
-    return {"trades": out}
 
 
 @app.post("/api/params")
@@ -512,77 +426,11 @@ def sitemap_check():
     return {"results": sitemap_monitor.check_connectivity()}
 
 
-@app.get("/api/accounts")
-def accounts_list():
-    return {"accounts": list(trader.ACCOUNTS.keys()),
-            "active": load_params().get("active_account", "saxo_live")}
-
-
-# stan logowania do Saxo (dla przycisku w panelu)
-_saxo_login = {"active": False, "ok": False, "error": None, "started_at": 0, "env": None}
-
-
-@app.post("/api/broker/login")
-def broker_login():
-    """Uruchamia logowanie OAuth do Saxo dla AKTYWNEGO konta — bez pliku .bat.
-    Zwraca authorize_url (panel otworzy go w nowej karcie); w tle łapie kod z przekierowania,
-    wymienia na token i przebudowuje klienta. Owner tylko loguje się w oknie Saxo."""
-    import saxo_authorize as sa
-    acct = load_params().get("active_account", "saxo_live")
-    kind, env = trader.ACCOUNTS.get(acct, ("saxo", "live"))
-    if kind != "saxo":
-        return {"ok": False, "why": "Logowanie przez przeglądarkę dotyczy tylko kont Saxo."}
-    cfg = sa.build_config(env)
-    if not (cfg["key"] and cfg["secret"]):
-        return {"ok": False, "why": f"Brak {cfg['pfx']}APP_KEY / {cfg['pfx']}APP_SECRET w .env."}
-    if _saxo_login["active"]:
-        return {"ok": True, "authorize_url": _saxo_login.get("authorize_url"), "env": env,
-                "why": "Logowanie już w toku — dokończ w oknie Saxo."}
-
-    _saxo_login.update(active=True, ok=False, error=None, started_at=time.time(),
-                       env=env, authorize_url=cfg["authorize_url"])
-
-    def _flow():
-        try:
-            code = sa.catch_code(cfg["redirect"], cfg["authorize_url"],
-                                 open_browser=False, timeout=300)
-            if not code:
-                _saxo_login.update(active=False, error="Nie odebrano kodu (przekroczono czas logowania).")
-                return
-            tok = sa.exchange_code(cfg, code)
-            with open(cfg["token_file"], "w", encoding="utf-8") as f:
-                import json as _json
-                _json.dump(tok, f)
-            trader.reset_client()  # świeży token z pliku zamiast martwego w pamięci
-            _saxo_login.update(active=False, ok=True, error=None)
-        except Exception as e:
-            _saxo_login.update(active=False, ok=False, error=str(e)[:200])
-
-    threading.Thread(target=_flow, daemon=True).start()
-    return {"ok": True, "authorize_url": cfg["authorize_url"], "env": env}
-
-
-@app.get("/api/broker/login/status")
-def broker_login_status():
-    return dict(_saxo_login)
-
-
-@app.post("/api/account")
-def set_account(body: dict):
-    """Przełącza aktywne konto brokera (saxo_demo/saxo_live/xm_demo/xm_live)."""
-    acct = (body or {}).get("account")
-    if acct not in trader.ACCOUNTS:
-        return {"ok": False, "why": "nieznane konto"}
-    # bezpieczeństwo: przy zmianie konta wracamy do obserwacji (nie handlujemy od razu na nowym)
-    save_params({"active_account": acct, "trading_enabled": False})
-    return {"ok": True, "active": acct}
-
-
 @app.post("/api/kill")
 def kill():
-    save_params({"kill_switch": True, "trading_enabled": False})
+    """Awaryjne zatrzymanie nasłuchu — pętla staje i nic nie jest analizowane."""
+    save_params({"kill_switch": True})
     runner.stop()
-    trader.close_everything()
     return {"ok": True}
 
 
@@ -1386,11 +1234,10 @@ if __name__ == "__main__":
 
     # Autostart monitoringu jest DOMYŚLNIE WYŁĄCZONY (autostart_monitoring=False):
     # ikona pulpitu otwiera ekran wyboru Portfel/Bot, a nasłuch newsów rusza dopiero
-    # po START w panelu. Gdyby ktoś włączył flagę ręcznie — nadal tylko obserwacja.
+    # po START w panelu.
     def _autostart():
         p = load_params()
         if p.get("autostart_monitoring", False) and not p.get("kill_switch"):
-            save_params({"trading_enabled": False})
             runner.start()
     threading.Thread(target=_autostart, daemon=True).start()
 

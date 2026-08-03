@@ -1,5 +1,9 @@
 """Sterowalna pętla bota — start()/stop() w wątku tła.
 
+Bot NASŁUCHUJE i ANALIZUJE. Nie składa zleceń, nie łączy się z żadnym brokerem
+i niczego nie poleca — po analizie zapisuje wydźwięk wiadomości i oddaje sprawę
+`outcomes`, który sprawdza potem, jak zachował się kurs.
+
 Dzięki temu przycisk START w panelu faktycznie uruchamia monitorowanie newsów
 w tym samym procesie co dashboard (jeden proces = jeden przycisk).
 main.py nadal potrafi odpalić to samotnie (np. na VPS bez UI).
@@ -10,9 +14,9 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import outcomes
 import state
 import strategy
-import trader
 from analyzer import analyze_post, verify_signal
 from config import load_params
 from sources import sec_edgar, truth_social, squawk, gov_rss, gpw_espi, sitemap_monitor, knf_registry, knf_announcements
@@ -32,22 +36,7 @@ _last_gpw = 0.0
 _last_sitemap = 0.0
 _last_knf = 0.0
 _last_knf_ann = 0.0
-_tradable_cache: set = set()
-_tradable_at = 0.0
-
-
-def _tradable_tickers() -> set:
-    """Zbiór tradowalnych tickerów (cache ~1h) — filtr EDGAR przed AI."""
-    global _tradable_cache, _tradable_at
-    if _tradable_cache and time.time() - _tradable_at < 3600:
-        return _tradable_cache
-    try:
-        if trader.client.configured and hasattr(trader.client, "tradable_tickers"):
-            _tradable_cache = trader.client.tradable_tickers()
-            _tradable_at = time.time()
-    except Exception:
-        log.exception("Nie udało się pobrać listy tradowalnych tickerów")
-    return _tradable_cache
+_last_outcomes = 0.0
 
 
 def is_running() -> bool:
@@ -59,12 +48,12 @@ def status() -> dict:
 
 
 def _blocked_by(signal: dict, params: dict, source: str = "truth_social") -> dict | None:
-    """Bramki PRZED egzekucją. Zwraca result-dict gdy nie gramy, None gdy gramy."""
+    """Bramki odsiewające szum. Zwraca result-dict gdy odpuszczamy, None gdy analizujemy dalej."""
     if not signal.get("tradable") or not signal.get("targets"):
-        return {"action": "ignored", "why": "news nie daje grywalnego sygnału"}
+        return {"action": "ignored", "why": "news nie wskazuje konkretnej spółki"}
     if signal["strength"] < params["min_signal_strength"]:
         return {"action": "ignored",
-                "why": f"sygnał za słaby ({signal['strength']} < próg {params['min_signal_strength']})"}
+                "why": f"wydźwięk za słaby ({signal['strength']} < próg {params['min_signal_strength']})"}
     stype = signal.get("signal_type", "direct")
     if stype == "thematic" and not params.get("thematic_enabled", True):
         return {"action": "ignored", "why": "sygnały tematyczne wyłączone w ustawieniach"}
@@ -75,8 +64,8 @@ def _blocked_by(signal: dict, params: dict, source: str = "truth_social") -> dic
     if stype not in ("macro", "crypto") and not strategy.market_open_for_source(source):
         rynek = "GPW" if strategy.market_for_source(source) == "pl" else "USA"
         return {"action": "after_hours",
-                "why": f"news po sesji {rynek} — bot odpuszcza (przewaga to reakcja w minutę; "
-                       "do otwarcia rynek zdąży wycenić). Możesz zagrać ręcznie."}
+                "why": f"news po sesji {rynek} — wartość informacyjna spada, bo do otwarcia "
+                       "rynek zdąży ją wycenić. Analiza zostaje zapisana bez pomiaru kursu."}
     return None
 
 
@@ -94,14 +83,15 @@ def handle_post(post: dict, params: dict):
     signal = analyze_post(text, source=post.get("source", "truth_social"))
     log.info("Ocena AI w %.1f s: %s", time.time() - t0, signal)
 
-    # decyzja skrótowa dla feedu: BUY / SHORT / SKIP
-    decision = "SKIP"
+    # skrót dla feedu: jaki wydźwięk ma wiadomość dla wskazanej spółki.
+    # To opis wymowy newsa, nie zalecenie kupna ani sprzedaży.
+    tone = "brak"
     if signal.get("tradable") and signal.get("targets"):
-        decision = "SHORT" if signal.get("direction") == "short" else "BUY"
+        tone = "negatywny" if signal.get("direction") == "short" else "pozytywny"
 
-    entry = {"post": text[:280], "signal": signal, "decision": decision,
+    entry = {"post": text[:280], "signal": signal, "tone": tone,
              "source": post.get("source", "truth_social"),
-             "latency": f"post→decyzja {(age or 0) + time.time() - t0:.0f} s"}
+             "latency": f"post→analiza {(age or 0) + time.time() - t0:.0f} s"}
 
     blocked = _blocked_by(signal, params, post.get("source", "truth_social"))
     if blocked:
@@ -110,41 +100,41 @@ def handle_post(post: dict, params: dict):
             for t in signal.get("targets", []):
                 strategy.record_mention(t["ticker"])
     else:
-        trades = []
+        tracked = []
         for target in signal["targets"]:
-            res = trader.open_trade(target["ticker"], target["direction"],
-                                    target.get("why") or signal.get("reason", ""),
-                                    signal=signal, target=target)
-            trades.append(res)
+            t_tone = "negatywny" if target.get("direction") == "short" else "pozytywny"
             strategy.record_mention(target["ticker"])
-        opened = [r for r in trades if r.get("action") == "opened"]
+            # Pomiar kursu nie może wywrócić analizy — Yahoo bywa niedostępny.
+            try:
+                outcomes.record(target["ticker"], t_tone, signal.get("strength", 0),
+                                post.get("source", "truth_social"))
+                tracked.append(target["ticker"])
+            except Exception as e:
+                log.debug("Nie zapisano punktu odniesienia dla %s: %s", target["ticker"], e)
         entry["result"] = {
-            "action": "opened" if opened else trades[0].get("action", "skipped"),
-            "why": ("; ".join(f"{r['ticker']}: {r.get('why', '')[:60]}" for r in trades)
-                    if len(trades) > 1 else trades[0].get("why", "")),
-            "trades": trades,
+            "action": "analyzed",
+            "why": "; ".join(f"{t['ticker']}: {(t.get('why') or '')[:60]}"
+                             for t in signal["targets"]),
+            "tracked": tracked,
         }
-        if len(opened) == 1:
-            entry["result"]["sizing"] = opened[0].get("sizing")
 
-        if opened and params.get("verify_enabled", True):
+        if params.get("verify_enabled", True):
             tv = time.time()
             verdict = verify_signal(text, signal)
             entry["verify"] = {**verdict, "took_s": round(time.time() - tv, 1)}
             log.info("Weryfikacja (%s): %s", verdict.get("_model"), verdict)
             if not verdict.get("keep", True):
-                closed = all(trader.close_position(r.get("positionId")) for r in opened)
-                entry["result"]["action"] = "closed_by_verifier" if closed else "verifier_reject_failed"
-                entry["result"]["why"] = f"weryfikator zamknął: {verdict.get('reason', '')}"
+                entry["result"]["action"] = "questioned"
+                entry["result"]["why"] = f"drugi model podważa analizę: {verdict.get('reason', '')}"
 
     state.log_signal(entry)
 
 
 def _loop():
-    global _last_edgar, _last_squawk, _last_gov, _last_truth, _last_gpw, _last_sitemap, _last_knf, _last_knf_ann
+    global _last_edgar, _last_squawk, _last_gov, _last_truth, _last_gpw, _last_sitemap, _last_knf, _last_knf_ann, _last_outcomes
     log.info("Pętla bota wystartowała. Parametry: %s", load_params())
-    truth_social.prime()  # nie gramy na postach sprzed startu
-    sec_edgar.prime(_tradable_tickers())
+    truth_social.prime()  # nie analizujemy postów sprzed startu
+    sec_edgar.prime()
     squawk.prime()
     gov_rss.prime()
     gpw_espi.prime()
@@ -169,19 +159,19 @@ def _loop():
         state.heartbeat()
         try:
             if params["kill_switch"]:
-                try:
-                    trader.close_everything()
-                except Exception as e:
-                    log.warning("kill_switch: broker niedostępny (%s)", e)
+                pass   # pauza: nasłuch stoi, nic nie analizujemy
             else:
-                # Zarządzanie pozycjami woła brokera. Gdy broker leży (np. wygasły token),
-                # NIE może to zabić nasłuchu newsów — izolujemy je w osobnym try.
-                # Dzięki temu analiza AI działa dalej nawet bez połączenia z brokerem.
-                try:
-                    trader.manage_positions(params)
-                except Exception as e:
-                    _status["broker_error"] = str(e)
-                    log.debug("manage_positions pominięte (broker): %s", e)
+                # Dopisanie pomiarów kursu (1h / 1d) do wcześniejszych analiz.
+                # Odpytuje sieć, więc trzymamy to w osobnym try — awaria Yahoo
+                # nie ma prawa zatrzymać nasłuchu newsów.
+                if time.time() - _last_outcomes >= 60:
+                    _last_outcomes = time.time()
+                    try:
+                        filled = outcomes.tick()
+                        if filled:
+                            log.info("Uzupełniono %d pomiarów kursu po analizach", filled)
+                    except Exception as e:
+                        log.debug("Pomiar kursów pominięty: %s", e)
                 # 1) Truth Social (z interwałem, nie co cykl)
                 truth_interval = params.get("truth_social_poll_seconds", 5)
                 if params.get("truth_social_enabled", True) and \
@@ -198,11 +188,12 @@ def _loop():
                 if params.get("sec_edgar_enabled", True) and \
                         time.time() - _last_edgar >= params["sec_poll_seconds"]:
                     _last_edgar = time.time()
-                    tradable = _tradable_tickers()
+                    # Dawniej filtrem była lista walorów dostępnych u brokera.
+                    # Bez brokera przepuszczamy wszystko, co ma rozpoznany ticker.
                     forms = ["8-K"] + (["10-Q"] if params.get("sec_edgar_10q") else [])
                     for form in forms:
                         for filing in sec_edgar.fetch_new_filings(
-                                params["max_filing_age_minutes"], form, tradable):
+                                params["max_filing_age_minutes"], form):
                             if not _running.is_set():
                                 break
                             _executor.submit(handle_post, filing, params)

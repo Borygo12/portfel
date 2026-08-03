@@ -4,7 +4,7 @@
   autostartuje sesje dla śledzonych wydarzeń, próbuje wystartować śledzone
   wydarzenia z ręcznym URL-em gdy nadejdzie ich godzina.
 - Sesja (LiveEventSession): capture+STT (live.capture) + pętla NLP (live.nlp)
-  + egzekucja przez trader.open_trade (tylko gdy live_auto_trade i trading_enabled).
+  + przekazanie mocnych fragmentów do pełnej analizy (tylko gdy live_auto_analyze).
 
 Wszystkie sygnały i analizy lecą też do wspólnego feedu (state.log_signal),
 więc widać je również na głównym panelu.
@@ -15,7 +15,6 @@ import threading
 import time
 
 import state
-import trader
 from config import load_params
 from live import calendar as cal
 from live import nlp
@@ -128,14 +127,15 @@ class LiveEventSession:
 
         conf = float(res.get("confidence") or 0)
         threshold = float(params.get("live_confidence_threshold", 0.85))
-        auto = params.get("live_auto_trade", False) and params.get("trading_enabled", False)
+        # stary klucz live_auto_trade zostaje jako zapas, żeby istniejące params.json działały
+        auto = params.get("live_auto_analyze", params.get("live_auto_trade", False))
         sig_entry = {"ts": time.strftime("%H:%M:%S"), "ticker": ticker,
                      "direction": res.get("direction"), "confidence": conf,
                      "event_type": res.get("event_type"),
                      "reasoning": res.get("reasoning"), "quote": res.get("quote"),
                      "executed": False, "exec_why": ""}
 
-        # sygnał w formacie analyzer-a — trader i feed panelu go rozumieją
+        # sygnał w formacie analyzer-a — feed panelu go rozumie
         signal = {"tradable": True, "signal_type": "direct",
                   "news_type": "political_statement", "strength": int(conf * 100),
                   "targets": [{"ticker": ticker, "direction": direction, "weight": 1.0,
@@ -147,8 +147,7 @@ class LiveEventSession:
         if conf < threshold:
             result["why"] = f"pewność {conf:.2f} < próg {threshold:.2f} — tylko alert"
         elif not auto:
-            result["why"] = ("auto-trade z live wyłączony (albo globalna obserwacja) "
-                             "— tylko alert")
+            result["why"] = "pogłębiona analiza fragmentów live wyłączona — tylko alert"
         else:
             try:
                 import runner

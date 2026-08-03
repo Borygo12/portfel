@@ -63,8 +63,6 @@
 <div class="tnav">
   <div class="brand">News<span>Trader</span></div>
   <a href="/bot">Panel</a>
-  <a href="/trades">Tready</a>
-  <a href="/backtest">Backtesty</a>
   <a href="/live">Wystąpienia na żywo</a>
   <a href="/brain">🧠 Mózg AI</a>
   <a class="active" href="/settings">Ustawienia</a>
@@ -116,41 +114,13 @@
   <p class="desc">Tematyczne: Trump mówi o sektorze bez nazwy spółki (kwanty, drony, złoto, bitcoin) → AI wybiera do 3 liderów powiązanych z rządem, mniejsze pozycje. Makro: wojna / szok dla całego rynku → short US100.</p>
   <div class="toggle"><span>Graj sygnały tematyczne<small>do 3 mniejszych pozycji na liderach sektora</small></span>
     <label class="switch"><input type="checkbox" id="p-thematic"><span class="slider-ui"></span></label></div>
-  <div class="param"><label>Wielkość pozycji tematycznej (ułamek normalnej) <output id="o-thsize"></output></label>
-    <input type="range" id="p-thsize" min="0.15" max="0.7" step="0.05"></div>
   <div class="toggle"><span>Graj sygnały makro (US100)<small>short przy dużym negatywnym wydarzeniu dla USA</small></span>
     <label class="switch"><input type="checkbox" id="p-macro"><span class="slider-ui"></span></label></div>
-  <div class="param"><label>Wielkość pozycji makro (ułamek normalnej) <output id="o-masize"></output></label>
-    <input type="range" id="p-masize" min="0.2" max="1" step="0.1"></div>
 </div>
 
 <div class="card">
-  <h2>Korekta "news już wyceniony"</h2>
-  <p class="desc">Jeśli spółka już dziś ruszyła mocno w kierunku sygnału, news mógł zostać wyceniony — gramy, ale mniejszym rozmiarem (ryzyko korekty).</p>
-  <div class="param"><label>Próg dziennego ruchu — DUŻA spółka <output id="o-apmove"></output></label>
-    <input type="range" id="p-apmove" min="3" max="25" step="1"></div>
-  <div class="param"><label>Próg dziennego ruchu — MAŁA spółka (rusza się mocniej) <output id="o-apmoves"></output></label>
-    <input type="range" id="p-apmoves" min="10" max="50" step="1"></div>
-  <div class="param"><label>Mnożnik wielkości po przekroczeniu progu <output id="o-apw"></output></label>
-    <input type="range" id="p-apw" min="0.2" max="0.9" step="0.05"></div>
-</div>
-
-<div class="card">
-  <h2>Wygaszanie pozycji</h2>
-  <p class="desc">Awaryjne auto-zamknięcia. Pozycje oznaczone ręcznie "trzymaj" (na stronie pozycji) są pomijane.</p>
-  <div class="param"><label>Runaway take-profit: zamknij przy zysku ≥ <output id="o-runaway"></output></label>
-    <input type="range" id="p-runaway" min="8" max="60" step="1"></div>
-  <div class="param"><label>Informacja w 100% wyceniona po (wskaźnik w UI) <output id="o-priced"></output></label>
-    <input type="range" id="p-priced" min="1" max="12" step="0.5"></div>
-  <div class="toggle"><span>TP/SL wg zmienności spółki (ATR)<small>rozchwiana spółka dostaje szersze progi, stabilna ciaśniejsze</small></span>
-    <label class="switch"><input type="checkbox" id="p-vol"><span class="slider-ui"></span></label></div>
-</div>
-
-<div class="card">
-  <h2>Pamięć wzmianek i weryfikacja</h2>
-  <div class="toggle"><span>Osłabiaj powtórki<small>4. pochwała tej samej spółki w tygodniu = mniejsza pozycja</small></span>
-    <label class="switch"><input type="checkbox" id="p-repeat"><span class="slider-ui"></span></label></div>
-  <div class="toggle"><span>Weryfikacja tradów mocnym modelem (etap 2)<small>zamyka tylko wyraźne błędy: zły ticker/kierunek/halucynacja</small></span>
+  <h2>Weryfikacja analiz</h2>
+  <div class="toggle"><span>Druga opinia mocniejszego modelu (etap 2)<small>zgłasza tylko wyraźne błędy: zły ticker, odwrócony wydźwięk, halucynacja</small></span>
     <label class="switch"><input type="checkbox" id="p-verify"><span class="slider-ui"></span></label></div>
 </div>
 
@@ -158,10 +128,8 @@
   <h2>Świeżość i polling</h2>
   <div class="param"><label>Odpytywanie źródeł co <output id="o-poll"></output></label>
     <input type="range" id="p-poll" min="3" max="30" step="1"></div>
-  <div class="param"><label>Graj tylko posty młodsze niż <output id="o-age"></output></label>
+  <div class="param"><label>Analizuj tylko posty młodsze niż <output id="o-age"></output></label>
     <input type="range" id="p-age" min="2" max="30" step="1"></div>
-  <div class="param"><label>Dzienny limit straty (bot się pauzuje) <output id="o-dloss"></output></label>
-    <input type="range" id="p-dloss" min="2" max="20" step="1"></div>
 </div>
 
 <button onclick="save()">Zapisz ustawienia</button>
@@ -170,18 +138,10 @@
 <script>
 const $ = id => document.getElementById(id);
 const sliders = [
-  ["p-thsize", "o-thsize", "thematic_size_factor", v => "x" + Number(v).toFixed(2)],
-  ["p-masize", "o-masize", "macro_size_factor", v => "x" + Number(v).toFixed(2)],
-  ["p-apmove", "o-apmove", "already_priced_move_pct", v => v + "%"],
-  ["p-apmoves", "o-apmoves", "already_priced_move_pct_small", v => v + "%"],
-  ["p-apw", "o-apw", "already_priced_weight", v => "x" + Number(v).toFixed(2)],
-  ["p-runaway", "o-runaway", "runaway_tp_pct", v => "+" + v + "%"],
-  ["p-priced", "o-priced", "priced_in_hours", v => v + " h"],
   ["p-filingage", "o-filingage", "max_filing_age_minutes", v => v + " min"],
   ["p-gpwage", "o-gpwage", "max_gpw_age_minutes", v => v + " min"],
   ["p-poll", "o-poll", "truth_social_poll_seconds", v => v + " s"],
   ["p-age", "o-age", "max_post_age_minutes", v => v + " min"],
-  ["p-dloss", "o-dloss", "daily_loss_limit_pct", v => v + "%"],
 ];
 const toggles = [
   ["p-truth", "truth_social_enabled"],
@@ -195,8 +155,6 @@ const toggles = [
   ["p-knf-ann", "knf_ann_enabled"],
   ["p-thematic", "thematic_enabled"],
   ["p-macro", "macro_enabled"],
-  ["p-vol", "volatility_scaling"],
-  ["p-repeat", "repeat_mention_decay"],
   ["p-verify", "verify_enabled"],
 ];
 sliders.forEach(([sid, oid, , show]) => {

@@ -94,20 +94,20 @@ FEATURES: list[dict] = [
         "status": "live",
         "icon": "📡",
         "title": "Bot newsów na żywo",
-        "tagline": "Sygnały z wiadomości szybciej, niż zdążysz odświeżyć portal",
+        "tagline": "Zrozum wiadomość szybciej, niż zdążysz odświeżyć portal",
         "pitch": (
             "Bot nasłuchuje komunikatów ESPI, raportów SEC, kanałów rządowych i serwisów "
             "newsowych, a model językowy ocenia każdy z nich w kilka sekund: czy to w ogóle "
-            "informacja handlowa, kogo dotyczy, w którą stronę i jak mocno. Dostajesz gotowy "
-            "sygnał z uzasadnieniem, zanim temat trafi na główną stronę portalu."
+            "informacja istotna dla rynku, kogo dotyczy i jak mocny ma wydźwięk. Dostajesz "
+            "gotową analizę z uzasadnieniem, zanim temat trafi na główną stronę portalu."
         ),
         "bullets": [
             "Nasłuch źródeł 24/7 — ESPI, SEC EDGAR, komunikaty rządowe, squawk",
-            "Ocena AI z uzasadnieniem po polsku, nie samo „kup / sprzedaj”",
-            "Siła sygnału i autorytet źródła — wiesz, czemu ufać bardziej",
-            "Tryb obserwacji: bot liczy, ale niczego nie kupuje",
+            "Analiza po polsku z uzasadnieniem — wiesz, skąd taki wniosek",
+            "Siła wydźwięku i autorytet źródła — wiesz, czemu ufać bardziej",
+            "Pomiar: co kurs zrobił po godzinie i po dniu od analizy",
         ],
-        "free_hint": "Bez premium widzisz ostatnie sygnały z opóźnieniem i bez uzasadnienia.",
+        "free_hint": "Bez premium widzisz ostatnie analizy z opóźnieniem i bez uzasadnienia.",
     },
     {
         "id": "bot.brain",
@@ -224,12 +224,12 @@ FEATURES: list[dict] = [
         "tagline": "Ustal proporcje raz, potem tylko wyrównuj",
         "pitch": (
             "Zapisujesz docelowy podział (np. 60% akcje globalne, 25% Polska, 15% gotówka), "
-            "a portfel sam pokazuje odchylenia i gotową listę „dokup / sprzedaj za tyle”, "
-            "żeby wrócić do planu. Z uwzględnieniem kosztów, żeby wyrównywanie nie zjadło zysku."
+            "a portfel sam pokazuje odchylenia od Twojego planu i kwoty potrzebne do "
+            "wyrównania. Z uwzględnieniem kosztów, żeby wyrównywanie nie zjadło zysku."
         ),
         "bullets": [
             "Własne cele procentowe dla klas, rynków i sektorów",
-            "Lista zleceń doprowadzających z kwotami",
+            "Kwoty potrzebne do wyrównania każdej pozycji planu",
             "Próg tolerancji — rebalansuj dopiero przy odchyleniu ponad X%",
         ],
         "free_hint": "",

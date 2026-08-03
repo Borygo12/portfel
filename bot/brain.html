@@ -128,8 +128,6 @@
 <nav>
   <div class="brand">News<span>Trader</span></div>
   <a class="navlink" href="/bot">Panel</a>
-  <a class="navlink" href="/trades">Tready</a>
-  <a class="navlink" href="/backtest">Backtesty</a>
   <a class="navlink" href="/live">Wystąpienia na żywo</a>
   <a class="navlink active" href="/brain">🧠 Mózg AI</a>
   <a class="navlink" href="/settings">Ustawienia</a>
@@ -282,8 +280,8 @@ function pipelineNodes(p, cfg, models) {
         </table>
         <div class="note">Cały prompt widzisz w "Podgląd finalnego promptu" na dole strony.</div>` },
     { ico: "🚦", t: "Bramki", s: "próg siły, sesja, typy",
-      h: "Bramki przed egzekucją", body: `
-        <p>Sygnał z AI musi przejść wszystkie bramki, inaczej ląduje w feedzie jako SKIP z powodem:</p>
+      h: "Bramki przed analizą", body: `
+        <p>Sygnał z AI musi przejść wszystkie bramki, inaczej ląduje w feedzie jako pominięty, z powodem:</p>
         <table>
           <tr><td>tradable = true</td><td>i przynajmniej 1 cel</td></tr>
           <tr><td>Siła ≥ próg</td><td>${p.min_signal_strength} (suwak w panelu)</td></tr>
@@ -291,33 +289,28 @@ function pipelineNodes(p, cfg, models) {
           <tr><td>Makro</td><td>${p.macro_enabled ? "włączone" : '<span style="color:var(--red)">wyłączone</span>'}</td></tr>
           <tr><td>Sesja giełdy</td><td>USA 15:30-22:00 PL / GPW 9:00-17:00; crypto grają zawsze (konkretny instrument: BTC→IBIT, ETH→ETHA); makro też</td></tr>
         </table>` },
-    { ico: "⚖️", t: "Mnożniki", s: "ile gramy — 8 czynników",
-      h: "Wielkość pozycji = baza × mnożniki", body: `
-        <p>Baza: ${p.position_pct_of_equity}% kapitału × dźwignia ${p.max_leverage}x, potem iloczyn mnożników:</p>
+    { ico: "⚖️", t: "Wagi", s: "co wzmacnia wydźwięk",
+      h: "Co wzmacnia, a co osłabia wymowę wiadomości", body: `
         <table>
-          <tr><td>Agresywność</td><td>${p.aggressiveness}/100 → x${(0.4 + p.aggressiveness/100*1.2).toFixed(2)}</td></tr>
-          <tr><td>Siła sygnału</td><td>98+ → x1.5 · 90+ → x1.25 · niżej liniowo</td></tr>
-          <tr><td>Typ sygnału</td><td>direct x1.0 · thematic x${p.thematic_size_factor} · macro x${p.macro_size_factor}</td></tr>
+          <tr><td>Siła wydźwięku</td><td>ocena AI 0-100, próg wejścia ${p.min_signal_strength}</td></tr>
           <tr><td>Kategoria newsa</td><td>x${Math.min(...catsOn.map(([,c])=>+c.mult||1)).toFixed(2)} – x${Math.max(...catsOn.map(([,c])=>+c.mult||1)).toFixed(2)} (sekcja "Kategorie" na tej stronie)</td></tr>
           <tr><td>Autorytet autora</td><td>${Object.entries(cfg.authority).map(([k,a])=>`${k} x${(+a.mult).toFixed(2)}`).join(" · ")}</td></tr>
-          <tr><td>Już wycenione</td><td>ruch ≥ ${p.already_priced_move_pct}% (duża) / ${p.already_priced_move_pct_small}% (mała) → x${p.already_priced_weight}</td></tr>
-          <tr><td>Powtórki</td><td>3. wzmianka w tygodniu x0.8 · 4.+ x0.6</td></tr>
-          <tr><td>Waga celu</td><td>0.3-1.0 od AI (tematyczne mniejsze)</td></tr>
+          <tr><td>Powtórki</td><td>kolejna wzmianka o tej samej spółce w tygodniu niesie mniej nowego</td></tr>
         </table>` },
-    { ico: "🏦", t: "Broker", s: "zlecenie + TP/SL",
-      h: "Egzekucja u brokera", body: `
+    { ico: "📈", t: "Pomiar", s: "co zrobił kurs",
+      h: "Pomiar kursu po analizie", body: `
+        <p>Bot nie składa zleceń i nie prowadzi rachunku maklerskiego. Po analizie zapisuje kurs
+        spółki i sprawdza go ponownie po godzinie oraz po dniu, korzystając z tego samego
+        darmowego źródła notowań co portfel.</p>
         <table>
-          <tr><td>Take profit</td><td>+${p.take_profit_pct}% ${p.volatility_scaling ? "(skalowane ATR)" : ""}</td></tr>
-          <tr><td>Stop loss</td><td>-${p.stop_loss_pct}% ${p.volatility_scaling ? "(skalowane ATR)" : ""}</td></tr>
-          <tr><td>Max czas pozycji</td><td>${p.max_hold_hours} h</td></tr>
-          <tr><td>Runaway TP</td><td>auto-zamknięcie przy +${p.runaway_tp_pct}%</td></tr>
-          <tr><td>Max pozycji naraz</td><td>${p.max_open_positions}</td></tr>
-          <tr><td>Dzienny limit straty</td><td>${p.daily_loss_limit_pct}% → pauza bota</td></tr>
+          <tr><td>Horyzonty</td><td>1 godzina · 1 dzień</td></tr>
+          <tr><td>„Zgodny"</td><td>kurs poszedł w stronę wydźwięku wiadomości</td></tr>
+          <tr><td>Do czego służy</td><td>statystyka trafności analiz, widoczna w panelu</td></tr>
         </table>
-        <div class="note">Tryb: ${p.trading_enabled ? '<span class="chip">HANDEL NA ŻYWO</span>' : '<span class="chip warn">OBSERWACJA — zlecenia nie są składane</span>'}</div>` },
-    { ico: "🔍", t: "Weryfikator", s: "etap 2 — po otwarciu",
-      h: "AI Etap 2 — weryfikacja PO otwarciu (nie blokuje wejścia)", body: `
-        <p>Mocny model dostaje news + wykonaną decyzję i zamyka pozycję TYLKO przy wyraźnym błędzie: zły ticker, odwrotny kierunek, halucynacja, stara informacja. "Ryzykowny" ≠ błąd — takie trady bierzemy świadomie.</p>
+        <div class="note">To opis tego, co się wydarzyło na rynku — nie rekomendacja i nie porada inwestycyjna.</div>` },
+    { ico: "🔍", t: "Weryfikator", s: "etap 2 — druga opinia",
+      h: "AI Etap 2 — druga opinia o analizie", body: `
+        <p>Mocniejszy model dostaje news i pierwszą analizę, po czym zgłasza zastrzeżenie TYLKO przy wyraźnym błędzie: zły ticker, odwrotny wydźwięk, halucynacja, stara informacja. Analiza zostaje w feedzie z adnotacją.</p>
         <table>
           <tr><td>Model</td><td>${esc(models.verify)}</td></tr>
           <tr><td>Status</td><td>${p.verify_enabled ? "włączony" : '<span style="color:var(--red)">wyłączony</span>'}</td></tr>
