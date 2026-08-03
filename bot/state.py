@@ -1,4 +1,4 @@
-"""Wspólny stan bota i dashboardu: feed sygnałów + heartbeat (pliki na dysku)."""
+"""Wspólny stan bota i serwera: feed analiz + heartbeat (pliki na dysku)."""
 
 import json
 import os
@@ -8,32 +8,8 @@ import time
 _DIR = os.path.dirname(__file__)
 SIGNALS_FILE = os.path.join(_DIR, "signals.jsonl")
 HEARTBEAT_FILE = os.path.join(_DIR, "heartbeat.json")
-HOLDS_FILE = os.path.join(_DIR, "holds.json")
 
 _state_lock = threading.Lock()
-
-
-def get_holds() -> dict:
-    """Pozycje oznaczone ręcznie 'trzymaj' — bot nie zamyka ich automatycznie
-    (limit czasu / runaway take-profit); SL/TP u brokera dalej działają."""
-    try:
-        with open(HOLDS_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def set_hold(position_id, hold: bool):
-    with _state_lock:
-        holds = get_holds()
-        pid = str(position_id)
-        if hold:
-            holds[pid] = time.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            holds.pop(pid, None)
-        with open(HOLDS_FILE, "w", encoding="utf-8") as f:
-            json.dump(holds, f)
-        return holds
 
 
 def log_signal(entry: dict):
