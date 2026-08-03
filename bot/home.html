@@ -3,145 +3,88 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Start — co odpalamy?</title>
+<meta name="robots" content="noindex">
+<title>Portfel — serwer</title>
 <style>
   :root {
-    --bg: #0a0d13; --card: #141926; --elev: #10141d; --border: #232b3d;
-    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
-    --green: #2fd48a; --accent: #5b8cff; --violet: #a78bfa; --amber: #ffb454;
+    --bg: #0a0d13; --card: #141926; --border: #212938; --text: #e8ecf4;
+    --muted: #8b93a7; --dim: #5c6479; --green: #2fd48a;
   }
-  * { box-sizing: border-box; margin: 0; }
-  html, body { height: 100%; }
+  * { box-sizing: border-box; }
   body {
-    background: var(--bg); color: var(--text); overflow: hidden;
-    font: 15px/1.5 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
   }
-  /* tło: dwie mgławice kolorystycznie przypisane do wyborów */
-  .glow { position: fixed; width: 62vmax; height: 62vmax; border-radius: 50%;
-          filter: blur(90px); opacity: .16; pointer-events: none; transition: opacity .5s; }
-  .glow.g1 { background: radial-gradient(circle, var(--green), transparent 60%); left: -18vmax; top: -14vmax; }
-  .glow.g2 { background: radial-gradient(circle, var(--accent), transparent 60%); right: -18vmax; bottom: -14vmax; }
-  body.hover-l .glow.g1 { opacity: .3; }
-  body.hover-r .glow.g2 { opacity: .3; }
-
-  header { text-align: center; margin-bottom: 44px; animation: drop .5s ease both; }
-  header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.3px; }
-  header p { color: var(--muted); margin-top: 6px; font-size: 14.5px; }
-
-  .choices { display: grid; grid-template-columns: repeat(3, 300px); gap: 22px; }
-  @media (max-width: 1050px) { .choices { grid-template-columns: 1fr; padding: 0 18px; } body { overflow: auto; } }
-
-  .choice {
-    position: relative; display: block; padding: 34px 30px 30px; border-radius: 22px;
-    background: linear-gradient(180deg, var(--card), var(--elev));
-    border: 1px solid var(--border); cursor: pointer; text-decoration: none; color: inherit;
-    transition: transform .18s ease, border-color .18s, box-shadow .18s;
-    animation: drop .5s ease both;
+  .box { max-width: 460px; width: 100%; }
+  .status { display: flex; align-items: center; gap: 9px; margin-bottom: 22px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 10px var(--green);
   }
-  .choice:nth-child(2) { animation-delay: .08s; }
-  .choice:hover { transform: translateY(-6px); }
-  .choice.left:hover  { border-color: rgba(47,212,138,.55); box-shadow: 0 22px 60px -18px rgba(47,212,138,.35); }
-  .choice.right:hover { border-color: rgba(91,140,255,.55); box-shadow: 0 22px 60px -18px rgba(91,140,255,.35); }
-
-  .icon { width: 58px; height: 58px; border-radius: 16px; display: flex; align-items: center;
-          justify-content: center; font-size: 28px; margin-bottom: 20px; }
-  .left  .icon { background: rgba(47,212,138,.13); }
-  .mid   .icon { background: rgba(167,139,250,.14); }
-  .right .icon { background: rgba(91,140,255,.13); }
-  .choice.mid:hover { border-color: rgba(167,139,250,.55); box-shadow: 0 22px 60px -18px rgba(167,139,250,.35); }
-  .mid .go { color: var(--violet); }
-  .mid .badge { background: rgba(167,139,250,.16); color: var(--violet); }
-
-  .choice h2 { font-size: 21px; font-weight: 800; letter-spacing: -.2px; }
-  .choice p  { color: var(--muted); font-size: 13.5px; margin-top: 8px; min-height: 60px; }
-
-  .go { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; font-weight: 700;
-        font-size: 13.5px; transition: gap .18s; }
-  .left  .go { color: var(--green); }
-  .right .go { color: var(--accent); }
-  .choice:hover .go { gap: 13px; }
-
-  .key { position: absolute; top: 16px; right: 16px; font-size: 11px; color: var(--dim);
-         border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px;
-         font-family: "Cascadia Mono", Consolas, monospace; }
-
-  .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .8px;
-           padding: 3px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 3px; }
-  .left  .badge { background: rgba(47,212,138,.15); color: var(--green); }
-  .right .badge { background: rgba(255,180,84,.14); color: var(--amber); }
-
-  .extras { margin-top: 30px; display: flex; gap: 12px; align-items: center;
-            color: var(--dim); font-size: 12.5px; animation: drop .5s .2s ease both; }
-  .extras a { color: var(--muted); text-decoration: none; }
-  .extras a:hover { color: var(--text); }
-  .extras a.premium { color: var(--amber); }
-
-  footer { position: fixed; bottom: 18px; color: var(--dim); font-size: 12px; }
-  @keyframes drop { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  .status span { font-size: 13px; color: var(--muted); }
+  h1 { font-size: 21px; margin: 0 0 10px; letter-spacing: -0.2px; }
+  p { color: var(--muted); font-size: 13.5px; line-height: 1.65; margin: 0 0 18px; }
+  .links { display: flex; gap: 10px; flex-wrap: wrap; }
+  a {
+    display: inline-block; padding: 10px 16px; border-radius: 11px;
+    border: 1px solid var(--border); background: var(--card);
+    color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600;
+  }
+  a:hover { border-color: var(--dim); }
+  footer { margin-top: 26px; color: var(--dim); font-size: 11.5px; line-height: 1.6; }
 </style>
 </head>
 <body>
-  <div class="glow g1"></div><div class="glow g2"></div>
+  <div class="box">
+    <div class="status"><span class="dot"></span><span>Serwer działa</span></div>
+    <h1>Portfel — serwer danych</h1>
+    <p>
+      To już tylko silnik: liczy portfel, nasłuchuje wiadomości i podaje dane aplikacji.
+      Interfejs mieszka w aplikacji — jedna wersja na telefon i na przeglądarkę.
+    </p>
+    <div class="links">
+      <a href="/account">Konto</a>
+      <a href="/premium">Premium</a>
+    </div>
 
-  <header>
-    <h1>Co dziś robimy?</h1>
-    <p>Wybierz moduł — bot newsowy nie startuje sam, dopóki go nie włączysz.</p>
-  </header>
+    <!-- Dane do połączenia telefonu. Były w panelu portfela, a panel zniknął —
+         więc muszą być tutaj, inaczej nie da się podłączyć nowego urządzenia. -->
+    <div class="connect" id="connect" hidden>
+      <h2>Podłącz telefon</h2>
+      <p class="small">W aplikacji wpisz ten adres i token. Widoczne tylko z tego komputera.</p>
+      <div id="endpoints"></div>
+      <div class="field"><span>Token</span><code id="token">…</code></div>
+    </div>
 
-  <div class="choices">
-    <a class="choice left" href="/portfolio"
-       onmouseenter="document.body.classList.add('hover-l')" onmouseleave="document.body.classList.remove('hover-l')">
-      <span class="key">1</span>
-      <div class="icon">📈</div>
-      <h2>Portfel<span class="badge">NOWOŚĆ</span></h2>
-      <p>Śledzenie kont maklerskich: wykres wartości od początku, wpłaty, zyski, benchmarki (S&amp;P&nbsp;500, WIG20, inflacja) i pozycje.</p>
-      <span class="go">Otwórz portfel <span>→</span></span>
-    </a>
-
-    <a class="choice mid" href="/earnings"
-       onmouseenter="document.body.classList.add('hover-l')" onmouseleave="document.body.classList.remove('hover-l')">
-      <span class="key">2</span>
-      <div class="icon">🗓️</div>
-      <h2>Earnings<span class="badge">NOWOŚĆ</span></h2>
-      <p>Kalendarz wyników spółek z całego świata i GPW, wydarzenia makro (Fed, EBC, NBP, dane), raport przed publikacją i historia zaskoczeń.</p>
-      <span class="go">Otwórz kalendarz <span>→</span></span>
-    </a>
-
-    <a class="choice right" href="/bot"
-       onmouseenter="document.body.classList.add('hover-r')" onmouseleave="document.body.classList.remove('hover-r')">
-      <span class="key">3</span>
-      <div class="icon">🤖</div>
-      <h2>Bot newsowy<span class="badge">STOP</span></h2>
-      <p>Panel operacyjny bota tradingowego — nasłuch newsów, sygnały, pozycje. Uruchomisz go przyciskiem START w panelu.</p>
-      <span class="go">Otwórz panel bota <span>→</span></span>
-    </a>
+    <footer>
+      Dawne panele w przeglądarce zostały wycofane — wszystko, co robiły, jest w aplikacji.
+    </footer>
   </div>
 
-  <div class="extras">
-    <a href="/account" id="acctLink">Konto</a>
-    <span>·</span>
-    <a href="/premium">Premium</a>
-  </div>
+<style>
+  .connect { margin-top: 26px; padding: 16px; border: 1px solid var(--border);
+             border-radius: 14px; background: var(--card); }
+  .connect h2 { font-size: 14px; margin: 0 0 6px; }
+  .small { font-size: 12px; margin: 0 0 12px; }
+  .field { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+           border-top: 1px solid var(--border); }
+  .field span { color: var(--dim); font-size: 11.5px; min-width: 96px; }
+  .field code { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+                color: var(--text); word-break: break-all; }
+  .tag { color: var(--dim); font-size: 10.5px; margin-left: auto; white-space: nowrap; }
+</style>
 
-  <footer>news-trader · klawisz 1, 2 lub 3 wybiera moduł</footer>
-
-<script src="/static/auth.js"></script>
 <script>
-  // podmieniamy „Konto" na adres zalogowanego — jedno spojrzenie mówi, kto jest w środku
-  (async function () {
-    await Portfel.auth.ready().catch(() => {});
-    const link = document.getElementById("acctLink");
-    if (!Portfel.auth.configured) { document.querySelector(".extras").style.display = "none"; return; }
-    const u = Portfel.auth.user;
-    if (u) link.textContent = (u.name || u.email).split("@")[0];
-  })();
-
-  document.addEventListener("keydown", e => {
-    if (e.key === "1") location.href = "/portfolio";
-    if (e.key === "2") location.href = "/earnings";
-    if (e.key === "3") location.href = "/bot";
-  });
+  fetch("/api/portfolio/connect-info").then(r => r.json()).then(d => {
+    if (!d.ok) return;                        // otwarte z sieci — nic nie pokazujemy
+    document.getElementById("connect").hidden = false;
+    document.getElementById("token").textContent = d.token;
+    document.getElementById("endpoints").innerHTML = (d.endpoints || []).map(e =>
+      `<div class="field"><span>Adres</span><code>${e.url}</code>` +
+      `<span class="tag">${e.label}</span></div>`).join("")
+      || `<div class="field"><span>Adres</span><code>brak adresu w sieci</code></div>`;
+  }).catch(() => {});
 </script>
 </body>
 </html>

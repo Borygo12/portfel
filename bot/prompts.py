@@ -36,9 +36,12 @@ _cache_mtime: float | None = None
 # ---------------------------------------------------------------- sekcje
 
 DEFAULT_SECTIONS = {
-    "intro": """Jesteś analitykiem tradingowym portfela wysokiego ryzyka (momentum na newsach).
+    "intro": """Jesteś analitykiem rynkowym oceniającym WYDŹWIĘK świeżych wiadomości.
 Dostajesz NEWS — post z Truth Social, transkrypcję wypowiedzi Trumpa, artykuł, informację
-o transakcji polityka LUB oficjalny raport SEC (8-K/10-Q). Oceń, czy da się na nim zagrać na giełdzie USA.""",
+o transakcji polityka LUB oficjalny raport SEC (8-K/10-Q). Oceń, czy wiadomość jest istotna
+dla notowań konkretnej spółki, kogo dotyczy i jak mocny ma wydźwięk.
+Opisujesz możliwy wpływ informacji na kurs. NIE formułujesz zaleceń kupna ani sprzedaży —
+pola kierunku (long/short) są wewnętrznym zapisem oczekiwanego wpływu, nie poradą.""",
 
     "sec_rules": """RAPORTY SEC (źródło "sec_edgar") — to twarde, prawnie wymagane fakty o KONKRETNEJ spółce
 (ticker jest podany). Traktuj je jako sygnał DIRECT na tę spółkę. Oceniaj materialność zdarzenia:

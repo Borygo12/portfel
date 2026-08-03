@@ -1,8 +1,15 @@
-"""Panel operacyjny ownera — serwer webowy (port 8500).
+"""Serwer danych (port 8500) — API aplikacji Portfel.
 
-Uruchomienie:  python dashboard.py
-Bot (main.py) i panel to osobne procesy; komunikują się przez params.json,
-signals.jsonl i heartbeat.json, więc panel działa nawet gdy bot leży.
+Uruchomienie:  python dashboard.py [--lan] [--no-browser]
+
+Od sierpnia 2026 serwer nie ma własnego interfejsu: dawne panele HTML zostały
+wycofane, a jedynym interfejsem jest aplikacja (telefon i przeglądarka z tego
+samego kodu). Zostały tylko trzy strony, które MUSZĄ być otwierane w
+przeglądarce: `/` (informacja, że serwer żyje), `/account` (powrót z logowania
+Google) i `/premium` (strona sprzedażowa spod kłódek).
+
+Bot (main.py) i serwer to osobne procesy; komunikują się przez params.json,
+signals.jsonl i heartbeat.json, więc serwer działa nawet gdy bot leży.
 """
 
 import os
@@ -29,7 +36,7 @@ from live import calendar as live_cal       # noqa: E402
 from live import manager as live_manager    # noqa: E402
 from sources import sitemap_monitor         # noqa: E402
 
-app = FastAPI(title="News Trader — panel")
+app = FastAPI(title="Portfel — serwer danych")
 
 _DIR = os.path.dirname(__file__)
 _STARTED_AT = int(time.time())          # do rozpoznania, czy panel wstał po restarcie
@@ -105,7 +112,7 @@ from fastapi.staticfiles import StaticFiles    # noqa: E402
 
 app.include_router(account_api.router)
 
-# Wspólne skrypty i style paneli HTML (logowanie, kłódki premium).
+# Skrypty i style stron logowania oraz strony sprzedażowej.
 app.mount("/static", StaticFiles(directory=os.path.join(_DIR, "static")), name="static")
 
 
@@ -119,18 +126,8 @@ def _page(name):
 
 @app.get("/")
 def index():
-    """Ekran wyboru: Portfel (tracker) albo Bot newsowy."""
+    """Serwer nie ma już własnego interfejsu — interfejsem jest aplikacja."""
     return _page("home.html")
-
-
-@app.get("/bot")
-def bot_panel():
-    return _page("panel.html")
-
-
-@app.get("/portfolio")
-def portfolio_page():
-    return _page("portfolio.html")
 
 
 @app.get("/premium")
@@ -143,37 +140,6 @@ def premium_page():
 def account_page():
     """Logowanie, stan subskrypcji i powrót z OAuth Google."""
     return _page("account.html")
-
-
-@app.get("/vendor/lightweight-charts.js")
-def vendor_lwc():
-    return FileResponse(os.path.join(_DIR, "vendor", "lightweight-charts.js"),
-                        media_type="application/javascript")
-
-
-@app.get("/settings")
-def settings_page():
-    return _page("settings.html")
-
-
-@app.get("/ict")
-def ict_page():
-    return _page("ict.html")
-
-
-@app.get("/live")
-def live_page():
-    return _page("live.html")
-
-
-@app.get("/brain")
-def brain_page():
-    return _page("brain.html")
-
-
-@app.get("/earnings")
-def earnings_page():
-    return _page("earnings.html")
 
 
 # ---------------- Mózg AI (prompty, kategorie, autorytet) ----------------

@@ -1,5 +1,6 @@
-' Portfel (telefon) — jak launch.vbs, ale panel słucha też w sieci lokalnej (--lan),
-' żeby aplikacja na iPhonie mogła się połączyć. Dostęp z sieci wymaga tokenu.
+' Portfel — serwer danych dla aplikacji. Slucha takze w sieci lokalnej (--lan),
+' zeby aplikacja na telefonie mogla sie polaczyc. Dostep z sieci wymaga tokenu.
+' Nie otwiera przegladarki: interfejsem jest aplikacja, nie ten serwer.
 
 Dim botDir, pyw, url, shell, killCmd, i
 botDir = "C:\Users\Borys\Desktop\news-trader\bot"
@@ -23,7 +24,7 @@ Next
 
 ' 3) Odpal świeży serwer w trybie sieciowym.
 shell.CurrentDirectory = botDir
-shell.Run """" & pyw & """ """ & botDir & "\dashboard.py"" --lan", 0, False
+shell.Run """" & pyw & """ """ & botDir & "\dashboard.py"" --lan --no-browser", 0, False
 
 Function PortBusy(port)
     Dim exec, out

@@ -131,24 +131,44 @@ FEATURES: list[dict] = [
         "free_hint": "Bez premium widzisz konfigurację, ale nie zapiszesz zmian.",
     },
     {
-        "id": "bot.backtest",
+        "id": "bot.outcomes",
         "group": "bot",
         "screen": "bot",
         "status": "live",
-        "icon": "⏮",
-        "title": "Backtest strategii",
-        "tagline": "Sprawdź na historii, zanim wystawisz prawdziwe pieniądze",
+        "icon": "📈",
+        "title": "Sprawdzalność analiz",
+        "tagline": "Zobacz, co kurs naprawdę robił po takich wiadomościach",
         "pitch": (
-            "Puszczasz obecne ustawienia bota po archiwum wiadomości i widzisz, co by z tego "
-            "wyszło: ile transakcji, jaka skuteczność, jakie obsunięcie kapitału. To jedyny "
-            "sposób, żeby zmiana w Mózgu AI nie była wróżeniem z fusów."
+            "Przy każdej analizie bot zapisuje kurs spółki, a potem sprawdza go po godzinie "
+            "i po dniu. Z tego powstaje liczba zamiast obietnicy: jak często kurs poszedł "
+            "w stronę wskazanego wydźwięku i jak duży był to ruch."
         ),
         "bullets": [
-            "Wynik na historycznych komunikatach z krzywą kapitału",
-            "Skuteczność, profit factor, maksymalne obsunięcie",
-            "Porównanie dwóch zestawów ustawień obok siebie",
+            "Pomiar po 1 godzinie i po 1 dniu od analizy",
+            "Skuteczność w podziale na źródła i kategorie wiadomości",
+            "Średnia siła ruchu — czy to w ogóle był ruch wart uwagi",
         ],
-        "free_hint": "Bez premium widzisz przykładowy wynik na danych demonstracyjnych.",
+        "free_hint": "Bez premium widzisz sam wynik zbiorczy, bez rozbicia na źródła.",
+    },
+    {
+        "id": "bot.live",
+        "group": "bot",
+        "screen": "tools",
+        "status": "live",
+        "icon": "🎙",
+        "title": "Wystąpienia na żywo",
+        "tagline": "Słuchaj konferencji, zanim media zdążą ją streścić",
+        "pitch": (
+            "Konferencje prasowe, decyzje banków centralnych i wystąpienia polityków lecą "
+            "na żywo. Komputer zamienia dźwięk na tekst, a model wyławia z niego zdania, "
+            "które realnie dotyczą konkretnych spółek — razem z cytatem, na którym się oparł."
+        ),
+        "bullets": [
+            "Transkrypcja na żywo z kanałów YouTube i zaplanowanych streamów",
+            "Kalendarz wydarzeń: FDA, Fed, wystąpienia — z automatycznym dozorem",
+            "Wyłapane fragmenty z cytatem i oceną, kogo dotyczą",
+        ],
+        "free_hint": "Bez premium widzisz kalendarz wydarzeń, ale bez transkrypcji i analiz.",
     },
     {
         "id": "bot.alerts",
