@@ -1,0 +1,29 @@
+# --- sekrety: NIGDY do repozytorium -----------------------------------------
+.env
+*.env
+!*.env.example
+keys/
+bot/.env
+
+# --- aplikacja mobilna ma własne repozytorium --------------------------------
+mobile/
+
+# --- zależności i budowanie ---------------------------------------------------
+node_modules/
+__pycache__/
+*.pyc
+.expo/
+dist/
+
+# --- dane robocze i pamięć podręczna (odtwarzalne) ---------------------------
+bot/portfolio_data/
+bot/live_logs/
+bot/backtests/
+bot/*.log
+bot/signals.jsonl
+bot/heartbeat.json
+bot/holds.json
+bot/day_start.json
+bot/mentions.json
+bot/live_events.json
+bot/sources/sitemap_state.json

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Konto — Portfel</title>
+<style>
+  :root {
+    --bg: #0a0d13; --card: #141926; --elev: #10141d; --border: #232b3d;
+    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
+    --green: #2fd48a; --accent: #5b8cff; --amber: #ffb454; --red: #ff5c6c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    font: 15px/1.55 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .glow { position: fixed; width: 62vmax; height: 62vmax; border-radius: 50%;
+          filter: blur(100px); opacity: .12; pointer-events: none;
+          background: radial-gradient(circle, var(--accent), transparent 60%);
+          left: -20vmax; top: -20vmax; }
+
+  .box {
+    width: 100%; max-width: 420px; position: relative;
+    background: linear-gradient(180deg, var(--card), var(--elev));
+    border: 1px solid var(--border); border-radius: 22px; padding: 30px 28px;
+  }
+  h1 { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+  .sub { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+
+  label { display: block; font-size: 11.5px; color: var(--dim); font-weight: 700;
+          letter-spacing: .5px; margin: 16px 0 6px; }
+  input {
+    width: 100%; padding: 12px 14px; border-radius: 12px; background: #0d1119;
+    border: 1px solid var(--border); color: var(--text); font-size: 14.5px; font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+
+  button.main {
+    width: 100%; margin-top: 18px; padding: 13px; border-radius: 13px; border: 0;
+    background: var(--green); color: #04140c; font-weight: 800; font-size: 14.5px; cursor: pointer;
+  }
+  button.main:disabled { opacity: .55; cursor: default; }
+
+  button.google {
+    width: 100%; margin-top: 10px; padding: 12px; border-radius: 13px;
+    border: 1px solid var(--border); background: #171d29; color: var(--text);
+    font-weight: 700; font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+  }
+  button.google:hover { border-color: var(--muted); }
+
+  .or { display: flex; align-items: center; gap: 12px; color: var(--dim); font-size: 11.5px;
+        margin: 20px 0 2px; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  .swap { margin-top: 18px; text-align: center; font-size: 13px; color: var(--muted); }
+  .swap a { color: var(--accent); cursor: pointer; text-decoration: none; }
+
+  .msg { margin-top: 14px; font-size: 13px; border-radius: 11px; padding: 11px 13px; display: none; }
+  .msg.err { display: block; color: var(--red); background: rgba(255,92,108,.1);
+             border: 1px solid rgba(255,92,108,.3); }
+  .msg.ok  { display: block; color: var(--green); background: rgba(47,212,138,.1);
+             border: 1px solid rgba(47,212,138,.3); }
+
+  /* --- widok zalogowanego --- */
+  .who { display: flex; align-items: center; gap: 13px; }
+  .avatar { width: 46px; height: 46px; border-radius: 14px; background: #1a2030;
+            display: flex; align-items: center; justify-content: center; font-size: 19px;
+            font-weight: 800; color: var(--accent); overflow: hidden; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .who .mail { font-weight: 700; font-size: 14.5px; }
+  .who .prov { color: var(--dim); font-size: 12px; }
+
+  .status { margin-top: 22px; padding: 16px; border-radius: 15px; border: 1px solid var(--border);
+            background: #0d1119; }
+  .status .t { font-size: 11.5px; letter-spacing: .6px; color: var(--dim); font-weight: 700; }
+  .status .v { font-size: 17px; font-weight: 800; margin-top: 5px; }
+  .status.on  { border-color: rgba(255,180,84,.45); background: rgba(255,180,84,.07); }
+  .status.on .v { color: var(--amber); }
+  .status .exp { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+
+  .links { display: flex; gap: 10px; margin-top: 18px; }
+  .links a, .links button {
+    flex: 1; text-align: center; padding: 11px; border-radius: 12px; text-decoration: none;
+    border: 1px solid var(--border); background: #171d29; color: var(--text);
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .links a:hover, .links button:hover { border-color: var(--muted); }
+
+  .note { color: var(--dim); font-size: 11.5px; margin-top: 18px; line-height: 1.6; }
+  .note code { background: #0d1119; padding: 1px 5px; border-radius: 5px;
+               font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
+  .back { display: block; text-align: center; margin-top: 18px; color: var(--dim);
+          font-size: 12.5px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<div class="box" id="box">
+  <h1>Wczytywanie…</h1>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const box = document.getElementById("box");
+const backTo = new URLSearchParams(location.search).get("wróć") || "/";
+let mode = "in";                       // "in" = logowanie, "up" = zakładanie konta
+
+function say(text, kind) {
+  const el = document.getElementById("msg");
+  if (!el) return;
+  el.className = "msg " + (kind || "err");
+  el.textContent = text;
+}
+
+function renderAuth(configured) {
+  if (!configured) {
+    box.innerHTML = `
+      <h1>Konta nie są jeszcze włączone</h1>
+      <p class="sub">Backend nie widzi konfiguracji Supabase, więc logowanie jest wyłączone.
+        Panel działa normalnie — brakuje tylko kont i premium.</p>
+      <p class="note">Uzupełnij <code>keys/supabase.env</code> według instrukcji w
+        <code>keys/README.md</code> i zrestartuj panel.</p>
+      <a class="back" href="/">← Wróć do panelu</a>`;
+    return;
+  }
+  const up = mode === "up";
+  box.innerHTML = `
+    <h1>${up ? "Załóż konto" : "Zaloguj się"}</h1>
+    <p class="sub">${up
+      ? "Jedno konto obsługuje panel i aplikację na telefonie."
+      : "Tym samym kontem wchodzisz w panelu i w telefonie."}</p>
+
+    <button class="google" id="google">
+      <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-3.9H24v7.1h12c-.2 1.9-1.5 4.8-4.4 6.7l6.7 5.2C42.2 35.5 45 30.3 45 24z"/><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8 41.2 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 9.9l7.1-5.5z"/><path fill="#EA4335" d="M24 10.4c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.2 29.9 2 24 2 15.4 2 8 6.8 4.4 14.1l7.1 5.5C13.3 14.2 18.2 10.4 24 10.4z"/></svg>
+      Kontynuuj z Google
+    </button>
+
+    <div class="or">albo e-mailem</div>
+
+    <label for="email">ADRES E-MAIL</label>
+    <input id="email" type="email" autocomplete="email" placeholder="ty@example.com">
+
+    <label for="pass">HASŁO</label>
+    <input id="pass" type="password" autocomplete="${up ? "new-password" : "current-password"}"
+           placeholder="${up ? "co najmniej 6 znaków" : "••••••••"}">
+
+    <button class="main" id="go">${up ? "Załóż konto" : "Zaloguj się"}</button>
+    <div class="msg" id="msg"></div>
+
+    <div class="swap">
+      ${up ? "Masz już konto?" : "Nie masz konta?"}
+      <a id="swap">${up ? "Zaloguj się" : "Załóż je w 20 sekund"}</a>
+    </div>
+    <a class="back" href="/">← Wróć do panelu</a>`;
+
+  document.getElementById("swap").onclick = () => { mode = up ? "in" : "up"; renderAuth(true); };
+  document.getElementById("google").onclick = () =>
+    Portfel.auth.signInGoogle().catch((e) => say(e.message));
+
+  const submit = async () => {
+    const email = document.getElementById("email").value.trim();
+    const pass = document.getElementById("pass").value;
+    if (!email || !pass) { say("Podaj adres i hasło."); return; }
+    const btn = document.getElementById("go");
+    btn.disabled = true; btn.textContent = "Chwila…";
+    try {
+      const user = up ? await Portfel.auth.signUp(email, pass)
+                      : await Portfel.auth.signIn(email, pass);
+      if (!user) {
+        // Supabase wymaga potwierdzenia adresu — konto powstało, sesji jeszcze nie ma
+        say("Konto założone. Sprawdź skrzynkę i potwierdź adres, potem zaloguj się.", "ok");
+        btn.disabled = false; btn.textContent = up ? "Załóż konto" : "Zaloguj się";
+        return;
+      }
+      render();
+    } catch (e) {
+      say(e.message || "Nie udało się zalogować");
+      btn.disabled = false; btn.textContent = up ? "Załóż konto" : "Zaloguj się";
+    }
+  };
+  document.getElementById("go").onclick = submit;
+  document.getElementById("pass").onkeydown = (e) => { if (e.key === "Enter") submit(); };
+}
+
+async function renderAccount(user) {
+  const r = await Portfel.auth.fetch("/api/me");
+  const me = await r.json().catch(() => ({}));
+  const initial = (user.name || user.email || "?").trim().charAt(0).toUpperCase();
+  const premium = !!me.premium;
+  const until = me.expires_at
+    ? new Date(me.expires_at).toLocaleDateString("pl-PL",
+        { day: "numeric", month: "long", year: "numeric" })
+    : null;
+
+  const PLAN = { monthly: "Premium — miesięcznie", yearly: "Premium — rocznie",
+                 lifetime: "Premium — dożywotnio", trial: "Okres próbny", owner: "Konto właściciela" };
+
+  box.innerHTML = `
+    <div class="who">
+      <div class="avatar">${user.avatar
+        ? `<img src="${esc(user.avatar)}" alt="">` : esc(initial)}</div>
+      <div>
+        <div class="mail">${esc(user.name || user.email)}</div>
+        <div class="prov">${esc(user.name ? user.email : "konto Portfel")}</div>
+      </div>
+    </div>
+
+    <div class="status ${premium ? "on" : ""}">
+      <div class="t">STATUS</div>
+      <div class="v">${premium ? esc(PLAN[me.plan] || "Premium") : "Wersja darmowa"}</div>
+      ${premium
+        ? `<div class="exp">${until ? "Ważne do " + esc(until) : "Bez terminu wygaśnięcia"}</div>`
+        : `<div class="exp">Funkcje premium są widoczne w panelu, ale zasłonięte kłódką.</div>`}
+    </div>
+
+    <div class="links">
+      ${premium ? "" : `<a href="/premium">Zobacz premium</a>`}
+      <a href="${esc(backTo)}">Do panelu</a>
+      <button id="out">Wyloguj</button>
+    </div>
+
+    <p class="note">Ten sam adres wpisujesz w aplikacji na telefonie — ustawienia i status
+      premium wędrują między urządzeniami automatycznie.</p>`;
+
+  document.getElementById("out").onclick = async () => {
+    await Portfel.auth.signOut();
+    render();
+  };
+}
+
+async function render() {
+  // ready() zapamiętuje wynik pierwszego wywołania, więc po wylogowaniu bieżący
+  // stan czytamy z gettera, a nie z tego, co zwróciło ready()
+  await Portfel.auth.ready().catch(() => {});
+  const user = Portfel.auth.user;
+  if (user) renderAccount(user);
+  else renderAuth(Portfel.auth.configured);
+}
+
+render();
+</script>
+</body>
+</html>

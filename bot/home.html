@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start — co odpalamy?</title>
+<style>
+  :root {
+    --bg: #0a0d13; --card: #141926; --elev: #10141d; --border: #232b3d;
+    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
+    --green: #2fd48a; --accent: #5b8cff; --violet: #a78bfa; --amber: #ffb454;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); overflow: hidden;
+    font: 15px/1.5 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  /* tło: dwie mgławice kolorystycznie przypisane do wyborów */
+  .glow { position: fixed; width: 62vmax; height: 62vmax; border-radius: 50%;
+          filter: blur(90px); opacity: .16; pointer-events: none; transition: opacity .5s; }
+  .glow.g1 { background: radial-gradient(circle, var(--green), transparent 60%); left: -18vmax; top: -14vmax; }
+  .glow.g2 { background: radial-gradient(circle, var(--accent), transparent 60%); right: -18vmax; bottom: -14vmax; }
+  body.hover-l .glow.g1 { opacity: .3; }
+  body.hover-r .glow.g2 { opacity: .3; }
+
+  header { text-align: center; margin-bottom: 44px; animation: drop .5s ease both; }
+  header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.3px; }
+  header p { color: var(--muted); margin-top: 6px; font-size: 14.5px; }
+
+  .choices { display: grid; grid-template-columns: repeat(3, 300px); gap: 22px; }
+  @media (max-width: 1050px) { .choices { grid-template-columns: 1fr; padding: 0 18px; } body { overflow: auto; } }
+
+  .choice {
+    position: relative; display: block; padding: 34px 30px 30px; border-radius: 22px;
+    background: linear-gradient(180deg, var(--card), var(--elev));
+    border: 1px solid var(--border); cursor: pointer; text-decoration: none; color: inherit;
+    transition: transform .18s ease, border-color .18s, box-shadow .18s;
+    animation: drop .5s ease both;
+  }
+  .choice:nth-child(2) { animation-delay: .08s; }
+  .choice:hover { transform: translateY(-6px); }
+  .choice.left:hover  { border-color: rgba(47,212,138,.55); box-shadow: 0 22px 60px -18px rgba(47,212,138,.35); }
+  .choice.right:hover { border-color: rgba(91,140,255,.55); box-shadow: 0 22px 60px -18px rgba(91,140,255,.35); }
+
+  .icon { width: 58px; height: 58px; border-radius: 16px; display: flex; align-items: center;
+          justify-content: center; font-size: 28px; margin-bottom: 20px; }
+  .left  .icon { background: rgba(47,212,138,.13); }
+  .mid   .icon { background: rgba(167,139,250,.14); }
+  .right .icon { background: rgba(91,140,255,.13); }
+  .choice.mid:hover { border-color: rgba(167,139,250,.55); box-shadow: 0 22px 60px -18px rgba(167,139,250,.35); }
+  .mid .go { color: var(--violet); }
+  .mid .badge { background: rgba(167,139,250,.16); color: var(--violet); }
+
+  .choice h2 { font-size: 21px; font-weight: 800; letter-spacing: -.2px; }
+  .choice p  { color: var(--muted); font-size: 13.5px; margin-top: 8px; min-height: 60px; }
+
+  .go { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; font-weight: 700;
+        font-size: 13.5px; transition: gap .18s; }
+  .left  .go { color: var(--green); }
+  .right .go { color: var(--accent); }
+  .choice:hover .go { gap: 13px; }
+
+  .key { position: absolute; top: 16px; right: 16px; font-size: 11px; color: var(--dim);
+         border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px;
+         font-family: "Cascadia Mono", Consolas, monospace; }
+
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .8px;
+           padding: 3px 8px; border-radius: 999px; margin-left: 8px; vertical-align: 3px; }
+  .left  .badge { background: rgba(47,212,138,.15); color: var(--green); }
+  .right .badge { background: rgba(255,180,84,.14); color: var(--amber); }
+
+  .extras { margin-top: 30px; display: flex; gap: 12px; align-items: center;
+            color: var(--dim); font-size: 12.5px; animation: drop .5s .2s ease both; }
+  .extras a { color: var(--muted); text-decoration: none; }
+  .extras a:hover { color: var(--text); }
+  .extras a.premium { color: var(--amber); }
+
+  footer { position: fixed; bottom: 18px; color: var(--dim); font-size: 12px; }
+  @keyframes drop { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+  <div class="glow g1"></div><div class="glow g2"></div>
+
+  <header>
+    <h1>Co dziś robimy?</h1>
+    <p>Wybierz moduł — bot newsowy nie startuje sam, dopóki go nie włączysz.</p>
+  </header>
+
+  <div class="choices">
+    <a class="choice left" href="/portfolio"
+       onmouseenter="document.body.classList.add('hover-l')" onmouseleave="document.body.classList.remove('hover-l')">
+      <span class="key">1</span>
+      <div class="icon">📈</div>
+      <h2>Portfel<span class="badge">NOWOŚĆ</span></h2>
+      <p>Śledzenie kont maklerskich: wykres wartości od początku, wpłaty, zyski, benchmarki (S&amp;P&nbsp;500, WIG20, inflacja) i pozycje.</p>
+      <span class="go">Otwórz portfel <span>→</span></span>
+    </a>
+
+    <a class="choice mid" href="/earnings"
+       onmouseenter="document.body.classList.add('hover-l')" onmouseleave="document.body.classList.remove('hover-l')">
+      <span class="key">2</span>
+      <div class="icon">🗓️</div>
+      <h2>Earnings<span class="badge">NOWOŚĆ</span></h2>
+      <p>Kalendarz wyników spółek z całego świata i GPW, wydarzenia makro (Fed, EBC, NBP, dane), raport przed publikacją i historia zaskoczeń.</p>
+      <span class="go">Otwórz kalendarz <span>→</span></span>
+    </a>
+
+    <a class="choice right" href="/bot"
+       onmouseenter="document.body.classList.add('hover-r')" onmouseleave="document.body.classList.remove('hover-r')">
+      <span class="key">3</span>
+      <div class="icon">🤖</div>
+      <h2>Bot newsowy<span class="badge">STOP</span></h2>
+      <p>Panel operacyjny bota tradingowego — nasłuch newsów, sygnały, pozycje. Uruchomisz go przyciskiem START w panelu.</p>
+      <span class="go">Otwórz panel bota <span>→</span></span>
+    </a>
+  </div>
+
+  <div class="extras">
+    <a href="/account" id="acctLink">Konto</a>
+    <span>·</span>
+    <a href="/premium">Premium</a>
+  </div>
+
+  <footer>news-trader · klawisz 1, 2 lub 3 wybiera moduł</footer>
+
+<script src="/static/auth.js"></script>
+<script>
+  // podmieniamy „Konto" na adres zalogowanego — jedno spojrzenie mówi, kto jest w środku
+  (async function () {
+    await Portfel.auth.ready().catch(() => {});
+    const link = document.getElementById("acctLink");
+    if (!Portfel.auth.configured) { document.querySelector(".extras").style.display = "none"; return; }
+    const u = Portfel.auth.user;
+    if (u) link.textContent = (u.name || u.email).split("@")[0];
+  })();
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "1") location.href = "/portfolio";
+    if (e.key === "2") location.href = "/earnings";
+    if (e.key === "3") location.href = "/bot";
+  });
+</script>
+</body>
+</html>

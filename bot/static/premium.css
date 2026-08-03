@@ -1,0 +1,84 @@
+/* Wygląd zablokowanych funkcji — żółta obwódka i kłódka.
+ *
+ * Zasada: zablokowana funkcja ma być WIDOCZNA, nie ukryta. Użytkownik ma zobaczyć,
+ * co traci, dotknąć tego i dopiero wtedy trafić na stronę sprzedażową. Dlatego pod
+ * kłódką zostaje prawdziwy interfejs, tylko rozmyty i nieklikalny.
+ */
+
+:root {
+  --lock: #ffb454;
+  --lock-soft: rgba(255, 180, 84, .13);
+  --lock-edge: rgba(255, 180, 84, .55);
+}
+
+.premium-locked {
+  position: relative;
+  border: 1.5px solid var(--lock-edge) !important;
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .18s, box-shadow .22s, transform .18s;
+}
+
+.premium-locked:hover {
+  border-color: var(--lock) !important;
+  box-shadow: 0 18px 50px -20px rgba(255, 180, 84, .45);
+  transform: translateY(-2px);
+}
+
+/* delikatny puls obwódki — na tyle wolny, żeby nie rozpraszał przy pracy */
+@keyframes premium-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 180, 84, .18); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 180, 84, 0); }
+}
+.premium-locked { animation: premium-breathe 3.6s ease-in-out infinite; }
+.premium-locked:hover { animation: none; }
+
+/* Zawartość pod spodem: widać kształt, nie widać liczb. */
+.premium-locked > .premium-under {
+  filter: blur(5px) saturate(.6);
+  opacity: .5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.premium-veil {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 20px; text-align: center;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(255, 180, 84, .10), transparent 62%),
+              rgba(10, 13, 19, .55);
+  backdrop-filter: blur(1.5px);
+}
+
+.premium-veil .padlock {
+  width: 42px; height: 42px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--lock-soft); border: 1px solid var(--lock-edge);
+  font-size: 19px;
+}
+
+.premium-veil .title {
+  font-size: 14.5px; font-weight: 800; color: var(--text, #e8ebf2); letter-spacing: -.2px;
+}
+.premium-veil .desc { font-size: 12.5px; color: var(--muted, #8b93a7); max-width: 34ch; line-height: 1.5; }
+
+.premium-veil .cta {
+  margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: .3px;
+  color: #1b1204; background: var(--lock); border-radius: 999px; padding: 7px 15px;
+  border: 0; cursor: pointer;
+}
+
+/* Znacznik przy tytułach sekcji, gdy nie da się zasłonić całej karty. */
+.premium-badge {
+  display: inline-flex; align-items: center; gap: 5px; vertical-align: middle;
+  margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 800; letter-spacing: .7px;
+  color: var(--lock); background: var(--lock-soft); border: 1px solid var(--lock-edge);
+  cursor: pointer;
+}
+
+/* Stan „masz premium" — ten sam element bez blokady, ale z dyskretnym śladem. */
+.premium-on {
+  border-color: rgba(255, 180, 84, .28) !important;
+}

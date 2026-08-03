@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News Trader — wystąpienia na żywo</title>
+<style>
+  :root {
+    --bg: #0a0d13; --elev: #10141d; --card: #141926; --border: #232b3d; --border2: #2d3750;
+    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
+    --green: #2fd48a; --red: #ff5c6c; --amber: #ffb454; --accent: #5b8cff; --violet: #a78bfa;
+    --mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: radial-gradient(1200px 600px at 80% -10%, #131a2b 0%, var(--bg) 55%); color: var(--text);
+         font: 14px/1.5 "Segoe UI", system-ui, sans-serif; min-height: 100vh; }
+  a { color: inherit; text-decoration: none; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 6px;
+        padding: 0 22px; height: 56px; background: rgba(10,13,19,.82); backdrop-filter: blur(14px);
+        border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 800; font-size: 16px; letter-spacing: .3px; margin-right: 22px; }
+  .brand span { color: var(--accent); }
+  .navlink { padding: 8px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--muted);
+             transition: .15s; display: flex; align-items: center; gap: 7px; }
+  .navlink:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  .navlink.active { color: var(--text); background: rgba(91,140,255,.14); }
+  .navlink.soon { color: var(--dim); }
+  .navlink .tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+                  background: rgba(167,139,250,.16); color: var(--violet); letter-spacing: .5px; }
+  .navlink .tag.live { background: rgba(255,92,108,.16); color: var(--red); }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+
+  main { padding: 22px; max-width: 1320px; margin: 0 auto; }
+  .card { background: linear-gradient(180deg, var(--card), var(--elev)); border: 1px solid var(--border);
+          border-radius: 16px; padding: 18px; }
+  .card h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted);
+             margin-bottom: 14px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; margin-bottom: 18px; }
+  @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-bottom: 18px; }
+  @media (max-width: 980px){ .grid2 { grid-template-columns: 1fr; } }
+
+  .power { width: 100%; border: 0; border-radius: 13px; padding: 16px; font-size: 16px; font-weight: 800;
+           letter-spacing: .5px; cursor: pointer; color: #04140c; display: flex; align-items: center;
+           justify-content: center; gap: 10px; transition: .15s; }
+  .power.start { background: linear-gradient(180deg, #34e59a, #1fb877); box-shadow: 0 8px 26px rgba(47,212,138,.32); }
+  .power.stop { background: linear-gradient(180deg, #ff6b7a, #e23e4f); color: #fff; box-shadow: 0 8px 26px rgba(255,92,108,.3); }
+  .power:active { transform: translateY(1px); }
+
+  .leds { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+  .led-row { display: flex; align-items: center; gap: 11px; padding: 9px 4px; border-top: 1px solid var(--border); }
+  .led { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--dim); transition: .3s; }
+  .led.on { box-shadow: 0 0 10px 1px currentColor; }
+  .led.green { color: var(--green); background: var(--green); }
+  .led.red { color: var(--red); background: var(--red); }
+  .led.amber { color: var(--amber); background: var(--amber); }
+  .led.pulse { animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+  .led-label { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
+  .led-val { margin-left: auto; font-size: 12.5px; font-weight: 700; }
+
+  .param { margin-bottom: 13px; }
+  .param label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; gap: 8px; }
+  .param output { color: var(--text); font-weight: 700; white-space: nowrap; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, input[type=text], input[type=time], input[type=date] {
+    background: var(--elev); border: 1px solid var(--border2); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; width: 100%; }
+  .btn { border: 0; border-radius: 9px; padding: 10px 14px; font-weight: 700; cursor: pointer; font-size: 13px; }
+  .btn-save { background: var(--accent); color: #fff; width: 100%; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border2); color: var(--muted); }
+  .btn-mini { padding: 5px 10px; font-size: 11.5px; border-radius: 7px; }
+  .btn-start { background: rgba(47,212,138,.16); color: var(--green); }
+  .btn-stop { background: rgba(255,92,108,.16); color: var(--red); }
+  .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-ui { position: absolute; inset: 0; background: #2a3247; border-radius: 999px; transition: .2s; cursor: pointer; }
+  .slider-ui:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider-ui { background: var(--green); }
+  .switch input:checked + .slider-ui:before { transform: translateX(18px); }
+
+  .cat { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px;
+         padding: 2px 8px; border-radius: 6px; }
+  .cat.fda { background: rgba(167,139,250,.16); color: var(--violet); }
+  .cat.trump { background: rgba(255,92,108,.16); color: var(--red); }
+  .cat.usa_gov { background: rgba(91,140,255,.16); color: var(--accent); }
+  .cat.europe { background: rgba(47,212,138,.14); color: var(--green); }
+  .cat.poland { background: rgba(255,180,84,.16); color: var(--amber); }
+  .cat.manual { background: rgba(139,147,167,.14); color: var(--muted); }
+
+  .evrow { display: flex; align-items: center; gap: 10px; padding: 11px 13px; background: var(--elev);
+           border: 1px solid var(--border); border-radius: 11px; margin-bottom: 8px; flex-wrap: wrap; }
+  .evrow.islive { border-color: rgba(255,92,108,.55); background: rgba(255,92,108,.05); }
+  .evrow .time { font-family: var(--mono); font-weight: 700; color: var(--muted); min-width: 44px; }
+  .evrow .title { font-weight: 600; flex: 1; min-width: 200px; font-size: 13px; }
+  .evrow .title small { color: var(--dim); display: block; font-weight: 400; }
+  .livebadge { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 6px;
+               background: var(--red); color: #fff; letter-spacing: .8px; animation: pulse 1.6s infinite; }
+  .endedbadge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+                background: rgba(139,147,167,.14); color: var(--dim); }
+  .track-label { font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
+
+  .chrow { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--elev);
+           border: 1px solid var(--border); border-radius: 10px; margin-bottom: 7px; }
+  .chrow .name { font-weight: 600; font-size: 13px; }
+  .chrow .handle { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .chrow .err { font-size: 11px; color: var(--red); }
+
+  .sess { border: 1px solid rgba(255,92,108,.4); border-radius: 16px; margin-bottom: 18px;
+          background: linear-gradient(180deg, var(--card), var(--elev)); overflow: hidden; }
+  .sess-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .sess-head .t { font-weight: 700; flex: 1; }
+  .sess-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 980px){ .sess-body { grid-template-columns: 1fr; } }
+  .sess-col { padding: 14px 18px; min-width: 0; }
+  .sess-col + .sess-col { border-left: 1px solid var(--border); }
+  .sess-col h3 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim); margin-bottom: 10px; }
+  .transcript { font-family: var(--mono); font-size: 12px; line-height: 1.7; max-height: 360px; overflow-y: auto;
+                background: rgba(0,0,0,.25); border-radius: 10px; padding: 12px; }
+  .transcript .tt { color: var(--dim); margin-right: 6px; }
+  .analyses { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .an { border: 1px solid var(--border); border-left: 3px solid var(--dim); border-radius: 9px;
+        padding: 9px 12px; background: rgba(0,0,0,.15); font-size: 12px; }
+  .an.sig { border-left-color: var(--amber); background: rgba(255,180,84,.06); }
+  .an.exec { border-left-color: var(--green); background: rgba(47,212,138,.06); }
+  .an .meta { color: var(--dim); font-size: 10.5px; margin-bottom: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .an .conf { font-family: var(--mono); font-weight: 800; }
+  .an .q { color: var(--muted); font-style: italic; }
+  .empty { color: var(--dim); text-align: center; padding: 26px 0; font-size: 13px; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 8px; line-height: 1.5; }
+  .hint code { font-family: var(--mono); color: var(--muted); }
+  .form-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .depline { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: var(--muted); }
+  #toast { position: fixed; bottom: 22px; right: 22px; background: var(--green); color: #04140c; padding: 11px 18px;
+           border-radius: 10px; font-weight: 700; opacity: 0; transition: .3s; z-index: 50; }
+  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 8px; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">News<span>Trader</span></div>
+  <a class="navlink" href="/bot">Panel</a>
+  <a class="navlink" href="/trades">Tready</a>
+  <a class="navlink" href="/backtest">Backtesty</a>
+  <a class="navlink active" href="/live">Wystąpienia na żywo <span class="tag live" id="nav-live-count" style="display:none"></span></a>
+  <a class="navlink" href="/brain">🧠 Mózg AI</a>
+  <a class="navlink" href="/settings">Ustawienia</a>
+  <a class="navlink soon" href="/ict">ICT Worrior <span class="tag">SOON</span></a>
+  <div class="nav-right"><span id="nav-clock" class="num"></span></div>
+</nav>
+
+<main>
+  <div class="grid">
+    <!-- lewa kolumna: sterowanie + ustawienia -->
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <h2>Monitor wydarzeń</h2>
+        <button id="mon-power" class="power start" onclick="toggleMonitor()">
+          <span id="mon-label">START NASŁUCHU</span>
+        </button>
+        <div class="leds">
+          <div class="led-row"><span id="led-mon" class="led"></span><span class="led-label">Monitor</span><span id="led-mon-v" class="led-val">—</span></div>
+          <div class="led-row"><span id="led-deps" class="led"></span><span class="led-label">Zależności</span><span id="led-deps-v" class="led-val">—</span></div>
+          <div class="led-row"><span id="led-auto" class="led"></span><span class="led-label">Auto-trade</span><span id="led-auto-v" class="led-val">—</span></div>
+        </div>
+        <div id="deps-detail" style="margin-top:10px; display:none">
+          <div id="deps-list"></div>
+          <div class="hint">Doinstaluj: <code>pip install -r requirements.txt</code>
+            + <code>ffmpeg</code> w PATH (np. <code>winget install ffmpeg</code>).</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <h2>Ustawienia live</h2>
+        <div class="param" style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12.5px;color:var(--muted)">Auto-trade z live<br><small style="color:var(--dim)">zlecenia z sygnałów live (wymaga też trybu handlu)</small></span>
+          <label class="switch"><input type="checkbox" id="p-autotrade"><span class="slider-ui"></span></label>
+        </div>
+        <div class="param"><label>Próg pewności do egzekucji <output id="o-conf"></output></label>
+          <input type="range" id="p-conf" min="0.5" max="0.99" step="0.01"></div>
+        <div class="param"><label>Analiza AI co (s) <output id="o-analyze"></output></label>
+          <input type="range" id="p-analyze" min="6" max="60" step="2"></div>
+        <div class="param"><label>⚡ priorytet: analiza co (s) <output id="o-analyze-hot"></output></label>
+          <input type="range" id="p-analyze-hot" min="4" max="30" step="1"></div>
+        <div class="param"><label>Okno transkrypcji dla AI (s) <output id="o-window"></output></label>
+          <input type="range" id="p-window" min="30" max="240" step="15"></div>
+        <div class="param"><label style="margin-bottom:5px">Model Whisper (lokalna transkrypcja)</label>
+          <select id="p-whisper">
+            <option value="tiny">tiny — najszybszy, słabszy (~75 MB)</option>
+            <option value="base">base — zalecany start (~145 MB)</option>
+            <option value="small">small — lepszy, wolniejszy (~480 MB)</option>
+            <option value="medium">medium — najlepszy, wolny na CPU (~1.5 GB)</option>
+          </select></div>
+        <button class="btn btn-save" onclick="saveLiveParams()">Zapisz ustawienia</button>
+      </div>
+
+      <div class="card">
+        <h2>Dodaj wydarzenie ręcznie</h2>
+        <div class="form-row"><input type="text" id="ev-title" placeholder="Tytuł (np. Konferencja FED)"></div>
+        <div class="form-row"><input type="date" id="ev-date"><input type="time" id="ev-time"></div>
+        <div class="form-row"><input type="text" id="ev-url" placeholder="URL streamu (YouTube/Rumble/webcast)"></div>
+        <div class="form-row">
+          <select id="ev-cat">
+            <option value="manual">Inne</option><option value="fda">FDA / biotech</option>
+            <option value="trump">Trump</option><option value="usa_gov">Rząd USA</option>
+            <option value="europe">Europa / NATO</option><option value="poland">Polska</option>
+          </select>
+          <button class="btn btn-save" style="width:auto" onclick="addEvent()">Dodaj</button>
+        </div>
+        <div class="hint">Wydarzenie od razu trafia do kalendarza jako śledzone — monitor
+          wystartuje nasłuch o podanej godzinie (albo od razu, jeśli godziny brak).</div>
+      </div>
+    </div>
+
+    <!-- prawa kolumna: kalendarz -->
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <h2 style="margin:0">Kalendarz wydarzeń</h2>
+        <input type="date" id="cal-date" style="width:auto" onchange="refresh()">
+        <button class="btn btn-ghost btn-mini" onclick="setToday()">dziś</button>
+        <button class="btn btn-ghost btn-mini" onclick="setTomorrow()">jutro</button>
+        <button class="btn btn-ghost btn-mini" id="btn-refresh" onclick="refreshSources()" style="margin-left:auto">⟳ odśwież źródła</button>
+        <button class="btn btn-mini" id="btn-discover" onclick="discover()" style="background:rgba(167,139,250,.16);color:var(--violet)">🔍 szukaj w internecie (AI)</button>
+      </div>
+      <div id="events"><div class="empty">Ładowanie…</div></div>
+      <div class="hint">Zaznacz <b>ŚLEDŹ</b> przy wydarzeniach, które bot ma dziś obserwować —
+        gdy stream wystartuje, bot sam podepnie się pod audio, zacznie transkrybować
+        i analizować. Wszystkich naraz nie śledzimy: każda sesja to whisper na CPU.</div>
+    </div>
+  </div>
+
+  <!-- kanały -->
+  <div class="grid2">
+    <div class="card">
+      <h2>Kanały monitorowane (YouTube — wykrywanie LIVE)</h2>
+      <div id="channels"></div>
+      <div class="form-row" style="margin-top:12px">
+        <input type="text" id="ch-name" placeholder="Nazwa">
+        <input type="text" id="ch-handle" placeholder="@handle">
+        <select id="ch-cat" style="width:130px">
+          <option value="trump">Trump</option><option value="usa_gov">Rząd USA</option>
+          <option value="fda">FDA</option><option value="europe">Europa</option>
+          <option value="poland">Polska</option><option value="manual">Inne</option>
+        </select>
+        <select id="ch-lang" style="width:80px"><option value="en">EN</option><option value="pl">PL</option></select>
+        <button class="btn btn-save" style="width:auto" onclick="addChannel()">＋</button>
+      </div>
+      <div class="hint">Monitor co ~45 s sprawdza <code>youtube.com/@handle/live</code>.
+        Gdy kanał z włączonym nasłuchem wejdzie LIVE, wydarzenie pojawia się w kalendarzu
+        i sesja startuje automatycznie.</div>
+    </div>
+    <div class="card">
+      <h2>Status monitora</h2>
+      <div id="mon-detail" class="empty">monitor zatrzymany</div>
+    </div>
+  </div>
+
+  <!-- aktywne sesje -->
+  <div class="card" style="border:0;background:transparent;padding:0">
+    <h2 style="padding-left:4px">Aktywne sesje nasłuchu</h2>
+    <div id="sessions"><div class="empty">Brak aktywnych sesji. Wystartuj monitor i zaznacz wydarzenia do śledzenia,
+      albo kliknij ▶ przy wydarzeniu z URL-em streamu.</div></div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => { const d = document.createElement("div"); d.textContent = t == null ? "" : t; return d.innerHTML; };
+let stateData = null, paramsLoaded = false;
+const sessionCursors = {};   // id -> {t: transcript_len, a: analyses_len}
+
+const CAT_LABEL = { fda: "FDA", trump: "TRUMP", usa_gov: "RZĄD USA", europe: "EUROPA/NATO", poland: "POLSKA", manual: "INNE" };
+
+const sliders = [
+  ["p-conf", "o-conf", "live_confidence_threshold", v => Number(v).toFixed(2)],
+  ["p-analyze", "o-analyze", "live_analyze_seconds", v => v + "s"],
+  ["p-analyze-hot", "o-analyze-hot", "live_analyze_seconds_hot", v => v + "s"],
+  ["p-window", "o-window", "live_window_seconds", v => v + "s"],
+];
+sliders.forEach(([sid, oid, , show]) => $(sid).addEventListener("input", () => $(oid).textContent = show($(sid).value)));
+
+function setLed(el, cls, on, pulse) { el.className = "led " + (cls||"") + (on?" on":"") + (pulse?" pulse":""); }
+function toast(m, err) { const t = $("toast"); t.textContent = m; t.style.background = err ? "var(--red)" : "var(--green)"; t.style.color = err ? "#fff" : "#04140c"; t.style.opacity = 1; setTimeout(()=>t.style.opacity=0, 3200); }
+function setToday(){ $("cal-date").value = new Date().toISOString().slice(0,10); refresh(); }
+function setTomorrow(){ const d = new Date(Date.now() + 86400e3); $("cal-date").value = d.toISOString().slice(0,10); refresh(); }
+
+async function api(url, body) {
+  const r = await fetch(url, body !== undefined
+    ? { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) }
+    : undefined);
+  return r.json();
+}
+
+async function refresh() {
+  let s;
+  try { s = await api(`/api/live/state?date=${$("cal-date").value || ""}`); }
+  catch { return; }
+  stateData = s;
+  const mon = s.monitor || {};
+
+  // monitor + LEDy
+  $("mon-power").className = "power " + (mon.running ? "stop" : "start");
+  $("mon-label").textContent = mon.running ? "STOP NASŁUCHU" : "START NASŁUCHU";
+  setLed($("led-mon"), mon.running ? "green" : "red", true, mon.running);
+  $("led-mon-v").textContent = mon.running ? "DZIAŁA" : "ZATRZYMANY";
+  $("led-mon-v").style.color = mon.running ? "var(--green)" : "var(--red)";
+
+  const deps = s.deps || {};
+  setLed($("led-deps"), deps.ready ? "green" : "amber", true, false);
+  $("led-deps-v").textContent = deps.ready ? "OK" : "BRAKI";
+  $("led-deps-v").style.color = deps.ready ? "var(--green)" : "var(--amber)";
+  $("deps-detail").style.display = deps.ready ? "none" : "block";
+  $("deps-list").innerHTML = Object.entries(deps).filter(([k])=>k!=="ready").map(([k,v]) =>
+    `<div class="depline"><span>${esc(k)}</span><b style="color:${v?"var(--green)":"var(--red)"}">${v?"✓":"✗ brak"}</b></div>`).join("");
+
+  const auto = s.params?.live_auto_trade;
+  setLed($("led-auto"), auto ? "green" : "amber", true, false);
+  $("led-auto-v").textContent = auto ? "WŁĄCZONY" : "TYLKO ALERTY";
+  $("led-auto-v").style.color = auto ? "var(--green)" : "var(--amber)";
+
+  if (!paramsLoaded && s.params) {
+    sliders.forEach(([sid, oid, key, show]) => { $(sid).value = s.params[key]; $(oid).textContent = show(s.params[key]); });
+    $("p-autotrade").checked = !!s.params.live_auto_trade;
+    $("p-whisper").value = s.params.live_whisper_model || "small";
+    paramsLoaded = true;
+  }
+
+  renderEvents(s.events || []);
+  renderChannels(s.channels || [], mon.channel_checks || {});
+  renderMonitorDetail(mon);
+  renderSessions(s.sessions || []);
+
+  const liveCount = (s.sessions||[]).filter(x=>x.running).length;
+  $("nav-live-count").style.display = liveCount ? "" : "none";
+  $("nav-live-count").textContent = "● " + liveCount;
+}
+
+function renderEvents(events) {
+  if (!events.length) { $("events").innerHTML = `<div class="empty">Brak wydarzeń na ten dzień.<br>Kliknij „⟳ odśwież źródła” albo dodaj wydarzenie ręcznie.</div>`; return; }
+  $("events").innerHTML = events.map(e => {
+    const live = e.status === "live", ended = e.status === "ended";
+    const sess = (stateData.sessions||[]).find(x => x.id === e.id && x.running);
+    const hot = e.priority === "high";
+    return `<div class="evrow ${live?"islive":""}">
+      <span class="time">${e.time || "—"}</span>
+      <span class="cat ${e.category}">${CAT_LABEL[e.category]||e.category}</span>
+      <button class="btn btn-mini" onclick="setPriority('${e.id}', ${!hot})"
+        title="${hot?"priorytet ⚡: szybszy nasłuch i analiza (kliknij, by zwolnić)":"normalne tempo (kliknij, by przyspieszyć)"}"
+        style="background:${hot?"rgba(255,180,84,.2)":"transparent"};border:1px solid ${hot?"var(--amber)":"var(--border2)"};color:${hot?"var(--amber)":"var(--dim)"};padding:3px 7px">⚡</button>
+      <span class="title">${esc(e.title)}
+        ${!e.stream_url && !live ? `<small style="color:var(--amber)">⚠ brak URL streamu — dodaj przez ✎, znajdzie go też 🔍 AI</small>` : ""}
+        ${e.note?`<small>${esc(e.note)}</small>`:""}
+        ${e.context?`<small style="color:var(--violet)" title="kontekst przekazywany AI podczas analizy live">🧠 ${esc(e.context)}</small>`:""}</span>
+      ${live?`<span class="livebadge">LIVE</span>`:""}${ended?`<span class="endedbadge">ZAKOŃCZONE</span>`:""}
+      <span class="track-label">śledź</span>
+      <label class="switch"><input type="checkbox" ${e.tracked?"checked":""} onchange="track('${e.id}', this.checked)"><span class="slider-ui"></span></label>
+      ${sess ? `<button class="btn btn-mini btn-stop" onclick="stopSession('${e.id}')">■ stop</button>`
+             : `<button class="btn btn-mini btn-start" onclick="startSession('${e.id}')" title="podepnij się teraz">▶</button>`}
+      <button class="btn btn-mini btn-ghost" onclick="editStreamUrl('${e.id}')" title="ustaw/zmień URL streamu">✎</button>
+      ${e.url?`<a class="btn btn-mini btn-ghost" href="${esc(e.url)}" target="_blank" title="otwórz stronę">↗</a>`:""}
+      <button class="btn btn-mini btn-ghost" onclick="delEvent('${e.id}')" title="usuń">🗑</button>
+    </div>`;
+  }).join("");
+}
+
+function renderChannels(channels, checks) {
+  $("channels").innerHTML = channels.map(c => {
+    const chk = checks[c.id];
+    const live = chk && chk.live;
+    return `<div class="chrow">
+      <label class="switch" title="nasłuchuj tego kanału"><input type="checkbox" ${c.watch?"checked":""} onchange="updateChannel('${c.id}',{watch:this.checked})"><span class="slider-ui"></span></label>
+      <span class="cat ${c.category}">${CAT_LABEL[c.category]||c.category}</span>
+      <div style="flex:1;min-width:0">
+        <div class="name">${esc(c.name)} ${live?`<span class="livebadge">LIVE</span>`:""}</div>
+        <div class="handle">${esc(c.handle)} ${chk&&chk.error?`<span class="err">⚠ ${esc(chk.error)}</span>`:""}</div>
+      </div>
+      <button class="btn btn-mini btn-ghost" onclick="editChannel('${c.id}')">✎</button>
+      <button class="btn btn-mini btn-ghost" onclick="updateChannel('${c.id}',{delete:true})">🗑</button>
+    </div>`;
+  }).join("") || `<div class="empty">Brak kanałów</div>`;
+}
+
+function renderMonitorDetail(mon) {
+  if (!mon.running) { $("mon-detail").innerHTML = `<div class="empty">monitor zatrzymany — kliknij START NASŁUCHU</div>`; return; }
+  const ago = ts => ts ? Math.round((stateData.server_time - ts)) + " s temu" : "—";
+  $("mon-detail").innerHTML = `
+    <div class="depline"><span>Ostatni obieg kanałów</span><b>${ago(mon.last_poll)}</b></div>
+    <div class="depline"><span>Ostatnie odświeżenie FDA</span><b>${ago(mon.last_fda_refresh)}</b></div>
+    <div class="depline"><span>Kanały sprawdzane</span><b>${Object.keys(mon.channel_checks||{}).length}</b></div>
+    ${mon.last_error?`<div class="depline"><span style="color:var(--red)">Ostatni błąd</span><b style="color:var(--red);max-width:60%;text-align:right">${esc(mon.last_error)}</b></div>`:""}`;
+}
+
+function renderSessions(sessions) {
+  const box = $("sessions");
+  const ids = new Set(sessions.map(s => s.id));
+  // usuń karty nieistniejących sesji
+  [...box.querySelectorAll("[data-sess]")].forEach(el => { if (!ids.has(el.dataset.sess)) el.remove(); });
+  if (!sessions.length) {
+    if (!box.querySelector(".empty")) box.innerHTML = `<div class="empty">Brak aktywnych sesji.</div>`;
+    return;
+  }
+  box.querySelector(".empty")?.remove();
+  for (const s of sessions) {
+    let el = box.querySelector(`[data-sess="${s.id}"]`);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "sess"; el.dataset.sess = s.id;
+      el.innerHTML = `
+        <div class="sess-head">
+          <span class="livebadge" data-r="badge">LIVE</span>
+          <span class="t">${esc(s.event?.title || s.id)}</span>
+          <span class="num" style="color:var(--dim);font-size:11.5px" data-r="meta"></span>
+          <button class="btn btn-mini btn-stop" onclick="stopSession('${s.id}')">■ zatrzymaj</button>
+        </div>
+        <div class="sess-body">
+          <div class="sess-col"><h3>Transkrypcja na żywo</h3><div class="transcript" data-r="tr"><span style="color:var(--dim)">czekam na audio…</span></div></div>
+          <div class="sess-col"><h3>Analiza AI i sygnały</h3><div class="analyses" data-r="an"></div></div>
+        </div>`;
+      box.appendChild(el);
+      sessionCursors[s.id] = { t: 0, a: 0 };
+    }
+    const cap = s.capture || {};
+    const stageTxt = { starting:"startowanie", resolving_url:"szukam streamu", loading_whisper:"ładowanie whispera",
+                       capturing:"nagrywam", ended:"zakończone", error:"BŁĄD", idle:"—" }[cap.stage] || cap.stage;
+    el.querySelector('[data-r="meta"]').textContent =
+      `${stageTxt} · ${Math.round(cap.seconds_captured||0)}s audio` + (cap.error ? ` · ${cap.error}` : "");
+    el.querySelector('[data-r="badge"]').style.display = s.running ? "" : "none";
+    if (cap.stage === "error") el.querySelector('[data-r="meta"]').style.color = "var(--red)";
+  }
+}
+
+async function pollSessions() {
+  if (!stateData) return;
+  for (const s of (stateData.sessions || [])) {
+    const cur = sessionCursors[s.id] || { t: 0, a: 0 };
+    if (s.transcript_len === cur.t && s.analyses_len === cur.a) continue;
+    let d;
+    try { d = await api(`/api/live/session/${s.id}?transcript_after=${cur.t}&analyses_after=${cur.a}`); }
+    catch { continue; }
+    if (d.error) continue;
+    const el = document.querySelector(`[data-sess="${s.id}"]`);
+    if (!el) continue;
+    const tr = el.querySelector('[data-r="tr"]');
+    if (d.transcript?.length) {
+      if (cur.t === 0) tr.innerHTML = "";
+      const atBottom = tr.scrollTop + tr.clientHeight >= tr.scrollHeight - 30;
+      tr.insertAdjacentHTML("beforeend", d.transcript.map(c =>
+        `<div><span class="tt">${c.t}</span>${esc(c.text)}</div>`).join(""));
+      if (atBottom) tr.scrollTop = tr.scrollHeight;
+    }
+    const an = el.querySelector('[data-r="an"]');
+    if (d.analyses?.length) {
+      an.insertAdjacentHTML("afterbegin", d.analyses.reverse().map(a => {
+        const sig = a.signal_detected;
+        const cls = sig ? (a.confidence >= (stateData.params?.live_confidence_threshold||0.85) ? "exec" : "sig") : "";
+        return `<div class="an ${cls}">
+          <div class="meta"><span>${a.ts||""}</span><span>${esc(a.event_type||"")}</span>
+            ${sig?`<span class="conf" style="color:${cls==="exec"?"var(--green)":"var(--amber)"}">${esc(String(a.ticker||""))} ${esc(String(a.direction||""))} · ${(a.confidence*100|0)}%</span>`:""}
+            <span>${a.took_s?a.took_s+"s":""}</span></div>
+          ${sig?`<div><b>${esc(a.reasoning||"")}</b></div>${a.quote?`<div class="q">„${esc(a.quote)}”</div>`:""}`
+               :`<div style="color:var(--muted)">${esc(a.context_note||a.reasoning||"analizuję…")}</div>`}
+        </div>`;
+      }).join(""));
+      while (an.children.length > 80) an.removeChild(an.lastChild);
+    }
+    sessionCursors[s.id] = { t: d.transcript_len, a: d.analyses_len };
+  }
+}
+
+// ---- akcje ----
+async function toggleMonitor() {
+  const running = stateData?.monitor?.running;
+  await api(`/api/live/monitor/${running ? "stop" : "start"}`, {});
+  toast(running ? "Monitor zatrzymany" : "Monitor nasłuchuje — kalendarz i kanały sprawdzane automatycznie");
+  refresh();
+}
+async function refreshSources() {
+  $("btn-refresh").textContent = "⟳ odświeżam…"; $("btn-refresh").disabled = true;
+  try {
+    const r = await api("/api/live/refresh", {});
+    toast(r.fda_error ? `Błąd źródeł (${r.fda_error})` : `Odświeżono: FDA +${r.fda_added}, zaplanowane streamy +${r.upcoming_added}, kanały sprawdzone`, !!r.fda_error);
+  } finally { $("btn-refresh").textContent = "⟳ odśwież źródła"; $("btn-refresh").disabled = false; refresh(); }
+}
+async function track(id, on) { await api(`/api/live/event/${id}/track`, { tracked: on }); refresh(); }
+async function setPriority(id, high) { await api(`/api/live/event/${id}/priority`, { high }); refresh(); }
+async function discover() {
+  const b = $("btn-discover"); b.disabled = true;
+  try {
+    // etap 1: szukanie nowych wydarzeń w internecie
+    b.textContent = "🔍 1/2 AI przeszukuje internet…";
+    const r = await api("/api/live/discover", { days_ahead: 2 });
+    if (r.error) { toast("Błąd wyszukiwania: " + r.error, true); return; }
+    toast(`Etap 1: znaleziono ${r.found}, dodano ${r.added} — doprecyzowuję…`);
+    refresh();
+    // etap 2: godziny, URL-e streamów, kontekst tradingowy, scalanie duplikatów
+    b.textContent = "🧠 2/2 AI doprecyzowuje wydarzenia…";
+    const e2 = await api("/api/live/enrich", { days_ahead: 2 });
+    toast(e2.error ? "Etap 2 błąd: " + e2.error
+                   : `Gotowe: ${e2.updated ?? 0} wydarzeń doprecyzowanych, ${e2.merged ?? 0} duplikatów scalonych`, !!e2.error);
+  } finally { b.textContent = "🔍 szukaj w internecie (AI)"; b.disabled = false; refresh(); }
+}
+async function startSession(id) {
+  const r = await api(`/api/live/session/${id}/start`, {});
+  toast(r.started ? "Sesja nasłuchu wystartowała" : ("Nie wystartowała: " + (r.why||"")), !r.started);
+  refresh();
+}
+async function stopSession(id) { await api(`/api/live/session/${id}/stop`, {}); toast("Sesja zatrzymana"); refresh(); }
+async function editStreamUrl(id) {
+  const ev = (stateData.events||[]).find(e => e.id === id);
+  const url = prompt("URL streamu dla:\n" + (ev?.title||id), ev?.stream_url || "");
+  if (url === null) return;
+  await api(`/api/live/event/${id}/stream_url`, { stream_url: url });
+  toast("URL streamu zapisany"); refresh();
+}
+async function delEvent(id) {
+  if (!confirm("Usunąć wydarzenie z kalendarza?")) return;
+  await api(`/api/live/event/${id}/delete`, {}); refresh();
+}
+async function addEvent() {
+  if (!$("ev-title").value.trim()) return toast("Podaj tytuł", true);
+  await api("/api/live/event", { title: $("ev-title").value, date: $("ev-date").value,
+    time: $("ev-time").value || null, stream_url: $("ev-url").value, category: $("ev-cat").value });
+  $("ev-title").value = $("ev-url").value = ""; toast("Wydarzenie dodane i śledzone"); refresh();
+}
+async function addChannel() {
+  if (!$("ch-handle").value.trim()) return toast("Podaj @handle kanału", true);
+  await api("/api/live/channel", { name: $("ch-name").value || $("ch-handle").value,
+    handle: $("ch-handle").value, category: $("ch-cat").value, lang: $("ch-lang").value, watch: true });
+  $("ch-name").value = $("ch-handle").value = ""; toast("Kanał dodany"); refresh();
+}
+async function updateChannel(id, body) {
+  if (body.delete && !confirm("Usunąć kanał z listy?")) return;
+  await api(`/api/live/channel/${id}`, body); refresh();
+}
+async function editChannel(id) {
+  const ch = (stateData.channels||[]).find(c => c.id === id);
+  const handle = prompt("Handle kanału (youtube.com/@…):", ch?.handle || "");
+  if (handle === null) return;
+  await api(`/api/live/channel/${id}`, { handle }); refresh();
+}
+async function saveLiveParams() {
+  const body = { live_auto_trade: $("p-autotrade").checked, live_whisper_model: $("p-whisper").value };
+  sliders.forEach(([sid, , key]) => body[key] = Number($(sid).value));
+  await fetch("/api/params", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+  toast("Ustawienia live zapisane");
+}
+
+function clock() { $("nav-clock").textContent = new Date().toLocaleTimeString("pl-PL"); }
+clock(); setInterval(clock, 1000);
+setToday();
+setInterval(refresh, 4000);
+setInterval(pollSessions, 3000);
+</script>
+</body>
+</html>

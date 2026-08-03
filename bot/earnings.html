@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earnings — kalendarz wyników</title>
+<style>
+  :root {
+    --bg: #0a0d13; --elev: #10141d; --card: #141926; --card2: #171d2b;
+    --border: #232b3d; --border2: #2d3750;
+    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
+    --green: #2fd48a; --red: #ff5c6c; --amber: #ffb454; --accent: #5b8cff; --violet: #a78bfa;
+    --mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: radial-gradient(1200px 620px at 78% -12%, #131a2b 0%, var(--bg) 55%);
+         color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; min-height: 100vh; }
+  a { color: inherit; text-decoration: none; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #232b3d; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- nawigacja ---------- */
+  nav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 6px;
+        padding: 0 22px; height: 56px; background: rgba(10,13,19,.85); backdrop-filter: blur(14px);
+        border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 800; font-size: 16px; letter-spacing: .3px; margin-right: 20px; }
+  .brand span { color: var(--green); }
+  .navlink { padding: 8px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600;
+             color: var(--muted); transition: .15s; }
+  .navlink:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  .navlink.active { color: var(--text); background: rgba(47,212,138,.13); }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px;
+               font-size: 12px; color: var(--muted); }
+
+  main { padding: 20px 22px 60px; max-width: 1900px; margin: 0 auto; }
+
+  /* ---------- pasek narzędzi ---------- */
+  .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .title h1 { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+  .title p { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .spacer { flex: 1; }
+
+  .seg { display: inline-flex; background: var(--elev); border: 1px solid var(--border);
+         border-radius: 11px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: inherit;
+                font-size: 13px; font-weight: 700; padding: 7px 15px; border-radius: 8px;
+                cursor: pointer; transition: .15s; }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { background: rgba(47,212,138,.16); color: var(--green); }
+
+  .stepper { display: inline-flex; align-items: center; gap: 8px; }
+  .icon-btn { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+              background: var(--card); color: var(--text); font-size: 17px; cursor: pointer;
+              display: flex; align-items: center; justify-content: center; transition: .15s; }
+  .icon-btn:hover { border-color: var(--border2); background: var(--card2); }
+  .range-label { min-width: 190px; text-align: center; font-weight: 800; font-size: 15px;
+                 text-transform: capitalize; cursor: pointer; }
+  .range-label small { display: block; font-size: 10.5px; font-weight: 600; color: var(--dim);
+                       text-transform: none; }
+
+  select.pick { background: var(--card); color: var(--text); border: 1px solid var(--border);
+                border-radius: 10px; padding: 8px 11px; font: inherit; font-size: 12.5px;
+                font-weight: 600; cursor: pointer; }
+  select.pick:hover { border-color: var(--border2); }
+  label.pick-wrap { display: inline-flex; flex-direction: column; gap: 3px; }
+  label.pick-wrap span { font-size: 9.5px; letter-spacing: .8px; color: var(--dim); font-weight: 800; }
+
+  /* ---------- legenda ---------- */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin-bottom: 16px;
+            color: var(--dim); font-size: 11.5px; font-weight: 600; }
+  .legend i { display: inline-block; width: 13px; height: 13px; border-radius: 4px;
+              border: 2px solid var(--border2); margin-right: 6px; vertical-align: -2px; }
+  .legend i.own { border-color: var(--green); animation: pulse 2.2s ease-in-out infinite; }
+  .legend i.watch { border-color: var(--red); }
+  .legend i.cb { border-color: var(--red); background: var(--red); }
+
+  /* ---------- plansza tygodniowa ---------- */
+  .board { display: grid; gap: 12px; align-items: start; }
+  .board.week { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .board.day { grid-template-columns: 1fr; }
+
+  .col { background: linear-gradient(180deg, var(--card), var(--elev));
+         border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .col.today { border-color: rgba(47,212,138,.42); box-shadow: 0 0 0 1px rgba(47,212,138,.1); }
+  .col.past { opacity: .62; }
+  .col-head { padding: 12px 14px; border-bottom: 1px solid var(--border);
+              display: flex; align-items: center; gap: 10px; }
+  .col-head .dnum { width: 34px; height: 34px; border-radius: 10px; background: var(--card2);
+                    border: 1px solid var(--border); display: flex; align-items: center;
+                    justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+  .col.today .dnum { background: rgba(47,212,138,.13); border-color: rgba(47,212,138,.4);
+                     color: var(--green); }
+  .col-head b { display: block; font-size: 13.5px; font-weight: 800; }
+  .col.today .col-head b { color: var(--green); }
+  .col-head small { display: block; color: var(--dim); font-size: 10.5px; font-weight: 600; }
+
+  /* wydarzenia ekonomiczne */
+  .events { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+            border-bottom: 1px solid var(--border); background: rgba(0,0,0,.16); }
+  .ev { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px;
+        border: 1px solid var(--border); background: var(--card2); cursor: pointer;
+        transition: .14s; text-align: left; font: inherit; color: inherit; width: 100%; }
+  .ev:hover { transform: translateX(2px); border-color: var(--border2); }
+  .ev .flag { font-size: 14px; }
+  .ev .evtime { font-size: 11px; font-weight: 800; font-family: var(--mono); flex-shrink: 0; }
+  .ev .evname { font-size: 11.5px; font-weight: 600; flex: 1; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+  .ev .dots { display: flex; gap: 2px; flex-shrink: 0; }
+  .ev .dots i { width: 4px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.14); }
+  .ev.imp2 .dots i:nth-child(-n+2), .ev.imp3 .dots i { background: currentColor; }
+  .ev.imp2 { color: var(--accent); }
+  .ev.imp3 { color: var(--amber); }
+  .ev.bank { color: var(--red); border-color: rgba(255,92,108,.45);
+             background: linear-gradient(180deg, rgba(255,92,108,.14), rgba(255,92,108,.05)); }
+  .ev.bank .tag { font-size: 9.5px; font-weight: 900; letter-spacing: .6px; background: var(--red);
+                  color: #150406; border-radius: 5px; padding: 1px 5px; }
+  .ev.holiday { color: var(--dim); opacity: .8; }
+
+  /* sekcje sesji */
+  .sess { padding: 10px 12px 12px; }
+  .sess + .sess { border-top: 1px dashed var(--border); }
+  .sess-head { display: flex; align-items: center; gap: 6px; color: var(--muted);
+               font-size: 9.5px; font-weight: 800; letter-spacing: .9px; margin-bottom: 9px; }
+  .sess-head span:last-child { margin-left: auto; color: var(--dim); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 8px; }
+  .tile { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+  .tile .box { position: relative; width: 100%; aspect-ratio: 1; border-radius: 13px;
+               background: #fff; display: flex; align-items: center; justify-content: center;
+               overflow: hidden; border: 2px solid transparent; transition: transform .16s; }
+  .tile:hover .box { transform: translateY(-3px) scale(1.04); }
+  .tile img { width: 84%; height: 84%; object-fit: contain; }
+  .tile .mono { font-weight: 900; font-size: 15px; color: #0a0d13; }
+  .tile .sym { display: block; text-align: center; font-size: 10px; font-weight: 800;
+               color: var(--muted); margin-top: 4px; letter-spacing: .2px;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile.watch .box { border-color: var(--red); }
+  .tile.watch .sym { color: var(--red); }
+  .tile.own .box { border-color: var(--green); animation: pulse 2.2s ease-in-out infinite; }
+  .tile.own .sym { color: var(--green); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(47,212,138,.55); }
+    50% { box-shadow: 0 0 0 7px rgba(47,212,138,0); }
+  }
+
+  .empty-day { padding: 22px 14px; color: var(--dim); font-size: 12px; text-align: center; }
+  .more { margin-top: 10px; text-align: center; color: var(--dim); font-size: 11px; }
+
+  /* ---------- widok dzienny ---------- */
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .erow { display: grid; grid-template-columns: 44px 1fr 130px 110px 120px 90px; gap: 12px;
+          align-items: center; padding: 10px 12px; border: 1px solid var(--border);
+          border-radius: 13px; background: var(--card2); cursor: pointer; transition: .14s;
+          text-align: left; font: inherit; color: inherit; width: 100%; }
+  .erow:hover { border-color: var(--border2); transform: translateX(3px); }
+  .erow.own { border-color: rgba(47,212,138,.5); }
+  .erow.watch { border-color: rgba(255,92,108,.5); }
+  .erow .logo { width: 40px; height: 40px; border-radius: 11px; background: #fff;
+                display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .erow .logo img { width: 84%; height: 84%; object-fit: contain; }
+  .erow b { font-size: 14px; font-weight: 900; display: block; }
+  .erow small { color: var(--dim); font-size: 11px; }
+  .erow .r { text-align: right; }
+  @media (max-width: 900px) { .erow { grid-template-columns: 44px 1fr 100px; }
+                              .erow .hide-sm { display: none; } }
+
+  /* ---------- siatka miesięczna ---------- */
+  .month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .dow { text-align: center; font-size: 10.5px; font-weight: 800; color: var(--dim);
+         letter-spacing: .6px; padding-bottom: 4px; }
+  .mcell { min-height: 108px; background: var(--card); border: 1px solid var(--border);
+           border-radius: 12px; padding: 8px; cursor: pointer; transition: .14s; text-align: left;
+           font: inherit; color: inherit; display: flex; flex-direction: column; gap: 6px; }
+  .mcell:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .mcell.today { border-color: rgba(47,212,138,.45); background: rgba(47,212,138,.07); }
+  .mcell.weekend { background: rgba(20,25,38,.5); }
+  .mcell.blank { background: transparent; border-color: transparent; cursor: default; }
+  .mcell .mhead { display: flex; align-items: center; justify-content: space-between; }
+  .mcell .mnum { font-size: 12px; font-weight: 800; color: var(--muted); }
+  .mcell.today .mnum { color: var(--green); }
+  .mcell .cbdot { width: 6px; height: 6px; border-radius: 3px; background: var(--red); }
+  .mcell .mlogos { display: flex; flex-wrap: wrap; gap: 3px; }
+  .mcell .mlogo { width: 20px; height: 20px; border-radius: 5px; background: #fff;
+                  overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .mcell .mlogo img { width: 88%; height: 88%; object-fit: contain; }
+  .mcell .mlogo.own { outline: 1.5px solid var(--green); }
+  .mcell .mlogo.watch { outline: 1.5px solid var(--red); }
+  .mcell .mcount { margin-top: auto; font-size: 10px; color: var(--dim); font-weight: 700; }
+
+  /* ---------- pasek „Twoje" ---------- */
+  .mine { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .mine-title { color: var(--dim); font-size: 9.5px; font-weight: 800; letter-spacing: .9px;
+                width: 100%; }
+  .mchip { display: flex; align-items: center; gap: 8px; padding: 6px 11px 6px 7px;
+           border-radius: 11px; border: 1px solid var(--border); background: var(--card);
+           cursor: pointer; font: inherit; color: inherit; transition: .14s; }
+  .mchip:hover { transform: translateY(-2px); }
+  .mchip.own { border-color: rgba(47,212,138,.45); }
+  .mchip.watch { border-color: rgba(255,92,108,.45); }
+  .mchip .logo { width: 26px; height: 26px; border-radius: 8px; background: #fff; overflow: hidden;
+                 display: flex; align-items: center; justify-content: center; }
+  .mchip .logo img { width: 86%; height: 86%; object-fit: contain; }
+  .mchip b { font-size: 12px; font-weight: 900; display: block; }
+  .mchip.own b { color: var(--green); }
+  .mchip.watch b { color: var(--red); }
+  .mchip small { color: var(--dim); font-size: 10px; }
+
+  /* ---------- panel boczny ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(4,7,12,.72); backdrop-filter: blur(3px);
+           z-index: 40; opacity: 0; pointer-events: none; transition: opacity .22s; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100vw); z-index: 41;
+            background: linear-gradient(180deg, #121724, var(--bg));
+            border-left: 1px solid var(--border2); overflow-y: auto;
+            transform: translateX(100%); transition: transform .28s cubic-bezier(.22,1,.36,1); }
+  .drawer.on { transform: none; }
+  .drawer-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px;
+                 padding: 14px 18px; background: rgba(15,19,28,.94); backdrop-filter: blur(10px);
+                 border-bottom: 1px solid var(--border); }
+  .drawer-body { padding: 18px; }
+  .x { width: 32px; height: 32px; border-radius: 16px; border: 1px solid var(--border);
+       background: var(--card); color: var(--muted); cursor: pointer; font-size: 14px; }
+  .x:hover { color: var(--text); }
+
+  .sec { margin-top: 26px; }
+  .sec > h3 { font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
+  .sec > p.hint { color: var(--dim); font-size: 11.5px; margin-top: 4px; line-height: 1.55; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 15px;
+           padding: 16px; margin-top: 11px; }
+
+  .co-head { display: flex; align-items: center; gap: 14px; }
+  .co-head .logo { width: 54px; height: 54px; border-radius: 14px; background: #fff;
+                   display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .co-head .logo img { width: 84%; height: 84%; object-fit: contain; }
+  .co-head h2 { font-size: 21px; font-weight: 800; letter-spacing: -.4px; }
+  .co-head .co-name { color: var(--muted); font-size: 12.5px; }
+  .co-head .co-px { margin-left: auto; text-align: right; }
+  .co-head .co-px b { font-size: 19px; font-weight: 800; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .chip { font-size: 9.5px; font-weight: 800; letter-spacing: .5px; padding: 3px 8px;
+          border-radius: 7px; border: 1px solid var(--border2); color: var(--muted); }
+  .chip.green { color: var(--green); border-color: rgba(47,212,138,.45); background: rgba(47,212,138,.1); }
+  .chip.red { color: var(--red); border-color: rgba(255,92,108,.45); background: rgba(255,92,108,.1); }
+
+  .next { display: flex; align-items: center; gap: 16px; }
+  .next .cd { width: 62px; height: 62px; border-radius: 16px; background: rgba(47,212,138,.12);
+              border: 1px solid rgba(47,212,138,.34); display: flex; flex-direction: column;
+              align-items: center; justify-content: center; color: var(--green); flex-shrink: 0; }
+  .next .cd b { font-size: 22px; font-weight: 900; line-height: 1; }
+  .next .cd small { font-size: 9px; font-weight: 800; letter-spacing: .8px; }
+  .kicker { font-size: 9.5px; letter-spacing: .9px; color: var(--dim); font-weight: 800; }
+  .next h4 { font-size: 17px; font-weight: 800; margin-top: 4px; text-transform: capitalize; }
+  .next .when { color: var(--green); font-size: 12.5px; font-weight: 700; margin-top: 2px; }
+
+  .thr + .thr { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .thr .thr-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .thr .thr-head span { color: var(--muted); font-size: 13px; }
+  .thr .thr-head b { font-size: 20px; font-weight: 900; letter-spacing: -.5px; }
+  .track { position: relative; height: 5px; border-radius: 3px; background: rgba(255,255,255,.07);
+           margin-top: 11px; }
+  .track i { position: absolute; top: -3px; width: 3px; height: 11px; border-radius: 2px;
+             background: var(--green); margin-left: -1.5px; }
+  .ends { display: flex; justify-content: space-between; color: var(--dim); font-size: 10.5px;
+          font-weight: 700; margin-top: 6px; }
+
+  .stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 11px; }
+  .st { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 13px; }
+  .st .k { color: var(--dim); font-size: 9.5px; font-weight: 800; letter-spacing: .4px; }
+  .st .v { font-size: 20px; font-weight: 900; letter-spacing: -.6px; margin-top: 6px; }
+  .st .s { color: var(--dim); font-size: 10px; font-weight: 600; margin-top: 3px; }
+
+  table.q { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  table.q th { text-align: right; color: var(--dim); font-size: 9.5px; font-weight: 800;
+               letter-spacing: .5px; padding: 0 0 8px; border-bottom: 1px solid var(--border); }
+  table.q th:first-child, table.q td:first-child { text-align: left; }
+  table.q td { padding: 9px 0; border-bottom: 1px solid rgba(35,43,61,.6); font-size: 12.5px;
+               font-weight: 700; text-align: right; }
+  table.q td small { display: block; color: var(--dim); font-size: 10px; font-weight: 600; }
+
+  .trend-row { display: flex; align-items: center; gap: 12px; padding: 13px 0;
+               border-top: 1px solid var(--border); }
+  .trend-row:first-child { border-top: 0; }
+  .trend-row .rv { margin-left: auto; text-align: right; font-size: 10.5px; font-weight: 800; }
+
+  .nums3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 11px; }
+  .desc { color: var(--muted); font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+
+  .btn { border: 1px solid var(--border2); background: var(--card2); color: var(--text);
+         border-radius: 11px; padding: 11px 16px; font: inherit; font-size: 13px; font-weight: 700;
+         cursor: pointer; transition: .15s; }
+  .btn:hover { border-color: var(--green); color: var(--green); }
+  .btn.full { width: 100%; margin-top: 24px; }
+
+  .loading { padding: 70px 20px; text-align: center; color: var(--dim); }
+  .spin { width: 26px; height: 26px; border: 3px solid var(--border2); border-top-color: var(--green);
+          border-radius: 50%; margin: 0 auto 14px; animation: sp .8s linear infinite; }
+  .spin.small { width: 14px; height: 14px; border-width: 2px; margin: 0; flex-shrink: 0; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+
+  .filling { display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+             padding: 9px 13px; border-radius: 11px; font-size: 12px; font-weight: 600;
+             color: var(--green); background: rgba(47,212,138,.09);
+             border: 1px solid rgba(47,212,138,.25); }
+  .col.pending .col-head { opacity: .75; }
+  .col-head .day-spin { margin-left: auto; }
+
+  .tip { position: absolute; pointer-events: none; background: rgba(10,13,19,.96);
+         border: 1px solid var(--border2); border-radius: 9px; padding: 7px 10px; font-size: 11.5px;
+         font-weight: 700; white-space: nowrap; z-index: 5; opacity: 0; transition: opacity .12s; }
+  .chart-wrap { position: relative; }
+  .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+                  color: var(--dim); font-size: 10.5px; font-weight: 600; }
+  .chart-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 4px;
+                    margin-right: 5px; vertical-align: 0; }
+  .foot { color: var(--dim); font-size: 11.5px; line-height: 1.6; margin-top: 12px; }
+  .center-note { text-align: center; color: var(--dim); font-size: 11.5px; margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="navlink" href="/" title="Ekran startowy">⌂</a>
+  <div class="brand">Earn<span>ings</span></div>
+  <a class="navlink" href="/portfolio">Portfel</a>
+  <a class="navlink active" href="/earnings">Kalendarz wyników</a>
+  <a class="navlink" href="/bot">Bot newsowy</a>
+  <div class="nav-right"><span id="clock" class="num"></span></div>
+</nav>
+
+<main>
+  <div class="toolbar">
+    <div class="title">
+      <h1>Kalendarz wyników</h1>
+      <p>Publikacje spółek i wydarzenia makroekonomiczne w jednym miejscu</p>
+    </div>
+    <div class="spacer"></div>
+
+    <div class="seg" id="modeSeg">
+      <button data-mode="day">Dzień</button>
+      <button data-mode="week" class="on">Tydzień</button>
+      <button data-mode="month">Miesiąc</button>
+    </div>
+
+    <div class="stepper">
+      <button class="icon-btn" id="prev">‹</button>
+      <div class="range-label" id="rangeLabel" title="Kliknij, żeby wrócić do dziś"></div>
+      <button class="icon-btn" id="next">›</button>
+    </div>
+
+    <label class="pick-wrap"><span>SPÓŁKI</span>
+      <select class="pick" id="filter">
+        <option value="popular">Popularne</option>
+        <option value="cap100b">Kapitalizacja 100 mld+</option>
+        <option value="cap10b">Kapitalizacja 10 mld+</option>
+        <option value="cap1b">Kapitalizacja 1 mld+</option>
+        <option value="all">Wszystkie</option>
+      </select>
+    </label>
+
+    <label class="pick-wrap"><span>KOLEJNOŚĆ</span>
+      <select class="pick" id="sort">
+        <option value="popular">Popularność</option>
+        <option value="time">Godzina publikacji</option>
+        <option value="cap">Kapitalizacja</option>
+        <option value="estimates">Liczba prognoz</option>
+        <option value="alpha">Alfabetycznie</option>
+      </select>
+    </label>
+
+    <label class="pick-wrap"><span>MAKRO</span>
+      <select class="pick" id="importance">
+        <option value="3">Tylko wysokiej wagi</option>
+        <option value="2" selected>Średnie i wyższe</option>
+        <option value="1">Wszystkie odczyty</option>
+        <option value="0">Także święta giełdowe</option>
+      </select>
+    </label>
+
+    <label class="pick-wrap"><span>KRAJE</span>
+      <select class="pick" id="scope"
+              title="Polska i USA w całości; z pozostałych krajów tylko najwyższa waga i decyzje o stopach">
+        <option value="core">Polska i USA + najważniejsze</option>
+        <option value="all">Wszystkie kraje</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="legend">
+    <span><i class="own"></i>spółka w Twoim portfelu</span>
+    <span><i class="watch"></i>spółka obserwowana</span>
+    <span><i class="cb"></i>decyzja lub wystąpienie banku centralnego</span>
+    <span id="counts"></span>
+  </div>
+
+  <div id="filling" class="filling" hidden></div>
+  <div id="mine" class="mine" hidden></div>
+  <div id="board" class="board week"></div>
+  <p class="center-note">
+    Źródła: Nasdaq (kalendarz wyników), Yahoo Finance (GPW i konsensus analityków),
+    FXStreet (kalendarz makroekonomiczny). Terminy publikacji bywają przez spółki przesuwane.
+  </p>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <button class="x" id="closeDrawer">✕</button>
+    <b id="drawerTitle">—</b>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<script>
+/* ============================ narzędzia ============================ */
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const MONTHS = ["stycznia","lutego","marca","kwietnia","maja","czerwca","lipca","sierpnia",
+                "września","października","listopada","grudnia"];
+const MONTHS_NOM = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień",
+                    "Wrzesień","Październik","Listopad","Grudzień"];
+const DOW = ["Pn","Wt","Śr","Cz","Pt","So","Nd"];
+const SESSIONS = [
+  { id: "bmo", label: "PRZED OTWARCIEM", icon: "☀" },
+  { id: "amc", label: "PO ZAMKNIĘCIU", icon: "☾" },
+  { id: "tbd", label: "GODZINA NIEZNANA", icon: "•" },
+];
+
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+function monday(d) { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay()+6)%7)); x.setHours(0,0,0,0); return x; }
+
+const nf = (v, min = 0, max = 2) =>
+  v == null ? "—" : v.toLocaleString("pl-PL", { minimumFractionDigits: min, maximumFractionDigits: max });
+const pct = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : "") + nf(v, d, d) + "%";
+const cur = (v, c, d = 2) => v == null ? "—" : nf(v, d, d) + (c ? " " + c : "");
+
+/** Duże liczby po ludzku: 2 901 100 986 368 → „2,90 bln USD". */
+function big(v, c) {
+  if (v == null) return "—";
+  const a = Math.abs(v);
+  const [u, div] = a >= 1e12 ? ["bln", 1e12] : a >= 1e9 ? ["mld", 1e9]
+    : a >= 1e6 ? ["mln", 1e6] : a >= 1e3 ? ["tys.", 1e3] : ["", 1];
+  return nf(v/div, div === 1 ? 0 : 2, div === 1 ? 0 : 2) + (u ? " " + u : "") + (c ? " " + c : "");
+}
+
+const plural = (n, one, few, many) => {
+  const a = Math.abs(n), l = a % 10, l2 = a % 100;
+  if (a === 1) return one;
+  return (l >= 2 && l <= 4 && !(l2 >= 12 && l2 <= 14)) ? few : many;
+};
+
+/** Etykieta kwartału: „2026-03-31" → „1Q26". */
+function qLabel(isoDate) {
+  if (!isoDate) return "";
+  const [y, m] = isoDate.split("-");
+  return `${Math.ceil(Number(m)/3)}Q${y.slice(2)}`;
+}
+
+function hhmm(e) {
+  if (e.all_day || !e.ts) return "cały dzień";
+  const d = new Date(e.ts * 1000);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
+function bankTag(e) {
+  const n = (e.name || "").toUpperCase();
+  if (/FOMC|FED|POWELL|FEDERAL RESERVE|BEIGE/.test(n)) return "FED";
+  if (/\bECB\b|LAGARDE/.test(n)) return "EBC";
+  if (/\bBOE\b/.test(n)) return "BOE";
+  if (/\bBOJ\b/.test(n)) return "BOJ";
+  if (/\bSNB\b/.test(n)) return "SNB";
+  if (/\bPBOC\b/.test(n)) return "PBOC";
+  if (/\bBOC\b/.test(n)) return "BOC";
+  return e.country === "PL" ? "NBP" : e.country;
+}
+
+/** Logotyp spółki z zapasowym monogramem — ten sam zestaw źródeł co w apce. */
+function logoHtml(symbol) {
+  const base = (symbol || "?").split(".")[0].toUpperCase();
+  const alt = `https://financialmodelingprep.com/image-stock/${base}.png`;
+  return `<img src="https://assets.parqet.com/logos/symbol/${base}?format=png&size=64" alt=""
+     onerror="this.onerror=null;this.src='${alt}';this.dataset.f=(this.dataset.f|0)+1;
+              if(this.dataset.f>1){this.replaceWith(Object.assign(document.createElement('span'),
+              {className:'mono',textContent:'${base.slice(0,2)}'}))}">`;
+}
+
+/* ============================ stan ============================ */
+
+const S = {
+  mode: localStorage.getItem("earn.mode") || "week",
+  offset: 0,
+  filter: localStorage.getItem("earn.filter") || "popular",
+  sort: localStorage.getItem("earn.sort") || "popular",
+  importance: localStorage.getItem("earn.importance") || "2",
+  scope: localStorage.getItem("earn.scope") || "core",
+  data: null,
+  /** numer ostatniego żądania — starsze odpowiedzi odrzucamy */
+  req: 0,
+  fillTimer: 0,
+};
+
+function rangeFor() {
+  const now = new Date(); now.setHours(0,0,0,0);
+  if (S.mode === "day") { const d = addDays(now, S.offset); return { start: iso(d), end: iso(d), anchor: d }; }
+  if (S.mode === "month") {
+    const first = new Date(now.getFullYear(), now.getMonth() + S.offset, 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + S.offset + 1, 0);
+    return { start: iso(first), end: iso(last), anchor: first };
+  }
+  const from = addDays(monday(now), S.offset * 7);
+  return { start: iso(from), end: iso(addDays(from, 6)), anchor: from };
+}
+
+function rangeLabel() {
+  const { anchor, start, end } = rangeFor();
+  if (S.mode === "day") return `${anchor.getDate()} ${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+  if (S.mode === "month") return `${MONTHS_NOM[anchor.getMonth()]} ${anchor.getFullYear()}`;
+  const a = new Date(start + "T00:00:00"), b = new Date(end + "T00:00:00");
+  return a.getMonth() === b.getMonth()
+    ? `${a.getDate()}–${b.getDate()} ${MONTHS[a.getMonth()]}`
+    : `${a.getDate()} ${MONTHS[a.getMonth()].slice(0,3)} – ${b.getDate()} ${MONTHS[b.getMonth()].slice(0,3)}`;
+}
+
+/* ============================ pobieranie ============================ */
+
+async function load(quiet = false) {
+  const { start, end } = rangeFor();
+  $("rangeLabel").innerHTML = `${esc(rangeLabel())}${S.offset ? "<small>kliknij, żeby wrócić do dziś</small>" : ""}`;
+  // przy cichym doładowaniu zostawiamy to, co użytkownik już widzi
+  if (!quiet) {
+    $("board").innerHTML = `<div class="loading"><div class="spin"></div>
+        Zbieram kalendarz wyników i wydarzenia makro…</div>`;
+    $("mine").hidden = true;
+    $("counts").textContent = "";
+  }
+
+  const limit = S.mode === "month" ? 8 : S.mode === "day" ? 120 : 40;
+  const url = `/api/earnings/calendar?start=${start}&end=${end}&filter=${S.filter}`
+            + `&sort=${S.sort}&limit=${limit}&importance=${S.importance}&scope=${S.scope}`;
+
+  //  Strażnik kolejności — przeklikiwanie zakresów wypuszcza kilka żądań naraz,
+  //  a odpowiedzi wracają jak chcą. Liczy się tylko ostatnie wysłane.
+  const my = ++S.req;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Serwer odpowiedział " + r.status);
+    const data = await r.json();
+    if (my !== S.req) return;
+    S.data = data;
+    render();
+    scheduleFill();
+  } catch (e) {
+    if (my !== S.req) return;
+    // cicha próba nie ma prawa skasować widocznych danych
+    if (!quiet) {
+      $("board").innerHTML = `<div class="loading">Nie udało się pobrać kalendarza: ${esc(e.message)}</div>`;
+    } else {
+      scheduleFill();
+    }
+  }
+}
+
+/** Ciche doładowanie brakujących dni.
+ *
+ *  Serwer oddaje kalendarz etapami: od razu to, co ma w cache, resztę dociąga
+ *  w tle. Póki `complete` jest fałszywe, wracamy po uzupełnienie — dzięki temu
+ *  miesiąc do przodu pokazuje od razu to, co wiadomo, zamiast kręcić się w kółko.
+ */
+function scheduleFill() {
+  clearTimeout(S.fillTimer);
+  if (!S.data || S.data.complete !== false) return;
+  S.fillTimer = setTimeout(() => { load(true).catch(() => {}); }, 6000);
+}
+
+/* ============================ rysowanie planszy ============================ */
+
+function render() {
+  const d = S.data;
+  const board = $("board");
+  board.className = "board " + (S.mode === "month" ? "month-wrap" : S.mode);
+  board.innerHTML = "";
+
+  const totalCo = d.days.reduce((a, x) => a + x.matched, 0);
+  const totalEv = d.days.reduce((a, x) => a + x.events.length, 0);
+  $("counts").textContent =
+    `${totalCo} ${plural(totalCo, "publikacja", "publikacje", "publikacji")} · ${totalEv} `
+    + plural(totalEv, "wydarzenie makro", "wydarzenia makro", "wydarzeń makro");
+
+  renderFilling(d);
+  renderMine(d);
+
+  if (S.mode === "month") { renderMonth(d, board); return; }
+  d.days.forEach((day) => {
+    if (day.weekend && !day.companies.length && !day.events.length && !day.pending) return;
+    board.appendChild(S.mode === "day" ? dayColumn(day, true) : dayColumn(day, false));
+  });
+  if (!board.children.length) {
+    board.innerHTML = `<div class="loading">W tym zakresie nic nie znaleźliśmy.</div>`;
+  }
+}
+
+/** Pasek „uzupełniam dane" — widoczny tylko wtedy, gdy serwer jeszcze coś dociąga. */
+function renderFilling(d) {
+  const bar = $("filling");
+  const left = (d.pending_days || []).length;
+  if (d.complete === false && left) {
+    bar.hidden = false;
+    bar.innerHTML = `<span class="spin small"></span>
+      <span>Uzupełniam ${left} ${plural(left, "dzień", "dni", "dni")} —
+      reszta kalendarza jest już widoczna</span>`;
+  } else {
+    bar.hidden = true;
+  }
+}
+
+function renderMine(d) {
+  const wrap = $("mine");
+  const rows = [];
+  for (const day of d.days) {
+    for (const c of day.companies) if (c.owned || c.watched) rows.push({ day, c });
+  }
+  if (!rows.length || S.mode === "month") { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  wrap.innerHTML = `<div class="mine-title">TWOJE SPÓŁKI W TYM ZAKRESIE · ${rows.length}</div>`;
+  rows.forEach(({ day, c }) => {
+    const b = el("button", "mchip " + (c.owned ? "own" : "watch"));
+    b.innerHTML = `<span class="logo">${logoHtml(c.symbol)}</span>
+      <span><b>${esc(c.symbol.replace(".WA",""))}</b>
+      <small>${esc(day.weekday.slice(0,3))} ${day.date.slice(8,10)}.${day.date.slice(5,7)}</small></span>`;
+    b.onclick = () => openCompany(c.symbol, c.time);
+    wrap.appendChild(b);
+  });
+}
+
+/** Podpis pod dniem. Rozróżnia trzy różne „zera", bo znaczą co innego: dane jeszcze
+ *  lecą, spółki nie ogłosiły terminów, albo naprawdę nikt nie raportuje. */
+function dayCountLabel(day) {
+  if (day.pending) return "wczytuję…";
+  if (day.matched) {
+    return `${day.matched} ${plural(day.matched, "spółka", "spółki", "spółek")}`
+         + (day.total > day.matched ? ` z ${day.total}` : "");
+  }
+  if (day.total) return "nic nie przeszło filtra";
+  // Nasdaq publikuje terminy z około sześciotygodniowym wyprzedzeniem — dalej pusty
+  // dzień nie znaczy „nikt nie raportuje", tylko „jeszcze nie wiadomo"
+  return day.is_past ? "brak publikacji" : "terminy jeszcze nieogłoszone";
+}
+
+function dayColumn(day, detailed) {
+  const col = el("div", "col" + (day.is_today ? " today" : "") + (day.is_past ? " past" : "")
+                       + (day.pending ? " pending" : ""));
+
+  const head = el("div", "col-head");
+  head.innerHTML = `<div class="dnum">${day.date.slice(8,10)}</div>
+    <div><b>${esc(day.weekday)}${day.is_today ? " · dziś" : ""}</b>
+    <small>${dayCountLabel(day)}${day.mine_count ? ` · ${day.mine_count} Twoich` : ""}</small></div>
+    ${day.pending ? '<span class="spin small day-spin"></span>' : ""}`;
+  col.appendChild(head);
+
+  if (day.events.length) {
+    const evs = el("div", "events");
+    // dni z danymi z pół świata potrafią mieć 45 pozycji — kolumna zamienia się wtedy
+    // w ścianę tekstu, więc pokazujemy najważniejsze, a resztę na żądanie
+    const CAP = 6;
+    const head = day.events.slice(0, CAP);
+    head.forEach((e) => evs.appendChild(eventChip(e)));
+    if (day.events.length > CAP) {
+      const more = el("button", "ev", `<span class="evname" style="text-align:center">
+        + ${day.events.length - CAP} ${plural(day.events.length - CAP, "wydarzenie", "wydarzenia", "wydarzeń")}</span>`);
+      more.onclick = () => {
+        more.remove();
+        day.events.slice(CAP).forEach((e) => evs.appendChild(eventChip(e)));
+      };
+      evs.appendChild(more);
+    }
+    col.appendChild(evs);
+  }
+
+  if (!day.companies.length) {
+    if (!day.events.length) col.appendChild(el("div", "empty-day", dayCountLabel(day)));
+    return col;
+  }
+
+  SESSIONS.forEach((sess) => {
+    const items = day.companies.filter((c) => c.time === sess.id);
+    if (!items.length) return;
+    const box = el("div", "sess");
+    box.appendChild(el("div", "sess-head",
+      `<span>${sess.icon}</span><span>${sess.label}</span><span>${items.length}</span>`));
+    box.appendChild(detailed ? rowsFor(items) : tilesFor(items));
+    col.appendChild(box);
+  });
+
+  if (day.hidden > 0) {
+    col.appendChild(el("div", "more",
+      `+ ${day.hidden} ${plural(day.hidden, "spółka", "spółki", "spółek")} poza limitem widoku`));
+  }
+  return col;
+}
+
+function tilesFor(items) {
+  const grid = el("div", "tiles");
+  items.forEach((c) => {
+    const b = el("button", "tile" + (c.owned ? " own" : c.watched ? " watch" : ""));
+    b.title = `${c.name}${c.eps_forecast != null ? ` · konsensus EPS ${nf(c.eps_forecast,2,2)} ${c.currency}` : ""}`;
+    b.innerHTML = `<span class="box">${logoHtml(c.symbol)}</span>
+                   <span class="sym">${esc(c.symbol.replace(".WA",""))}</span>`;
+    b.onclick = () => openCompany(c.symbol, c.time);
+    grid.appendChild(b);
+  });
+  return grid;
+}
+
+function rowsFor(items) {
+  const wrap = el("div", "rows");
+  items.forEach((c) => {
+    const b = el("button", "erow" + (c.owned ? " own" : c.watched ? " watch" : ""));
+    b.innerHTML = `
+      <span class="logo">${logoHtml(c.symbol)}</span>
+      <span><b>${esc(c.symbol.replace(".WA",""))}${c.market === "PL" ? "  ·  GPW" : ""}</b>
+            <small>${esc(c.name)}</small></span>
+      <span class="r hide-sm"><b class="num">${c.eps_forecast != null ? nf(c.eps_forecast,2,2) : "—"}</b>
+            <small>konsensus EPS</small></span>
+      <span class="r hide-sm"><b class="num">${c.estimates || "—"}</b><small>prognoz</small></span>
+      <span class="r hide-sm"><b class="num">${big(c.market_cap, c.currency)}</b><small>kapitalizacja</small></span>
+      <span class="r"><small>${esc(c.fiscal_quarter || "")}</small></span>`;
+    b.onclick = () => openCompany(c.symbol, c.time);
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+function eventChip(e) {
+  const bank = e.kind === "fed" || e.kind === "cb";
+  const b = el("button", `ev imp${e.importance}${bank ? " bank" : ""}${e.kind === "holiday" ? " holiday" : ""}`);
+  b.innerHTML = bank
+    ? `<span class="tag">${esc(bankTag(e))}</span>
+       <span class="evtime">${esc(hhmm(e))}</span>
+       <span class="evname">${esc(e.name_pl)}</span>`
+    : `<span class="flag">${e.flag}</span>
+       <span class="evtime">${esc(hhmm(e))}</span>
+       <span class="evname">${esc(e.name_pl)}</span>
+       <span class="dots"><i></i><i></i><i></i></span>`;
+  b.onclick = () => openEvent(e);
+  return b;
+}
+
+function renderMonth(d, board) {
+  board.className = "board";
+  const grid = el("div", "month");
+  DOW.forEach((x) => grid.appendChild(el("div", "dow", x)));
+  const first = new Date(d.days[0].date + "T00:00:00");
+  const blanks = (first.getDay() + 6) % 7;
+  for (let i = 0; i < blanks; i++) grid.appendChild(el("div", "mcell blank"));
+
+  d.days.forEach((day) => {
+    const c = el("button", "mcell" + (day.is_today ? " today" : "") + (day.weekend ? " weekend" : ""));
+    const hasBank = day.events.some((e) => e.kind === "fed" || e.kind === "cb");
+    const logos = day.companies.slice(0, 6).map((x) =>
+      `<span class="mlogo${x.owned ? " own" : x.watched ? " watch" : ""}">${logoHtml(x.symbol)}</span>`).join("");
+    c.innerHTML = `<span class="mhead"><span class="mnum">${day.date.slice(8,10)}</span>
+                   ${hasBank ? '<span class="cbdot"></span>' : ""}</span>
+                   <span class="mlogos">${logos}</span>
+                   ${day.matched ? `<span class="mcount">${day.matched} publ.</span>` : ""}`;
+    c.onclick = () => {
+      const t = new Date(day.date + "T00:00:00"), today = new Date();
+      today.setHours(0,0,0,0);
+      S.mode = "day";
+      S.offset = Math.round((t - today) / 86400000);
+      syncSeg();
+      load();
+    };
+    grid.appendChild(c);
+  });
+  board.appendChild(grid);
+}
+
+/* ============================ wykresy ============================ */
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+};
+
+/** Wspólna obsługa dymka: myszka nad wykresem wybiera najbliższy słupek. */
+function attachTip(wrap, svg, count, pad, describe, onSelect) {
+  const tip = el("div", "tip");
+  wrap.appendChild(tip);
+  const w = Number(svg.getAttribute("width"));
+  const step = (w - pad.l - pad.r) / count;
+  let last = -1;
+
+  svg.addEventListener("mousemove", (ev) => {
+    const box = svg.getBoundingClientRect();
+    const x = (ev.clientX - box.left) * (w / box.width);
+    const i = Math.max(0, Math.min(count - 1, Math.floor((x - pad.l) / step)));
+    if (i !== last) { last = i; onSelect?.(i); }
+    tip.innerHTML = describe(i);
+    tip.style.opacity = 1;
+    const tx = Math.min(Math.max(pad.l, (pad.l + step * (i + 0.5)) * (box.width / w) - tip.offsetWidth / 2),
+                        box.width - tip.offsetWidth - 4);
+    tip.style.left = tx + "px";
+    tip.style.top = "-4px";
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.opacity = 0; last = -1; onSelect?.(null); });
+}
+
+/** Historia publikacji: słupki = zaskoczenie EPS, linia = reakcja kursu nazajutrz. */
+function surpriseChart(history) {
+  const wrap = el("div", "chart-wrap");
+  const W = 600, H = 210, pad = { l: 10, r: 10, t: 14, b: 22 };
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+                             style: "width:100%;height:auto;display:block" });
+  const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+  const step = innerW / history.length;
+  const sMax = Math.max(1, ...history.map((h) => Math.abs(h.surprise_pct || 0)));
+  const rMax = Math.max(1, ...history.map((h) => Math.abs(h.reaction_pct || 0)));
+  const zero = pad.t + innerH / 2;
+  const yS = (v) => zero - (v / sMax) * (innerH / 2 - 6);
+  const yR = (v) => zero - (v / rMax) * (innerH / 2 - 6);
+
+  svg.appendChild(svgEl("line", { x1: pad.l, y1: zero, x2: W - pad.r, y2: zero,
+                                  stroke: "rgba(255,255,255,.14)" }));
+  const highlights = [];
+  history.forEach((h, i) => {
+    const hl = svgEl("rect", { x: pad.l + step * i, y: pad.t, width: step, height: innerH,
+                               rx: 6, fill: "rgba(255,255,255,.05)", opacity: 0 });
+    svg.appendChild(hl); highlights.push(hl);
+    const v = h.surprise_pct || 0, y = yS(v), bw = Math.min(42, step * 0.46);
+    svg.appendChild(svgEl("rect", {
+      x: pad.l + step * (i + 0.5) - bw / 2, y: Math.min(y, zero), width: bw,
+      height: Math.max(2, Math.abs(zero - y)), rx: 3,
+      fill: v >= 0 ? "#2fd48a" : "#ff5c6c", opacity: .85,
+    }));
+    const t = svgEl("text", { x: pad.l + step * (i + 0.5), y: H - 7, "font-size": 10,
+                              "font-weight": 700, fill: "#5c6479", "text-anchor": "middle" });
+    t.textContent = qLabel(h.quarter) || h.period || "";
+    svg.appendChild(t);
+  });
+  const path = history.map((h, i) =>
+    `${i ? "L" : "M"}${pad.l + step * (i + 0.5)},${yR(h.reaction_pct || 0)}`).join(" ");
+  svg.appendChild(svgEl("path", { d: path, stroke: "#5b8cff", "stroke-width": 2, fill: "none",
+                                  "stroke-linejoin": "round" }));
+  history.forEach((h, i) => svg.appendChild(svgEl("circle", {
+    cx: pad.l + step * (i + 0.5), cy: yR(h.reaction_pct || 0), r: 3.4, fill: "#5b8cff" })));
+
+  wrap.appendChild(svg);
+  attachTip(wrap, svg, history.length, pad, (i) => {
+    const h = history[i];
+    return `<b>${qLabel(h.quarter) || h.period}</b> · zaskoczenie
+            <span style="color:${(h.surprise_pct||0)>=0?"#2fd48a":"#ff5c6c"}">${pct(h.surprise_pct)}</span>
+            · kurs <span style="color:${(h.reaction_pct||0)>=0?"#2fd48a":"#ff5c6c"}">${pct(h.reaction_pct)}</span>`;
+  }, (i) => highlights.forEach((r, k) => r.setAttribute("opacity", k === i ? 1 : 0)));
+
+  wrap.appendChild(el("div", "chart-legend",
+    `<span><i style="background:#2fd48a"></i>zaskoczenie EPS (słupki)</span>
+     <span><i style="background:#5b8cff"></i>reakcja kursu (linia)</span>`));
+  return wrap;
+}
+
+const MARGIN_SERIES = [
+  { key: "gross_margin", label: "marża brutto", color: "#2fd48a" },
+  { key: "operating_margin", label: "marża operacyjna", color: "#5b8cff" },
+  { key: "net_margin", label: "marża netto", color: "#a78bfa" },
+];
+
+/** Przychód (słupki w tle) i trzy marże (linie) — kwartalnie albo rocznie. */
+function marginChart(points, currency) {
+  const wrap = el("div", "chart-wrap");
+  const W = 600, H = 230, pad = { l: 10, r: 10, t: 14, b: 22 };
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+                             style: "width:100%;height:auto;display:block" });
+  const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+  const step = innerW / points.length;
+  const all = points.flatMap((p) => MARGIN_SERIES.map((m) => p[m.key])).filter((v) => typeof v === "number");
+  const lo = Math.min(0, ...all), hi = Math.max(1, ...all), span = (hi - lo) || 1;
+  const y = (v) => pad.t + innerH - ((v - lo) / span) * innerH;
+  const revMax = Math.max(...points.map((p) => p.revenue || 0), 1);
+
+  points.forEach((p, i) => {
+    const h = ((p.revenue || 0) / revMax) * innerH * 0.55;
+    svg.appendChild(svgEl("rect", { x: pad.l + step * i + step * .16, y: pad.t + innerH - h,
+      width: step * .68, height: Math.max(1, h), rx: 3, fill: "rgba(255,255,255,.06)" }));
+  });
+  if (lo < 0) svg.appendChild(svgEl("line", { x1: pad.l, y1: y(0), x2: W - pad.r, y2: y(0),
+    stroke: "rgba(255,255,255,.18)", "stroke-dasharray": "3 3" }));
+
+  const cursor = svgEl("line", { y1: pad.t, y2: pad.t + innerH, stroke: "rgba(255,255,255,.25)", opacity: 0 });
+  svg.appendChild(cursor);
+
+  MARGIN_SERIES.forEach((m) => {
+    const pts = points.map((p, i) => ({ v: p[m.key], x: pad.l + step * (i + .5) }))
+                      .filter((p) => typeof p.v === "number");
+    if (pts.length < 2) return;
+    svg.appendChild(svgEl("path", {
+      d: pts.map((p, i) => `${i ? "L" : "M"}${p.x},${y(p.v)}`).join(" "),
+      stroke: m.color, "stroke-width": 2.2, fill: "none", "stroke-linejoin": "round" }));
+    pts.forEach((p) => svg.appendChild(svgEl("circle", { cx: p.x, cy: y(p.v), r: 2.8, fill: m.color })));
+  });
+  points.forEach((p, i) => {
+    const t = svgEl("text", { x: pad.l + step * (i + .5), y: H - 7, "font-size": 10,
+                              "font-weight": 700, fill: "#5c6479", "text-anchor": "middle" });
+    t.textContent = qLabel(p.date) || p.date.slice(0, 4);
+    svg.appendChild(t);
+  });
+
+  wrap.appendChild(svg);
+  attachTip(wrap, svg, points.length, pad, (i) => {
+    const p = points[i];
+    const parts = MARGIN_SERIES.filter((m) => p[m.key] != null)
+      .map((m) => `<span style="color:${m.color}">${m.label.replace("marża ","")} ${nf(p[m.key],1,1)}%</span>`);
+    return `<b>${qLabel(p.date) || p.date.slice(0,4)}</b> · ${big(p.revenue, currency)} · ${parts.join(" · ")}`;
+  }, (i) => {
+    if (i == null) { cursor.setAttribute("opacity", 0); return; }
+    cursor.setAttribute("x1", pad.l + step * (i + .5));
+    cursor.setAttribute("x2", pad.l + step * (i + .5));
+    cursor.setAttribute("opacity", 1);
+  });
+
+  wrap.appendChild(el("div", "chart-legend",
+    MARGIN_SERIES.map((m) => `<span><i style="background:${m.color}"></i>${m.label}</span>`).join("")
+    + `<span><i style="background:rgba(255,255,255,.22)"></i>przychód</span>`));
+  return wrap;
+}
+
+/** Odczyt vs prognoza dla wskaźnika makro — ostatnie kilkanaście publikacji. */
+function indicatorChart(history) {
+  const wrap = el("div", "chart-wrap");
+  const W = 600, H = 190, pad = { l: 10, r: 10, t: 14, b: 22 };
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+                             style: "width:100%;height:auto;display:block" });
+  const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+  const step = innerW / history.length;
+  const vals = history.flatMap((h) => [h.actual, h.consensus]).filter((v) => typeof v === "number");
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+  const y = (v) => pad.t + innerH - ((v - lo) / span) * innerH;
+  const line = (key) => history.map((h, i) => ({ v: h[key], x: pad.l + step * (i + .5) }))
+    .filter((p) => typeof p.v === "number")
+    .map((p, i) => `${i ? "L" : "M"}${p.x},${y(p.v)}`).join(" ");
+
+  const cursor = svgEl("line", { y1: pad.t, y2: pad.t + innerH, stroke: "rgba(255,255,255,.25)", opacity: 0 });
+  svg.appendChild(cursor);
+  svg.appendChild(svgEl("path", { d: line("consensus"), stroke: "#5c6479", "stroke-width": 1.8,
+                                  fill: "none", "stroke-dasharray": "4 3" }));
+  svg.appendChild(svgEl("path", { d: line("actual"), stroke: "#2fd48a", "stroke-width": 2.4,
+                                  fill: "none", "stroke-linejoin": "round" }));
+  history.forEach((h, i) => {
+    if (h.actual == null) return;
+    svg.appendChild(svgEl("circle", { cx: pad.l + step * (i + .5), cy: y(h.actual), r: 3, fill: "#2fd48a" }));
+  });
+  const every = Math.max(1, Math.ceil(history.length / 6));
+  history.forEach((h, i) => {
+    if (i % every) return;
+    const t = svgEl("text", { x: pad.l + step * (i + .5), y: H - 7, "font-size": 10,
+                              "font-weight": 700, fill: "#5c6479", "text-anchor": "middle" });
+    t.textContent = h.date.slice(5);
+    svg.appendChild(t);
+  });
+
+  wrap.appendChild(svg);
+  attachTip(wrap, svg, history.length, pad, (i) => {
+    const h = history[i];
+    return `<b>${h.date}</b> · odczyt <span style="color:#2fd48a">${esc(h.actual_fmt || "—")}</span>
+            · prognoza <span style="color:#8b93a7">${esc(h.consensus_fmt || "—")}</span>`;
+  }, (i) => {
+    if (i == null) { cursor.setAttribute("opacity", 0); return; }
+    cursor.setAttribute("x1", pad.l + step * (i + .5));
+    cursor.setAttribute("x2", pad.l + step * (i + .5));
+    cursor.setAttribute("opacity", 1);
+  });
+
+  wrap.appendChild(el("div", "chart-legend",
+    `<span><i style="background:#2fd48a"></i>odczyt</span>
+     <span><i style="background:#5c6479"></i>prognoza</span>`));
+  return wrap;
+}
+
+/* ============================ panel spółki ============================ */
+
+const SESSION_PL = { bmo: "przed otwarciem sesji", amc: "po zamknięciu sesji", tbd: "godzina nieogłoszona" };
+const PERIOD_PL = { "0q": "Bieżący kwartał", "+1q": "Następny kwartał", "0y": "Bieżący rok",
+                    "+1y": "Następny rok", "-1q": "Poprzedni kwartał", "+5y": "Perspektywa 5 lat" };
+
+function daysTo(isoDate) {
+  if (!isoDate) return "";
+  const t = new Date(isoDate + "T00:00:00"), now = new Date();
+  now.setHours(0,0,0,0);
+  const d = Math.round((t - now) / 86400000);
+  if (d === 0) return "dziś";
+  if (d === 1) return "jutro";
+  if (d === -1) return "wczoraj";
+  return d > 0 ? `za ${d} dni` : `${-d} dni temu`;
+}
+
+function dateLong(isoDate) {
+  if (!isoDate) return "";
+  const d = new Date(isoDate + "T00:00:00");
+  return d.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function openDrawer(title) {
+  $("drawerTitle").textContent = title;
+  $("drawerBody").innerHTML = `<div class="loading"><div class="spin"></div>Wczytuję…</div>`;
+  $("drawer").classList.add("on");
+  $("scrim").classList.add("on");
+}
+
+function closeDrawer() {
+  $("drawer").classList.remove("on");
+  $("scrim").classList.remove("on");
+}
+
+async function openCompany(symbol, time) {
+  openDrawer(symbol);
+  let d;
+  try {
+    const r = await fetch(`/api/earnings/company?symbol=${encodeURIComponent(symbol)}`);
+    d = await r.json();
+  } catch (e) {
+    $("drawerBody").innerHTML = `<div class="loading">Nie udało się pobrać raportu.</div>`;
+    return;
+  }
+  if (d.error) { $("drawerBody").innerHTML = `<div class="loading">${esc(d.error)}</div>`; return; }
+
+  $("drawerTitle").textContent = d.name || d.symbol;
+  const body = $("drawerBody");
+  body.innerHTML = "";
+  const c = d.currency || "";
+
+  /* nagłówek */
+  const head = el("div", "co-head");
+  head.innerHTML = `<span class="logo">${logoHtml(d.symbol)}</span>
+    <span><h2>${esc(d.symbol)}</h2><span class="co-name">${esc(d.name)}</span></span>
+    <span class="co-px"><b class="num">${cur(d.price, c)}</b><br>
+      <span class="num" style="color:${(d.change_pct||0)>=0?"var(--green)":"var(--red)"};font-size:12.5px;font-weight:800">
+      ${pct(d.change_pct)}</span></span>`;
+  body.appendChild(head);
+
+  const chips = el("div", "chips");
+  if (d.owned) chips.appendChild(el("span", "chip green", "W PORTFELU"));
+  if (d.watched) chips.appendChild(el("span", "chip red", "OBSERWOWANA"));
+  if (d.exchange) chips.appendChild(el("span", "chip", esc(d.exchange)));
+  if (d.market_cap != null) chips.appendChild(el("span", "chip", big(d.market_cap, c)));
+  if (d.forward_pe != null) chips.appendChild(el("span", "chip", "C/Z prog. " + nf(d.forward_pe,1,1)));
+  body.appendChild(chips);
+
+  /* najbliższa publikacja */
+  if (d.next?.date) {
+    const p = el("div", "panel");
+    p.style.borderColor = "rgba(47,212,138,.28)";
+    const mon = new Date(d.next.date + "T00:00:00")
+      .toLocaleDateString("pl-PL", { month: "short" }).toUpperCase();
+    p.innerHTML = `<div class="next">
+      <div class="cd"><b>${d.next.date.slice(8,10)}</b><small>${esc(mon)}</small></div>
+      <div><div class="kicker">NAJBLIŻSZA PUBLIKACJA</div>
+        <h4>${esc(dateLong(d.next.date))}</h4>
+        <div class="when">${esc(daysTo(d.next.date))}${time ? " · " + SESSION_PL[time] : ""}${d.next.estimate ? " · data szacowana" : ""}</div>
+      </div></div>`;
+    body.appendChild(p);
+  }
+
+  /* próg pobicia */
+  body.appendChild(section("Ile potrzeba, żeby pobić",
+    "Powyżej tych wartości mówi się o pobiciu prognozy (beat). Widełki to najniższa i najwyższa prognoza wśród analityków."));
+  const thr = el("div", "panel");
+  thr.appendChild(threshold("Zysk na akcję (EPS)", d.next?.eps, d.next?.eps_low, d.next?.eps_high,
+                            (v) => cur(v, c)));
+  thr.appendChild(threshold("Przychody", d.next?.revenue, d.next?.revenue_low, d.next?.revenue_high,
+                            (v) => big(v, c)));
+  if (d.analysts) {
+    thr.appendChild(el("p", "foot",
+      `Konsensus liczony z prognoz ${d.analysts} analityków.`
+      + (d.target_price != null ? ` Średnia cena docelowa: ${cur(d.target_price, c)}.` : "")));
+  }
+  body.appendChild(thr);
+
+  /* statystyki reakcji */
+  if (d.stats.quarters > 0) {
+    body.appendChild(section("Jak ta spółka zwykle reaguje",
+      "Z ostatnich kwartałów. Typowy ruch to średnia z bezwzględnych zmian kursu na sesji po raporcie — pokazuje skalę, na jaką trzeba być gotowym."));
+    const g = el("div", "stats3");
+    g.appendChild(stat("POBIŁA PROGNOZĘ", d.stats.beat_rate != null ? d.stats.beat_rate + "%" : "—",
+      `${d.stats.beats} z ${d.stats.quarters} kwartałów`,
+      (d.stats.beat_rate ?? 0) >= 50 ? "var(--green)" : "var(--amber)"));
+    g.appendChild(stat("ŚREDNIE ZASKOCZENIE", pct(d.stats.avg_surprise_pct),
+      "odchylenie EPS od prognozy",
+      (d.stats.avg_surprise_pct ?? 0) >= 0 ? "var(--green)" : "var(--red)"));
+    g.appendChild(stat("TYPOWY RUCH",
+      d.stats.avg_move_pct != null ? "±" + nf(d.stats.avg_move_pct,1,1) + "%" : "—",
+      d.stats.max_move_pct != null ? `największy ±${nf(d.stats.max_move_pct,1,1)}%` : "",
+      "var(--accent)"));
+    body.appendChild(g);
+  }
+
+  /* historia */
+  if (d.history.length) {
+    body.appendChild(section("Poprzednie wyniki",
+      "Słupek w górę = wynik lepszy od prognozy. Linia pokazuje, jak zachował się kurs — bywa, że pobicie prognozy kończy się spadkiem."));
+    const p = el("div", "panel");
+    p.appendChild(surpriseChart(d.history));
+    const t = el("table", "q");
+    t.innerHTML = `<tr><th>Kwartał</th><th>EPS</th><th>Prognoza</th><th>Zaskoczenie</th><th>Kurs</th></tr>`
+      + [...d.history].reverse().map((h) => `<tr>
+          <td><b>${esc(qLabel(h.quarter) || h.period || "—")}</b><small>${esc(h.date || "")}</small></td>
+          <td class="num">${h.eps != null ? nf(h.eps,2,2) : "—"}</td>
+          <td class="num" style="color:var(--muted)">${h.estimate != null ? nf(h.estimate,2,2) : "—"}</td>
+          <td class="num" style="color:${(h.surprise_pct||0)>=0?"var(--green)":"var(--red)"}">${pct(h.surprise_pct,1)}</td>
+          <td class="num" style="color:${h.reaction_pct==null?"var(--dim)":(h.reaction_pct>=0?"var(--green)":"var(--red)")}">${pct(h.reaction_pct,1)}</td>
+        </tr>`).join("");
+    p.appendChild(t);
+    body.appendChild(p);
+  }
+
+  /* marże */
+  const mq = d.margins?.quarterly || [], ma = d.margins?.annual || [];
+  if (mq.length >= 2 || ma.length >= 2) {
+    body.appendChild(section("Marże i przychód",
+      "Marża brutto mówi o sile cenowej, operacyjna o dyscyplinie kosztów, netto o tym, co zostaje właścicielom. Szare słupki w tle to przychód."));
+    const p = el("div", "panel");
+    const seg = el("div", "seg");
+    seg.style.marginBottom = "14px";
+    const holder = el("div");
+    const draw = (mode) => {
+      const pts = mode === "annual" ? ma : mq;
+      holder.innerHTML = "";
+      holder.appendChild(pts.length >= 2 ? marginChart(pts, c)
+        : el("p", "foot", "Brak danych w tej rozdzielczości dla tej spółki."));
+      [...seg.children].forEach((b) => b.classList.toggle("on", b.dataset.m === mode));
+    };
+    [["quarterly", "Kwartalnie"], ["annual", "Rocznie"]].forEach(([id, label]) => {
+      const b = el("button", "", label);
+      b.dataset.m = id;
+      b.onclick = () => draw(id);
+      seg.appendChild(b);
+    });
+    p.appendChild(seg); p.appendChild(holder);
+    draw(mq.length >= 2 ? "quarterly" : "annual");
+    body.appendChild(p);
+  }
+
+  /* prognozy analityków */
+  if (d.trend.length) {
+    body.appendChild(section("Prognozy analityków",
+      "Rewizje to zmiany prognoz z ostatnich 30 dni — więcej w górę niż w dół oznacza rosnące oczekiwania rynku."));
+    const p = el("div", "panel");
+    d.trend.forEach((t) => {
+      const r = el("div", "trend-row");
+      r.innerHTML = `<span><b>${esc(PERIOD_PL[t.period] || t.period)}</b><br>
+          <small style="color:var(--dim);font-size:10.5px">
+            ${t.analysts ? t.analysts + " analityków" : "—"}
+            ${t.rev_growth != null ? " · przychody " + pct(t.rev_growth,1) : ""}</small></span>
+        <span style="margin-left:auto;text-align:right">
+          <b class="num">${cur(t.eps_avg, c)}</b><br>
+          ${t.eps_growth != null ? `<small style="font-size:10.5px;font-weight:800;color:${t.eps_growth>=0?"var(--green)":"var(--red)"}">EPS ${pct(t.eps_growth,1)} r/r</small>` : ""}
+        </span>
+        ${(t.up_30d || t.down_30d) ? `<span class="rv">
+          <span style="color:var(--green)">▲${t.up_30d||0}</span><br>
+          <span style="color:var(--red)">▼${t.down_30d||0}</span></span>` : ""}`;
+      p.appendChild(r);
+    });
+    body.appendChild(p);
+  }
+
+  const go = el("button", "btn full", "Otwórz pełny profil spółki →");
+  go.onclick = () => openProfile(d.symbol, () => openCompany(symbol, time));
+  body.appendChild(go);
+  body.appendChild(el("p", "foot",
+    "Wykres notowań, wskaźniki z wyjaśnieniami i porównanie z podobnymi spółkami."));
+}
+
+/* ============================ profil spółki ============================ */
+//
+//  Drugi poziom panelu: to samo, co w aplikacji mobilnej (CompanyScreen) — wykres
+//  notowań i katalog wskaźników z opisami. Korzysta z istniejących endpointów
+//  /api/market/*, więc nic po stronie serwera nie trzeba było dokładać.
+
+const CHART_RANGES = [["1d","1D"],["5d","5D"],["1m","1M"],["3m","3M"],["6m","6M"],
+                      ["ytd","YTD"],["1y","1R"],["5y","5L"],["max","MAX"]];
+
+const METRIC_FMT = {
+  money: (v, c) => big(v, c),
+  ratio: (v) => nf(v, 1, 2) + "×",
+  pct: (v, _c, signed) => (signed && v > 0 ? "+" : "") + nf(v * 100, 1, 1) + "%",
+  num: (v) => nf(v, 1, 2),
+};
+
+async function openProfile(symbol, onBack) {
+  openDrawer(symbol);
+  const body = $("drawerBody");
+  let d;
+  try {
+    d = await (await fetch(`/api/market/company?symbol=${encodeURIComponent(symbol)}`)).json();
+  } catch {
+    body.innerHTML = `<div class="loading">Nie udało się pobrać profilu spółki.</div>`;
+    return;
+  }
+  if (d.error) { body.innerHTML = `<div class="loading">${esc(d.error)}</div>`; return; }
+
+  $("drawerTitle").textContent = d.name || d.symbol;
+  body.innerHTML = "";
+  const c = d.currency || "";
+
+  const back = el("button", "btn", "‹ Wróć do raportu wyników");
+  back.style.marginBottom = "16px";
+  back.onclick = onBack;
+  body.appendChild(back);
+
+  const head = el("div", "co-head");
+  head.innerHTML = `<span class="logo">${logoHtml(d.symbol)}</span>
+    <span><h2>${esc(d.symbol)}</h2><span class="co-name">${esc(d.name)}</span></span>
+    <span class="co-px"><b class="num">${cur(d.price, c)}</b><br>
+      <span class="num" style="color:${(d.change_pct||0)>=0?"var(--green)":"var(--red)"};font-size:12.5px;font-weight:800">
+      ${pct(d.change_pct)}</span></span>`;
+  body.appendChild(head);
+
+  const chips = el("div", "chips");
+  [d.sector, d.industry, d.country, d.exchange].filter(Boolean)
+    .forEach((x) => chips.appendChild(el("span", "chip", esc(x))));
+  body.appendChild(chips);
+
+  /* wykres notowań */
+  const chartPanel = el("div", "panel");
+  const seg = el("div", "seg");
+  seg.style.marginBottom = "14px";
+  const holder = el("div", "", `<div class="loading"><div class="spin"></div></div>`);
+  let range = "1y";
+  const drawRange = async (r) => {
+    range = r;
+    [...seg.children].forEach((b) => b.classList.toggle("on", b.dataset.r === r));
+    holder.innerHTML = `<div class="loading"><div class="spin"></div></div>`;
+    try {
+      const q = await (await fetch(`/api/market/chart?symbol=${encodeURIComponent(d.symbol)}&range=${r}`)).json();
+      holder.innerHTML = "";
+      holder.appendChild(q.error ? el("p", "foot", esc(q.error)) : priceChart(q));
+    } catch {
+      holder.innerHTML = `<p class="foot">Brak notowań dla tego zakresu.</p>`;
+    }
+  };
+  CHART_RANGES.forEach(([id, label]) => {
+    const b = el("button", "", label);
+    b.dataset.r = id;
+    b.onclick = () => drawRange(id);
+    seg.appendChild(b);
+  });
+  chartPanel.appendChild(seg);
+  chartPanel.appendChild(holder);
+  body.appendChild(chartPanel);
+  drawRange(range);
+
+  /* zakres 52 tygodni */
+  if (d.week52_low != null && d.week52_high != null && d.price != null) {
+    const at = ((d.price - d.week52_low) / Math.max(1e-9, d.week52_high - d.week52_low)) * 100;
+    const p = el("div", "panel");
+    p.innerHTML = `<div class="thr"><div class="thr-head"><span>Zakres 52 tygodni</span>
+        <b class="num">${cur(d.price, c)}</b></div>
+      <div class="track"><i style="left:${Math.max(0,Math.min(100,at))}%"></i></div>
+      <div class="ends"><span>${cur(d.week52_low, c)}</span><span>${cur(d.week52_high, c)}</span></div></div>`;
+    body.appendChild(p);
+  }
+
+  /* wskaźniki pogrupowane — katalog przychodzi z serwera, więc nic tu nie kodujemy na sztywno */
+  const groups = {};
+  (d.metrics || []).forEach((m) => {
+    if (m.value == null) return;
+    (groups[m.group] = groups[m.group] || []).push(m);
+  });
+  Object.entries(groups).forEach(([group, list]) => {
+    body.appendChild(section(group.charAt(0).toUpperCase() + group.slice(1), ""));
+    const p = el("div", "panel");
+    list.forEach((m) => {
+      const fmt = METRIC_FMT[m.fmt] || METRIC_FMT.num;
+      const row = el("div", "trend-row");
+      row.innerHTML = `<span style="flex:1"><b>${esc(m.label)}</b><br>
+          <small style="color:var(--dim);font-size:10.5px;line-height:1.5;display:block;max-width:380px">${esc(m.desc)}</small></span>
+        <span style="text-align:right"><b class="num" style="font-size:15px">${fmt(m.value, c, m.signed)}</b>
+        ${m.peer != null ? `<br><small style="color:var(--dim);font-size:10.5px">branża ${fmt(m.peer, c, m.signed)}</small>` : ""}</span>`;
+      p.appendChild(row);
+    });
+    body.appendChild(p);
+  });
+
+  if (d.summary) {
+    body.appendChild(section("O spółce", ""));
+    const p = el("div", "panel");
+    p.appendChild(el("p", "desc", esc(d.summary)));
+    body.appendChild(p);
+  }
+}
+
+/** Wykres notowań instrumentu — area z gradientem i kursorem po najechaniu. */
+function priceChart(q) {
+  const wrap = el("div", "chart-wrap");
+  const W = 600, H = 240, pad = { l: 10, r: 10, t: 14, b: 22 };
+  const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`,
+                             style: "width:100%;height:auto;display:block" });
+  const v = q.values, n = v.length;
+  const innerW = W - pad.l - pad.r, innerH = H - pad.t - pad.b;
+  const lo = Math.min(...v), hi = Math.max(...v), span = (hi - lo) || 1;
+  const x = (i) => pad.l + (n < 2 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const y = (val) => pad.t + innerH - ((val - lo) / span) * innerH;
+  const up = v[n-1] >= (q.prev_close ?? v[0]);
+  const color = up ? "#2fd48a" : "#ff5c6c";
+
+  const grad = svgEl("linearGradient", { id: "pcg", x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.appendChild(svgEl("stop", { offset: "0%", "stop-color": color, "stop-opacity": .28 }));
+  grad.appendChild(svgEl("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 }));
+  const defs = svgEl("defs"); defs.appendChild(grad); svg.appendChild(defs);
+
+  const line = v.map((val, i) => `${i ? "L" : "M"}${x(i)},${y(val)}`).join(" ");
+  svg.appendChild(svgEl("path", { d: `${line}L${x(n-1)},${pad.t+innerH}L${x(0)},${pad.t+innerH}Z`,
+                                  fill: "url(#pcg)" }));
+  svg.appendChild(svgEl("path", { d: line, stroke: color, "stroke-width": 2, fill: "none",
+                                  "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  if (q.prev_close != null && q.prev_close >= lo && q.prev_close <= hi) {
+    svg.appendChild(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: y(q.prev_close), y2: y(q.prev_close),
+                                    stroke: "rgba(255,255,255,.18)", "stroke-dasharray": "4 4" }));
+  }
+  const cursor = svgEl("line", { y1: pad.t, y2: pad.t + innerH, stroke: "rgba(255,255,255,.3)", opacity: 0 });
+  const dot = svgEl("circle", { r: 4.5, fill: color, stroke: "#0a0d13", "stroke-width": 2, opacity: 0 });
+  svg.appendChild(cursor); svg.appendChild(dot);
+
+  wrap.appendChild(svg);
+  attachTip(wrap, svg, n, pad, (i) => {
+    const t = new Date(q.ts[i] * 1000);
+    const when = q.intraday
+      ? t.toLocaleString("pl-PL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+      : t.toLocaleDateString("pl-PL", { day: "numeric", month: "short", year: "numeric" });
+    const ch = q.prev_close ? (v[i] / q.prev_close - 1) * 100 : null;
+    return `<b>${esc(when)}</b> · ${cur(v[i], q.currency)}`
+         + (ch != null ? ` · <span style="color:${ch>=0?"#2fd48a":"#ff5c6c"}">${pct(ch)}</span>` : "");
+  }, (i) => {
+    if (i == null) { cursor.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); return; }
+    cursor.setAttribute("x1", x(i)); cursor.setAttribute("x2", x(i)); cursor.setAttribute("opacity", 1);
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(v[i])); dot.setAttribute("opacity", 1);
+  });
+  return wrap;
+}
+
+function section(title, hint) {
+  const s = el("div", "sec");
+  s.appendChild(el("h3", "", esc(title)));
+  if (hint) s.appendChild(el("p", "hint", esc(hint)));
+  return s;
+}
+
+function threshold(label, value, low, high, fmt) {
+  const box = el("div", "thr");
+  const span = (low != null && high != null && high > low) ? high - low : 0;
+  const at = span && value != null ? ((value - low) / span) * 100 : null;
+  box.innerHTML = `<div class="thr-head"><span>${esc(label)}</span>
+      <b class="num">${value != null ? fmt(value) : "—"}</b></div>`
+    + (span ? `<div class="track"><i style="left:${Math.max(0,Math.min(100,at))}%"></i></div>
+       <div class="ends"><span>min ${fmt(low)}</span><span>max ${fmt(high)}</span></div>` : "");
+  return box;
+}
+
+function stat(k, v, s, color) {
+  const n = el("div", "st");
+  n.innerHTML = `<div class="k">${esc(k)}</div>
+    <div class="v num" style="color:${color}">${esc(v)}</div>
+    ${s ? `<div class="s">${esc(s)}</div>` : ""}`;
+  return n;
+}
+
+/* ============================ panel wydarzenia ============================ */
+
+const KIND_PL = { fed: "Rezerwa Federalna", cb: "Bank centralny", speech: "Wystąpienie",
+                  holiday: "Dzień wolny", data: "Odczyt danych" };
+const IMP_PL = ["kosmetyczna", "niska", "średnia", "wysoka"];
+const PERIOD_TYPE = { MONTH: "miesięczny", QUARTER: "kwartalny", YEAR: "roczny",
+                      WEEK: "tygodniowy", DAY: "dzienny" };
+
+async function openEvent(e) {
+  openDrawer(e.name_pl);
+  const body = $("drawerBody");
+  body.innerHTML = "";
+
+  const head = el("div", "co-head");
+  head.innerHTML = `<span class="logo" style="background:var(--card2);font-size:26px">${e.flag}</span>
+    <span><h2 style="font-size:19px">${esc(e.name_pl)}</h2>
+    ${e.name !== e.name_pl ? `<span class="co-name">${esc(e.name)}</span>` : ""}</span>`;
+  body.appendChild(head);
+
+  const chips = el("div", "chips");
+  const bank = e.kind === "fed" || e.kind === "cb";
+  if (bank) chips.appendChild(el("span", "chip red", esc(bankTag(e))));
+  chips.appendChild(el("span", "chip", esc(KIND_PL[e.kind] || e.kind)));
+  chips.appendChild(el("span", "chip", esc(e.country_name)));
+  chips.appendChild(el("span", "chip", "waga " + IMP_PL[e.importance]));
+  if (e.preliminary) chips.appendChild(el("span", "chip", "odczyt wstępny"));
+  if (e.tentative) chips.appendChild(el("span", "chip", "termin orientacyjny"));
+  body.appendChild(chips);
+
+  const when = el("div", "panel");
+  when.innerHTML = `<div style="display:flex;justify-content:space-between">
+      <div><div class="kicker">TERMIN</div><h4 style="font-size:17px;font-weight:800;margin-top:4px">${esc(e.date)}</h4></div>
+      <div style="text-align:right"><div class="kicker">GODZINA</div>
+        <h4 class="num" style="font-size:17px;font-weight:800;margin-top:4px;color:${bank?"var(--red)":"var(--text)"}">${esc(hhmm(e))}</h4></div>
+    </div>
+    ${e.period_date ? `<p class="foot">Okres ${esc(PERIOD_TYPE[e.period] || (e.period||"").toLowerCase())}: ${esc(e.period_date)}</p>` : ""}`;
+  body.appendChild(when);
+
+  if (e.actual_fmt || e.consensus_fmt || e.previous_fmt) {
+    body.appendChild(section("Liczby",
+      "Rynek reaguje nie na sam poziom, tylko na różnicę między odczytem a prognozą."));
+    const g = el("div", "nums3");
+    g.appendChild(stat("ODCZYT", e.actual_fmt || "—", "",
+      e.actual == null ? "var(--dim)" : e.better === false ? "var(--red)" : e.better ? "var(--green)" : "var(--text)"));
+    g.appendChild(stat("PROGNOZA", e.consensus_fmt || "—", "", "var(--muted)"));
+    g.appendChild(stat("POPRZEDNIO", e.previous_fmt || "—", "", "var(--dim)"));
+    body.appendChild(g);
+  }
+
+  const loading = el("div", "loading", `<div class="spin"></div>Wczytuję szczegóły…`);
+  body.appendChild(loading);
+
+  let d = null;
+  try {
+    const r = await fetch(`/api/earnings/event?event_id=${encodeURIComponent(e.event_id)}&country=${encodeURIComponent(e.country)}`);
+    d = await r.json();
+  } catch { /* zostajemy przy tym, co przyszło z kalendarza */ }
+  loading.remove();
+  if (!d) return;
+
+  if (e.actual != null && e.consensus != null) {
+    const diff = Math.abs(e.actual - e.consensus);
+    body.appendChild(el("p", "foot",
+      (e.actual > e.consensus ? `Odczyt wyższy od prognozy o ${nf(diff)}. `
+        : e.actual < e.consensus ? `Odczyt niższy od prognozy o ${nf(diff)}. `
+        : "Odczyt dokładnie zgodny z prognozą. ")
+      + (d.rise === "POSITIVE" ? `Wyższa wartość jest zwykle korzystna dla ${e.currency}.`
+        : d.rise === "NEGATIVE" ? `Wyższa wartość jest zwykle niekorzystna dla ${e.currency}.` : "")));
+  }
+
+  if ((d.history || []).length >= 2) {
+    body.appendChild(section("Poprzednie odczyty",
+      "Linia ciągła to rzeczywisty odczyt, przerywana — prognoza rynku."));
+    const p = el("div", "panel");
+    p.appendChild(indicatorChart(d.history));
+    body.appendChild(p);
+  }
+
+  if (d.description) {
+    body.appendChild(section("Co to właściwie jest",
+      d.category ? "Kategoria: " + d.category : ""));
+    const p = el("div", "panel");
+    p.appendChild(el("p", "desc", esc(d.description)));
+    if (d.source_name) p.appendChild(el("p", "foot", "Źródło danych: " + esc(d.source_name)));
+    body.appendChild(p);
+  }
+}
+
+/* ============================ sterowanie ============================ */
+
+function syncSeg() {
+  [...$("modeSeg").children].forEach((b) => b.classList.toggle("on", b.dataset.mode === S.mode));
+}
+
+$("modeSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  S.mode = b.dataset.mode;
+  S.offset = 0;
+  localStorage.setItem("earn.mode", S.mode);
+  syncSeg();
+  load();
+});
+
+$("prev").onclick = () => { S.offset--; load(); };
+$("next").onclick = () => { S.offset++; load(); };
+$("rangeLabel").onclick = () => { if (S.offset) { S.offset = 0; load(); } };
+
+["filter", "sort", "importance", "scope"].forEach((k) => {
+  const node = $(k);
+  node.value = S[k];
+  node.onchange = () => { S[k] = node.value; localStorage.setItem("earn." + k, node.value); load(); };
+});
+
+$("closeDrawer").onclick = closeDrawer;
+$("scrim").onclick = closeDrawer;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+setInterval(() => { $("clock").textContent = new Date().toLocaleTimeString("pl-PL"); }, 1000);
+$("clock").textContent = new Date().toLocaleTimeString("pl-PL");
+
+/* ============================ bezpiecznik ============================ */
+//
+//  Wyjątek w trakcie rysowania zostawiał wcześniej pustą, martwą stronę. Teraz
+//  łapiemy go globalnie i pokazujemy wyjście: przeładowanie widoku bez utraty
+//  ustawień (zakres, filtry i sortowanie siedzą w localStorage).
+
+function crashScreen(what) {
+  closeDrawer();
+  $("board").className = "board";
+  $("board").innerHTML = `
+    <div class="loading">
+      <div style="font-size:19px;font-weight:800;color:var(--text);margin-bottom:8px">Coś się zacięło</div>
+      <div style="max-width:460px;margin:0 auto 18px">Widok nie dał rady się odświeżyć.
+        Twoje ustawienia są zapisane — wystarczy złożyć go od nowa.</div>
+      <button class="btn" id="crashRetry">Załaduj od nowa</button>
+      <div style="margin-top:16px;font-size:11px;color:var(--dim)">${esc(String(what || ""))}</div>
+    </div>`;
+  $("crashRetry").onclick = () => load();
+}
+
+window.addEventListener("error", (e) => {
+  console.error("Błąd strony:", e.error || e.message);
+  crashScreen(e.message);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("Nieobsłużone odrzucenie:", e.reason);
+  // odrzucone fetch-e obsługujemy lokalnie; tu tylko log, żeby nie gasić widoku
+});
+
+syncSeg();
+load();
+</script>
+</body>
+</html>

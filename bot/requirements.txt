@@ -1,0 +1,15 @@
+anthropic>=0.40
+MetaTrader5>=5.0.45
+requests>=2.31
+curl_cffi>=0.7
+python-dotenv>=1.0
+fastapi>=0.110
+uvicorn>=0.29
+feedparser>=6.0.10
+websocket-client>=1.7   # broker XTB xStation (xAPI) — akcje GPW + krypto
+
+# --- Wystąpienia na żywo (/live): kalendarz + audio -> tekst -> AI ---
+yt-dlp>=2025.1.1
+faster-whisper>=1.0
+numpy>=1.26
+# UWAGA: potrzebny też ffmpeg w PATH (Windows: winget install ffmpeg)

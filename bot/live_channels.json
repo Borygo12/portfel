@@ -1,0 +1,74 @@
+[
+  {
+    "id": "rsbn",
+    "name": "RSBN — wiece Trumpa",
+    "handle": "@RSBN",
+    "category": "trump",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "whitehouse",
+    "name": "Biały Dom (oficjalny)",
+    "handle": "@WhiteHouse",
+    "category": "usa_gov",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "foxnews",
+    "name": "Fox News",
+    "handle": "@FoxNews",
+    "category": "trump",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "livenow",
+    "name": "LiveNOW from FOX",
+    "handle": "@livenowfox",
+    "category": "usa_gov",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "nato",
+    "name": "NATO",
+    "handle": "@NATO",
+    "category": "europe",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "ecaudio",
+    "name": "Komisja Europejska",
+    "handle": "@EuropeanCommission",
+    "category": "europe",
+    "lang": "en",
+    "watch": true
+  },
+  {
+    "id": "sejm",
+    "name": "Sejm RP",
+    "handle": "@SejmRP_PL",
+    "category": "poland",
+    "lang": "pl",
+    "watch": true
+  },
+  {
+    "id": "premierpl",
+    "name": "Kancelaria Premiera RP",
+    "handle": "@premierrp",
+    "category": "poland",
+    "lang": "pl",
+    "watch": true
+  },
+  {
+    "id": "nbp",
+    "name": "Narodowy Bank Polski",
+    "handle": "@NarodowyBankPolski",
+    "category": "poland",
+    "lang": "pl",
+    "watch": true
+  }
+]

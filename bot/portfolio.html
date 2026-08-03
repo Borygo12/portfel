@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfel — śledzenie inwestycji</title>
+<script src="/vendor/lightweight-charts.js"></script>
+<style>
+  :root {
+    --bg: #0a0d13; --elev: #10141d; --card: #141926; --border: #232b3d; --border2: #2d3750;
+    --text: #e8ebf2; --muted: #8b93a7; --dim: #5c6479;
+    --green: #2fd48a; --red: #ff5c6c; --amber: #ffb454; --accent: #5b8cff; --violet: #a78bfa;
+    --gold: #e6c15a; --btc: #f7931a; --cyan: #67e8f9;
+    --mono: "Cascadia Mono", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: radial-gradient(1400px 700px at 75% -12%, #121a2c 0%, var(--bg) 55%);
+         color: var(--text); min-height: 100vh;
+         font: 14px/1.5 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+
+  nav { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 6px;
+        padding: 0 22px; height: 56px; background: rgba(10,13,19,.82); backdrop-filter: blur(14px);
+        border-bottom: 1px solid var(--border); }
+  .brand { font-weight: 800; font-size: 16px; margin-right: 18px; }
+  .brand span { color: var(--green); }
+  .navlink { padding: 8px 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--muted); transition: .15s; }
+  .navlink:hover { color: var(--text); background: rgba(255,255,255,.04); }
+  .navlink.active { color: var(--text); background: rgba(47,212,138,.13); }
+  .nav-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .btn { border: 1px solid var(--border2); background: var(--card); color: var(--text); font: inherit;
+         font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 10px; cursor: pointer; transition: .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: linear-gradient(180deg, #34e59a, #1fb877); color: #04140c; border: 0; font-weight: 800; }
+  .btn.primary:hover { filter: brightness(1.07); }
+  .btn:disabled { opacity: .5; cursor: wait; }
+
+  main { max-width: 1320px; margin: 0 auto; padding: 26px 22px 60px; }
+
+  /* ---------- hero ---------- */
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 6px; }
+  .hero .label { font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .value-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  #heroValue { font-size: 46px; font-weight: 800; letter-spacing: -1px; font-family: var(--mono); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+          font-weight: 700; font-size: 14px; font-family: var(--mono); }
+  .chip.up { background: rgba(47,212,138,.12); color: var(--green); }
+  .chip.down { background: rgba(255,92,108,.12); color: var(--red); }
+  .hero .sub { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+
+  /* ---------- pasek świeżości wyceny ---------- */
+  .live { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 13px;
+          border-radius: 999px; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border);
+          background: var(--elev); color: var(--muted); transition: .2s; }
+  .live .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex-shrink: 0; }
+  .live.on { border-color: rgba(47,212,138,.35); background: rgba(47,212,138,.07); color: var(--green); }
+  .live.on .ldot { background: var(--green); animation: livePulse 2s ease-in-out infinite; }
+  .live.stale { border-color: rgba(255,180,84,.35); background: rgba(255,180,84,.07); color: var(--amber); }
+  .live.stale .ldot { background: var(--amber); }
+  .live .lsep { color: var(--dim); font-weight: 400; }
+  @keyframes livePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(47,212,138,.55); }
+                         70% { box-shadow: 0 0 0 6px rgba(47,212,138,0); } }
+  .flash { animation: flashVal .6s ease; }
+  @keyframes flashVal { 0% { color: var(--accent); } 100% { color: inherit; } }
+
+  .ranges { display: flex; gap: 4px; background: var(--elev); border: 1px solid var(--border);
+            border-radius: 12px; padding: 4px; }
+  .ranges button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 700;
+                   font-size: 12.5px; padding: 7px 13px; border-radius: 9px; cursor: pointer; transition: .12s; }
+  .ranges button:hover { color: var(--text); }
+  .ranges button.active { background: rgba(47,212,138,.14); color: var(--green); }
+
+  /* ---------- chart card ---------- */
+  .chart-card { background: linear-gradient(180deg, var(--card), var(--elev)); border: 1px solid var(--border);
+                border-radius: 18px; padding: 16px 16px 8px; margin-top: 14px; }
+  .chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 6px 10px; }
+  .seg { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px;
+                font-weight: 700; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+  .seg button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  .bench-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .bchip { border: 1px solid var(--border2); background: transparent; color: var(--muted); font: inherit;
+           font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: .12s; }
+  .bchip:hover { color: var(--text); }
+  .bchip.on { color: #0a0d13; font-weight: 800; border-color: transparent; }
+  #chart { height: 430px; position: relative; }
+  .chart-note { color: var(--dim); font-size: 11.5px; padding: 6px 8px 4px; }
+
+  /* ---------- stat cards ---------- */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  @media (max-width: 1000px){ .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: linear-gradient(180deg, var(--card), var(--elev)); border: 1px solid var(--border);
+          border-radius: 14px; padding: 14px 16px; }
+  .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; font-weight: 700; }
+  .stat .v { font-size: 21px; font-weight: 800; margin-top: 4px; font-family: var(--mono); }
+  .stat .s { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+
+  /* ---------- tabs & tables ---------- */
+  .tabs { display: flex; gap: 4px; margin: 26px 0 12px; border-bottom: 1px solid var(--border); }
+  .tab { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 700; font-size: 13.5px;
+         padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--elev); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; padding: 11px 14px; color: var(--muted); font-size: 11px; text-transform: uppercase;
+       letter-spacing: .6px; cursor: pointer; user-select: none; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th:hover { color: var(--text); }
+  th .arr { opacity: .9; color: var(--green); }
+  td { padding: 11px 14px; text-align: right; border-bottom: 1px solid rgba(35,43,61,.55); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background .1s; }
+  tbody tr:hover { background: rgba(255,255,255,.025); }
+  .tname { font-weight: 700; }
+  .tsub { color: var(--dim); font-size: 11.5px; }
+  .irow { display: flex; align-items: center; gap: 11px; }
+  .logo { width: 34px; height: 34px; border-radius: 50%; object-fit: contain; background: #fff;
+          padding: 3px; flex-shrink: 0; }
+  span.logo { display: inline-flex; align-items: center; justify-content: center; font-weight: 800;
+              font-size: 12px; color: #0a0d13; padding: 0; }
+  .btn.danger { border-color: rgba(255,92,108,.45); color: var(--red); background: transparent; }
+  .btn.danger:hover { border-color: var(--red); background: rgba(255,92,108,.08); }
+  .hint { color: var(--dim); font-size: 12.5px; padding: 12px 4px; }
+  .empty-cell { text-align: center !important; color: var(--dim); padding: 26px !important; }
+
+  /* ---------- empty state / dropzone ---------- */
+  .empty-state { margin: 60px auto; max-width: 620px; text-align: center; }
+  .drop { border: 2px dashed var(--border2); border-radius: 22px; padding: 54px 30px; transition: .15s; cursor: pointer;
+          background: rgba(20,25,38,.5); }
+  .drop.over, .drop:hover { border-color: var(--green); background: rgba(47,212,138,.06); }
+  .drop .big { font-size: 44px; }
+  .drop h2 { margin-top: 12px; font-size: 20px; font-weight: 800; }
+  .drop p { color: var(--muted); margin-top: 8px; font-size: 13.5px; }
+  .howto { text-align: left; margin-top: 26px; color: var(--muted); font-size: 13px; background: var(--elev);
+           border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; }
+  .howto b { color: var(--text); }
+  .howto ol { margin: 8px 0 0 18px; display: grid; gap: 5px; }
+
+  /* ---------- toast ---------- */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+           background: var(--card); border: 1px solid var(--border2); border-radius: 12px; padding: 12px 20px;
+           font-weight: 600; font-size: 13.5px; box-shadow: 0 12px 40px rgba(0,0,0,.5); transition: transform .25s; z-index: 50; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.ok { border-color: rgba(47,212,138,.5); }
+  #toast.err { border-color: rgba(255,92,108,.5); }
+
+  /* ---------- alokacja ---------- */
+  .alloc { display: grid; grid-template-columns: 380px 1fr; gap: 18px; margin-bottom: 14px; }
+  @media (max-width: 900px){ .alloc { grid-template-columns: 1fr; } }
+  .alloc-card { background: linear-gradient(180deg, var(--card), var(--elev)); border: 1px solid var(--border);
+                border-radius: 18px; padding: 20px; }
+  .donut-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+  .donut-center { position: absolute; text-align: center; pointer-events: none; max-width: 170px; }
+  .donut-center .dc-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; }
+  .donut-center .dc-v { font-size: 22px; font-weight: 800; margin-top: 3px; letter-spacing: -.5px; }
+  .donut-center .dc-s { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+  #donut path { cursor: pointer; transition: opacity .18s, transform .18s; transform-origin: center; }
+  #donut path:hover { opacity: .82; }
+  .donut-hint { text-align: center; color: var(--dim); font-size: 11.5px; margin-top: 14px; }
+
+  .legend { display: grid; gap: 8px; }
+  .leg-row { border: 1px solid var(--border); background: var(--elev); border-radius: 13px; padding: 12px 14px;
+             cursor: pointer; transition: .15s; }
+  .leg-row:hover { border-color: var(--border2); transform: translateX(2px); }
+  .leg-row.on { border-color: var(--accent); background: var(--card); }
+  .leg-top { display: flex; align-items: center; gap: 9px; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .leg-label { font-weight: 700; font-size: 13.5px; flex: 1; }
+  .leg-pct { font-weight: 800; font-size: 13.5px; }
+  .leg-bar { height: 5px; background: rgba(255,255,255,.05); border-radius: 3px; margin-top: 9px; overflow: hidden; }
+  .leg-bar i { display: block; height: 100%; border-radius: 3px; width: 0; animation: grow .8s cubic-bezier(.22,1,.36,1) forwards; }
+  @keyframes grow { to { width: var(--w); } }
+  .leg-bottom { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--dim); }
+  .leg-tickers { color: var(--muted); font-size: 11.5px; line-height: 1.7; margin-top: 10px; }
+  .insight { background: rgba(91,140,255,.07); border: 1px solid rgba(91,140,255,.22); border-radius: 14px;
+             padding: 14px 16px; font-size: 13px; color: var(--muted); line-height: 1.65; margin-bottom: 14px; }
+  .insight b { color: var(--text); }
+
+  /* ---------- statystyki zamkniętych ---------- */
+  .cs-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 900px){ .cs-grid { grid-template-columns: 1fr; } }
+  .cs-big { font-size: 30px; font-weight: 800; letter-spacing: -1px; margin-top: 4px; }
+  .wl-bar { display: flex; height: 9px; border-radius: 5px; overflow: hidden; gap: 2px; margin-top: 12px; }
+  .wl-bar span { display: block; transition: flex .4s; }
+  .wl-legend { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin-top: 9px; }
+  .cs-rows { display: grid; gap: 0; }
+  .cs-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(35,43,61,.6); font-size: 13px; }
+  .cs-row:last-child { border-bottom: 0; }
+  .cs-row .k { color: var(--muted); }
+  .cs-row .v { font-weight: 700; }
+  .rank-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .rank-t { font-size: 12.5px; font-weight: 700; width: 92px; }
+  .rank-v { font-size: 12.5px; font-weight: 800; width: 74px; text-align: right; }
+
+  .skeleton { background: linear-gradient(90deg, var(--card) 25%, #1a2133 45%, var(--card) 65%);
+              background-size: 300% 100%; animation: sk 1.4s infinite; border-radius: 10px; }
+  @keyframes sk { to { background-position: -300% 0; } }
+  .warn-badge { color: var(--amber); font-size: 12px; margin-left: 10px; }
+  .drag-overlay { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center;
+                  background: rgba(10,13,19,.85); backdrop-filter: blur(4px); font-size: 22px; font-weight: 800;
+                  border: 3px dashed var(--green); border-radius: 18px; margin: 14px; color: var(--green); }
+  body.dragging .drag-overlay { display: flex; }
+
+  /* konto w pasku nawigacji */
+  .acct { display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+          color: var(--muted); font-size: 12.5px; font-weight: 600; padding: 5px 11px;
+          border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+  .acct:hover { color: var(--text); border-color: var(--muted); }
+  .acct.premium { color: #ffb454; border-color: rgba(255,180,84,.45);
+                  background: rgba(255,180,84,.1); }
+</style>
+<link rel="stylesheet" href="/static/premium.css">
+</head>
+<body>
+
+<nav>
+  <a class="navlink" href="/" title="Ekran startowy">⌂</a>
+  <div class="brand">Port<span>fel</span></div>
+  <a class="navlink active" href="/portfolio">Przegląd</a>
+  <a class="navlink" href="/earnings">Kalendarz wyników</a>
+  <a class="navlink" href="/bot">Bot newsowy</a>
+  <div class="nav-right">
+    <a class="acct" id="acctChip" href="/account">Zaloguj się</a>
+    <span id="importWarn" class="warn-badge" style="display:none"></span>
+    <button class="btn" id="btnRefresh" title="Przelicz od nowa (dociągnie świeże ceny)">↻ Odśwież</button>
+    <button class="btn primary" id="btnImport">＋ Wgraj raport</button>
+    <input type="file" id="fileInput" accept=".xlsx,.zip" multiple hidden>
+  </div>
+</nav>
+
+<div class="drag-overlay">Upuść raport XTB (.xlsx / .zip)</div>
+
+<main id="main">
+  <!-- pusty stan (bez danych) -->
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="drop" id="dropZone">
+      <div class="big">📊</div>
+      <h2>Zacznij od wgrania historii konta</h2>
+      <p>Przeciągnij tu plik <b>.xlsx</b> albo <b>.zip</b> z raportem XTB<br>— albo kliknij, żeby wybrać plik.</p>
+    </div>
+    <div class="howto">
+      <b>Jak pobrać raport z XTB (xStation):</b>
+      <ol>
+        <li>Profil → <b>Historia konta</b> → zakładka <b>Wyciągi</b></li>
+        <li>Zakres dat: od początku konta do dziś, format <b>xlsx</b></li>
+        <li>Pobierz osobno dla <b>każdego subkonta walutowego</b> (PLN, USD…) i wgraj wszystkie — transfery między nimi rozpoznają się same</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- główny widok -->
+  <div id="dashboard" style="display:none">
+    <div class="hero">
+      <div>
+        <div class="label">Wartość portfela</div>
+        <div class="value-row">
+          <span id="heroValue" class="num">—</span>
+          <span id="heroChip" class="chip up">—</span>
+        </div>
+        <div class="sub" id="heroSub"></div>
+        <div class="live" id="liveBar" title="Kliknij, aby odświeżyć teraz" style="cursor:pointer">
+          <span class="ldot"></span><span id="liveTxt">sprawdzam notowania…</span>
+        </div>
+      </div>
+      <div class="ranges" id="ranges">
+        <button data-r="1w">1T</button><button data-r="1m">1M</button><button data-r="3m">3M</button>
+        <button data-r="6m">6M</button><button data-r="ytd">YTD</button><button data-r="1y">1R</button>
+        <button data-r="3y">3L</button><button data-r="max" class="active">MAX</button>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-tools">
+        <div class="seg" id="modeSeg">
+          <button data-m="value" class="active">Wartość (zł)</button>
+          <button data-m="pct">Porównanie %</button>
+        </div>
+        <div class="bench-chips" id="benchChips"></div>
+      </div>
+      <div id="chart"></div>
+      <div class="chart-note">▲ wpłata &nbsp;·&nbsp; ▼ wypłata &nbsp;·&nbsp; pomarańczowa linia schodkowa = poziom wpłat netto w danym momencie (odstęp od wykresu = zysk/strata) &nbsp;·&nbsp; benchmarki liczone w PLN &nbsp;·&nbsp; tryb % = stopa zwrotu ważona czasem (wpłaty nie zaburzają wyniku)</div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-t="positions">Pozycje</button>
+      <button class="tab" data-t="allocation">Alokacja</button>
+      <button class="tab" data-t="closed">Zamknięte</button>
+      <button class="tab" data-t="ops">Operacje</button>
+      <button class="tab" data-t="accounts">Konta / raporty</button>
+    </div>
+    <div id="panelExtra"></div>
+    <div class="tbl-wrap" id="tblWrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    <div class="hint" id="tblHint"></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const fmtPLN = new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" });
+const fmtNum = new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 4 });
+const fmtPct = v => (v >= 0 ? "+" : "") + v.toLocaleString("pl-PL", { maximumFractionDigits: 2 }) + "%";
+const sgn = v => (v >= 0 ? "+" : "") + fmtPLN.format(v);
+
+const BENCH_META = {
+  sp500:     { label: "S&P 500",      color: "#5b8cff" },
+  nasdaq100: { label: "Nasdaq 100",   color: "#67e8f9" },
+  wig20:     { label: "WIG20 TR",     color: "#ffb454" },
+  inflation: { label: "Inflacja PL",  color: "#a78bfa" },
+  usd:       { label: "USD",          color: "#9aa7c7" },
+  gold:      { label: "Złoto",        color: "#e6c15a" },
+  btc:       { label: "Bitcoin",      color: "#f7931a" },
+};
+
+let state = {
+  range: "max", mode: "value", bench: new Set(),
+  summary: null, series: null,
+  tab: "positions", sortKey: "value_pln", sortDir: -1,
+  closed: null, ops: null,
+  allocBy: "asset_class", allocSel: null,       // zakładka Alokacja
+  closedStats: null, closedScope: "all",        // zakładka Zamknięte
+};
+
+/* ================= wykres ================= */
+let chart, areaSeries, investedSeries, benchSeries = {};
+
+function initChart() {
+  const el = $("chart");
+  chart = LightweightCharts.createChart(el, {
+    width: el.clientWidth, height: el.clientHeight, autoSize: true,
+    layout: { background: { color: "transparent" }, textColor: "#8b93a7",
+              fontFamily: '"Segoe UI", system-ui, sans-serif', fontSize: 12 },
+    grid: { vertLines: { color: "rgba(35,43,61,.4)" }, horzLines: { color: "rgba(35,43,61,.4)" } },
+    rightPriceScale: { borderVisible: false, scaleMargins: { top: .12, bottom: .12 } },
+    timeScale: { borderVisible: false, fixLeftEdge: true, fixRightEdge: true },
+    crosshair: { horzLine: { labelBackgroundColor: "#232b3d" }, vertLine: { labelBackgroundColor: "#232b3d" } },
+    localization: {
+      locale: "pl-PL",
+      priceFormatter: v => state.mode === "pct"
+        ? (v >= 0 ? "+" : "") + v.toFixed(1) + "%"
+        : Math.round(v).toLocaleString("pl-PL") + " zł",
+    },
+    handleScroll: false, handleScale: false,
+  });
+  new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth, height: el.clientHeight })).observe(el);
+}
+
+function drawChart() {
+  const s = state.series;
+  if (!s || s.empty) return;
+  // wyczyść poprzednie serie
+  if (areaSeries) { chart.removeSeries(areaSeries); areaSeries = null; }
+  if (investedSeries) { chart.removeSeries(investedSeries); investedSeries = null; }
+  for (const k in benchSeries) chart.removeSeries(benchSeries[k]);
+  benchSeries = {};
+
+  if (state.mode === "value") {
+    const up = s.stats.change_pct >= 0;
+    const c = up ? "#2fd48a" : "#ff5c6c";
+    areaSeries = chart.addAreaSeries({
+      lineColor: c, lineWidth: 2,
+      topColor: up ? "rgba(47,212,138,.32)" : "rgba(255,92,108,.32)",
+      bottomColor: "rgba(47,212,138,0)",
+      priceLineVisible: false, lastValueVisible: true,
+    });
+    areaSeries.setData(s.dates.map((d, i) => ({ time: d, value: s.values[i] })));
+    // linia wpłat: schodkowa (skacze w dniu każdej wpłaty/wypłaty) — poziom wpłat
+    // w danym momencie historii; odstęp między nią a wykresem = zysk/strata wtedy
+    investedSeries = chart.addLineSeries({
+      color: "#ffb454", lineWidth: 1.5, lineStyle: LightweightCharts.LineStyle.Dashed,
+      lineType: LightweightCharts.LineType.WithSteps, title: "Wpłaty",
+      priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
+    });
+    investedSeries.setData(s.dates.map((d, i) => ({ time: d, value: s.invested[i] })));
+    // znaczniki wpłat/wypłat
+    const byDay = {};
+    for (const f of s.flows) byDay[f.date] = (byDay[f.date] || 0) + f.amount_pln;
+    const markers = Object.entries(byDay).sort().map(([d, amt]) => ({
+      time: d, position: amt >= 0 ? "belowBar" : "aboveBar",
+      color: amt >= 0 ? "#2fd48a" : "#ffb454", shape: amt >= 0 ? "arrowUp" : "arrowDown",
+      text: sgn(amt),
+    }));
+    areaSeries.setMarkers(markers);
+  } else {
+    // tryb %: TWR portfela + benchmarki (wszystko znormalizowane do początku zakresu)
+    areaSeries = chart.addLineSeries({ color: "#2fd48a", lineWidth: 2.5, priceLineVisible: false, title: "Portfel" });
+    areaSeries.setData(s.dates.map((d, i) => ({ time: d, value: (s.twr[i] - 1) * 100 })));
+    // linia odniesienia 0% — od razu widać, czy jesteś nad kreską
+    areaSeries.createPriceLine({
+      price: 0, color: "rgba(139,147,167,.6)", lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: "0%",
+    });
+    for (const b of state.bench) {
+      const vals = s.bench[b];
+      if (!vals) continue;
+      const meta = BENCH_META[b] || { color: "#888", label: b };
+      const ls = chart.addLineSeries({ color: meta.color, lineWidth: 1.6, priceLineVisible: false,
+                                       lastValueVisible: false, title: meta.label });
+      ls.setData(s.dates.map((d, i) => vals[i] == null ? null : ({ time: d, value: (vals[i] - 1) * 100 }))
+                        .filter(Boolean));
+      benchSeries[b] = ls;
+    }
+  }
+  chart.timeScale().fitContent();
+}
+
+/* ================= dane ================= */
+async function loadSummary() {
+  state.summary = await (await fetch("/api/portfolio/summary")).json();
+}
+async function loadSeries() {
+  const b = [...state.bench].join(",");
+  state.series = await (await fetch(`/api/portfolio/series?range=${state.range}&bench=${b}`)).json();
+}
+
+function renderHero() {
+  const s = state.series, sum = state.summary;
+  if (!s || s.empty) return;
+  $("heroValue").textContent = fmtPLN.format(s.stats.value_end);
+  const ch = s.stats.change_pct;
+  const chip = $("heroChip");
+  chip.className = "chip " + (ch >= 0 ? "up" : "down");
+  chip.textContent = `${fmtPct(ch)}  ·  ${sgn(s.stats.profit_pln)}`;
+  const rangeName = { "1w": "tydzień", "1m": "miesiąc", "3m": "3 miesiące", "6m": "pół roku",
+                      ytd: "od początku roku", "1y": "rok", "3y": "3 lata", max: "od początku" }[state.range];
+  $("heroSub").textContent = `zmiana za: ${rangeName} · wycena z ${sum.computed_at?.slice(0, 10) || "—"} · konta: ` +
+    sum.accounts.map(a => `${a.account} (${a.currency})`).join(", ");
+}
+
+/* ---- pasek świeżości wyceny ---- */
+const hhmm = ts => new Date(ts * 1000).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" });
+const ago = sec => sec < 90 ? `${Math.max(1, Math.round(sec))} s temu`
+  : sec < 5400 ? `${Math.round(sec / 60)} min temu`
+  : `${Math.round(sec / 3600)} h temu`;
+
+function renderLive() {
+  const q = state.summary?.quotes;
+  const bar = $("liveBar"), txt = $("liveTxt");
+  if (!q || !q.total) { bar.className = "live"; txt.textContent = "brak notowań"; return; }
+  const live = q.market_open && q.age_sec != null && q.age_sec < 120;
+  bar.className = "live " + (live ? "on" : q.age_sec != null && q.age_sec < 3600 ? "" : "stale");
+  const parts = [];
+  if (live) parts.push(`NA ŻYWO · ${hhmm(q.newest_ts)}`);
+  else if (q.newest_ts) parts.push(`Ostatnie notowanie ${hhmm(q.newest_ts)} (${ago(q.age_sec)})`);
+  parts.push(`<span class="lsep">${q.live}/${q.total} pozycji z kursem</span>`);
+  if (!q.market_open) parts.push(`<span class="lsep">rynki zamknięte lub poza sesją</span>`);
+  txt.innerHTML = parts.join(' <span class="lsep">·</span> ');
+}
+
+function renderStats() {
+  const m = state.summary.summary;
+  const cash = state.summary.accounts.map(a => `${fmtNum.format(a.cash)} ${a.currency}`).join(" · ");
+  const cards = [
+    { k: "Wpłaty netto", v: fmtPLN.format(m.net_invested), s: `wpłaty ${fmtPLN.format(m.deposits)} · wypłaty ${fmtPLN.format(m.withdrawals)}` },
+    { k: "Wynik całkowity", v: sgn(m.profit), s: "wartość − wpłaty netto", cls: m.profit >= 0 ? "pos" : "neg" },
+    { k: "Stopa zwrotu (TWR)", v: fmtPct(m.twr_total_pct), s: "ważona czasem, od początku", cls: m.twr_total_pct >= 0 ? "pos" : "neg" },
+    { k: "XIRR (roczna)", v: m.xirr_pct == null ? "—" : fmtPct(m.xirr_pct), s: "ważona pieniędzmi", cls: (m.xirr_pct || 0) >= 0 ? "pos" : "neg" },
+    { k: "Gotówka", v: cash || "0", s: "wolne środki na kontach" },
+  ];
+  $("stats").innerHTML = cards.map(c =>
+    `<div class="stat"><div class="k">${c.k}</div><div class="v ${c.cls || ""}">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
+}
+
+/* ================= logotypy instrumentów =================
+   Źródła (w kolejności): parqet -> financialmodelingprep -> kółko z inicjałami.
+   Obsługa błędów delegowana (error nie bąbelkuje, więc capture=true). */
+function logoBase(ticker) { return ticker.split(".")[0].toUpperCase(); }
+function logoColor(base) {
+  let h = 0; for (const ch of base) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h}, 55%, 62%)`;
+}
+function logoImg(ticker) {
+  const b = logoBase(ticker);
+  return `<img class="logo" loading="lazy" data-base="${b}"
+            src="https://assets.parqet.com/logos/symbol/${b}?format=png&size=64" alt="">`;
+}
+document.addEventListener("error", e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains("logo")) return;
+  const b = img.dataset.base || "?";
+  if (!img.dataset.step) {
+    img.dataset.step = "1";
+    img.src = `https://financialmodelingprep.com/image-stock/${b}.png`;
+  } else {
+    const span = document.createElement("span");
+    span.className = "logo";
+    span.style.background = logoColor(b);
+    span.textContent = b.slice(0, 2);
+    img.replaceWith(span);
+  }
+}, true);
+
+/* ================= tabele ================= */
+const POS_COLS = [
+  ["name", "Instrument"], ["shares", "Ilość"], ["avg_open", "Śr. cena zakupu"], ["price", "Kurs"],
+  ["value_pln", "Wartość"], ["pl_pln", "Zysk/strata"], ["pl_pct", "Z/S %"],
+];
+function renderPositions() {
+  const rows = [...(state.summary.positions || [])];
+  const { sortKey, sortDir } = state;
+  rows.sort((a, b) => (typeof a[sortKey] === "string"
+    ? a[sortKey].localeCompare(b[sortKey]) : (a[sortKey] - b[sortKey])) * sortDir);
+  $("tbl").querySelector("thead").innerHTML = "<tr>" + POS_COLS.map(([k, l]) =>
+    `<th data-k="${k}">${l} ${sortKey === k ? `<span class="arr">${sortDir > 0 ? "↑" : "↓"}</span>` : ""}</th>`).join("") + "</tr>";
+  const tb = rows.map(p => `<tr>
+    <td><div class="irow">${logoImg(p.ticker)}<div><div class="tname">${p.ticker}${p.no_price ? ' <span class="warn-badge" title="brak notowań — pozycja nie jest wyceniana">⚠</span>' : ""}</div><div class="tsub">${p.name}</div></div></div></td>
+    <td class="num">${fmtNum.format(p.shares)}</td>
+    <td class="num">${fmtNum.format(p.avg_open)} ${p.currency}</td>
+    <td class="num">${fmtNum.format(p.price)} ${p.currency}</td>
+    <td class="num">${fmtPLN.format(p.value_pln)}</td>
+    <td class="num ${p.pl_pln >= 0 ? "pos" : "neg"}">${sgn(p.pl_pln)}</td>
+    <td class="num ${p.pl_pct >= 0 ? "pos" : "neg"}">${fmtPct(p.pl_pct)}</td></tr>`).join("");
+  $("tbl").querySelector("tbody").innerHTML = tb ||
+    `<tr><td class="empty-cell" colspan="7">Brak otwartych pozycji — cały kapitał w gotówce.</td></tr>`;
+}
+
+async function renderClosed() {
+  if (!state.closed) state.closed = await (await fetch("/api/portfolio/closed")).json();
+  const rows = state.closed.filter(c =>
+    state.closedScope === "all" ? true
+      : state.closedScope === "cfd" ? (c.category || "").toUpperCase() === "CFD"
+      : (c.category || "").toUpperCase() !== "CFD");
+  $("tbl").querySelector("thead").innerHTML =
+    "<tr><th>Instrument</th><th>Ilość</th><th>Otwarcie</th><th>Zamknięcie</th><th>Kupno</th><th>Sprzedaż</th><th>Wynik</th><th>Wynik %</th></tr>";
+  $("tbl").querySelector("tbody").innerHTML = rows.map(c => {
+    const pct = c.purchase_value ? (c.profit / c.purchase_value) * 100 : 0;
+    return `<tr>
+    <td><div class="irow">${logoImg(c.ticker)}<div><div class="tname">${c.ticker}</div><div class="tsub">${c.instrument}</div></div></div></td>
+    <td class="num">${fmtNum.format(c.volume)}</td>
+    <td class="num">${(c.open_time || "").slice(0, 10)}<div class="tsub">@ ${fmtNum.format(c.open_price)}</div></td>
+    <td class="num">${(c.close_time || "").slice(0, 10)}<div class="tsub">@ ${fmtNum.format(c.close_price)}</div></td>
+    <td class="num">${fmtNum.format(c.purchase_value)}</td>
+    <td class="num">${fmtNum.format(c.sale_value)}</td>
+    <td class="num ${c.profit >= 0 ? "pos" : "neg"}">${(c.profit >= 0 ? "+" : "") + fmtNum.format(c.profit)}</td>
+    <td class="num ${pct >= 0 ? "pos" : "neg"}">${fmtPct(pct)}</td></tr>`;
+  }).join("") || `<tr><td class="empty-cell" colspan="8">Brak zamkniętych pozycji.</td></tr>`;
+}
+
+const OP_LABEL = {
+  "Stock purchase": "Kupno akcji", "Stock sell": "Sprzedaż akcji", Deposit: "Wpłata",
+  Withdrawal: "Wypłata", Transfer: "Transfer", Dividend: "Dywidenda", "SEC fee": "Opłata SEC",
+  "Withholding tax": "Podatek u źródła", "Free funds interest": "Odsetki",
+};
+async function renderOps() {
+  if (!state.ops) state.ops = await (await fetch("/api/portfolio/operations")).json();
+  $("tbl").querySelector("thead").innerHTML =
+    "<tr><th>Data</th><th>Typ</th><th>Instrument</th><th>Kwota</th><th>Konto</th><th>Szczegóły</th></tr>";
+  $("tbl").querySelector("tbody").innerHTML = state.ops.map(o => `<tr>
+    <td class="num">${(o.time || "").slice(0, 16).replace("T", " ")}</td>
+    <td>${OP_LABEL[o.type] || o.type}</td>
+    <td>${o.ticker ? `<span class="tname">${o.ticker}</span>` : "—"}</td>
+    <td class="num ${o.amount >= 0 ? "pos" : "neg"}">${(o.amount >= 0 ? "+" : "") + fmtNum.format(o.amount)}</td>
+    <td class="num tsub">${o.account}</td>
+    <td class="tsub" style="text-align:left;max-width:420px;overflow:hidden;text-overflow:ellipsis">${o.comment || ""}</td></tr>`).join("")
+    || `<tr><td class="empty-cell" colspan="6">Brak operacji.</td></tr>`;
+}
+
+async function renderAccounts() {
+  const accts = await (await fetch("/api/portfolio/accounts")).json();
+  $("tbl").querySelector("thead").innerHTML =
+    "<tr><th>Konto</th><th>Waluta</th><th>Operacje</th><th>Pierwsza</th><th>Ostatnia</th><th>Import</th><th></th></tr>";
+  $("tbl").querySelector("tbody").innerHTML = accts.map(a => `<tr>
+    <td class="num tname">${a.account}</td>
+    <td>${a.currency}</td>
+    <td class="num">${a.ops}</td>
+    <td class="num">${(a.first_op || "").slice(0, 10)}</td>
+    <td class="num">${(a.last_op || "").slice(0, 10)}</td>
+    <td class="num tsub">${(a.imported_at || "").slice(0, 10)}</td>
+    <td><button class="btn danger" data-del="${a.account}">Usuń konto</button></td></tr>`).join("")
+    + `<tr><td class="empty-cell" colspan="7">
+         <button class="btn danger" id="btnWipe">🗑 Usuń WSZYSTKIE dane portfela</button>
+       </td></tr>`;
+  $("tblHint").innerHTML = "Raporty wgrywasz przyciskiem <b>＋ Wgraj raport</b> (xlsx lub zip, można kilka naraz). " +
+    "Ponowne wgranie tego samego raportu <b>nie duplikuje</b> operacji — nowy, dłuższy raport tylko dokłada nowe wpisy. " +
+    "Jeśli chcesz zacząć od zera: usuń konto (albo wszystko) i wgraj świeże pliki.";
+  renderPhoneBox();
+}
+
+/* dane do połączenia apki mobilnej */
+async function renderPhoneBox() {
+  let info = {};
+  try { info = await (await fetch("/api/portfolio/connect-info")).json(); } catch { /* offline */ }
+  const box = document.createElement("div");
+  box.className = "howto";
+  box.style.marginTop = "14px";
+  if (!info.ok) {
+    box.innerHTML = "<b>📱 Telefon</b><br>Dane połączenia dostępne tylko z tego komputera.";
+  } else {
+    const eps = info.endpoints || [];
+    box.innerHTML = `<b>📱 Telefon — dane do aplikacji Portfel</b>
+      <div style="margin-top:10px;display:grid;gap:8px">
+        ${eps.map(e => `<div>
+          <span style="display:inline-block;min-width:190px;color:${e.kind === "tailscale" ? "var(--green)" : "var(--muted)"}">
+            ${e.kind === "tailscale" ? "🌍" : "🏠"} ${e.label}:</span>
+          <code style="color:${e.kind === "tailscale" ? "var(--green)" : "var(--text)"};font-family:var(--mono)">${e.url}</code>
+          <button class="btn" style="padding:3px 9px;font-size:11.5px;margin-left:8px" data-copy="${e.url}">kopiuj</button></div>`).join("")}
+        <div><span style="display:inline-block;min-width:190px;color:var(--muted)">🔑 Token dostępu:</span>
+          <code style="color:var(--amber);font-family:var(--mono)">${info.token}</code>
+          <button class="btn" style="padding:3px 9px;font-size:11.5px;margin-left:8px" data-copy="${info.token}">kopiuj</button></div>
+      </div>
+      <div style="margin-top:12px;color:var(--dim);font-size:12.5px">
+        ${info.tailscale
+          ? "Adres Tailscale działa <b style='color:var(--text)'>z każdej sieci</b> — także poza domem, przez komórkę."
+          : "Na razie działa tylko w domowym Wi-Fi. Zainstaluj <b style='color:var(--text)'>Tailscale</b> na PC i telefonie, żeby mieć dostęp z dowolnego miejsca."}
+        Panel musi być uruchomiony skrótem <b style="color:var(--text)">Portfel (telefon)</b> z pulpitu.
+        Token jest hasłem do Twoich danych — nie udostępniaj go.
+      </div>`;
+  }
+  $("tblHint").appendChild(box);
+  box.addEventListener("click", async e => {
+    const b = e.target.closest("[data-copy]");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); toast("Skopiowano ✓", true); }
+    catch { toast("Nie udało się skopiować", false); }
+  });
+}
+
+/* ================= alokacja ================= */
+const ALLOC_BY = [
+  ["asset_class", "Klasa aktywów", "Akcje, ETF-y i gotówka — podstawowy podział ryzyka portfela."],
+  ["market", "Rynek", "Gdzie notowane są Twoje spółki — stąd wynika ekspozycja walutowa i regulacyjna."],
+  ["sector", "Sektor", "Branże, w które inwestujesz. Skupienie w jednej zwiększa wahania portfela."],
+  ["currency", "Waluta", "W jakich walutach trzymasz kapitał."],
+  ["position", "Spółka", "Udział pojedynczych pozycji. Zdrowy portfel rzadko ma jedną powyżej 20%."],
+];
+const CHART_COLORS = ["#2fd48a", "#5b8cff", "#a78bfa", "#ffb454", "#67e8f9",
+                      "#f472b6", "#facc15", "#4ade80", "#fb923c", "#38bdf8", "#c084fc", "#94a3b8"];
+const cColor = i => CHART_COLORS[i % CHART_COLORS.length];
+const plural = (n, one, few, many) => {
+  const a = Math.abs(n), l = a % 10, l2 = a % 100;
+  if (a === 1) return one;
+  return (l >= 2 && l <= 4 && !(l2 >= 12 && l2 <= 14)) ? few : many;
+};
+
+function donutSvg(groups, size = 260, thick = 34) {
+  const cx = size / 2, cy = size / 2, rOut = size / 2 - 2, rIn = rOut - thick;
+  const total = groups.reduce((a, g) => a + g.value, 0) || 1;
+  const pol = (r, deg) => {
+    const rad = (deg - 90) * Math.PI / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  let acc = 0;
+  const paths = groups.map((g, i) => {
+    const from = acc / total * 360; acc += g.value;
+    const to = acc / total * 360;
+    const sweep = to - from;
+    if (sweep < 0.15) return "";
+    let d;
+    if (sweep >= 359.9) {
+      d = `M${cx - rOut},${cy}A${rOut},${rOut} 0 1 1 ${cx + rOut},${cy}A${rOut},${rOut} 0 1 1 ${cx - rOut},${cy}` +
+          `M${cx - rIn},${cy}A${rIn},${rIn} 0 1 0 ${cx + rIn},${cy}A${rIn},${rIn} 0 1 0 ${cx - rIn},${cy}`;
+    } else {
+      const gap = groups.length > 1 ? 1 : 0;
+      const [x1, y1] = pol(rOut, to), [x2, y2] = pol(rOut, from + gap);
+      const [x3, y3] = pol(rIn, from + gap), [x4, y4] = pol(rIn, to);
+      const big = sweep > 180 ? 1 : 0;
+      d = `M${x1},${y1}A${rOut},${rOut} 0 ${big} 0 ${x2},${y2}L${x3},${y3}A${rIn},${rIn} 0 ${big} 1 ${x4},${y4}Z`;
+    }
+    return `<path d="${d}" fill="${cColor(i)}" data-i="${i}"
+              opacity="${state.allocSel != null && state.allocSel !== i ? .28 : 1}"
+              style="${state.allocSel === i ? 'transform:scale(1.03)' : ''}"><title>${g.label}</title></path>`;
+  }).join("");
+  return `<svg id="donut" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${rIn + thick / 2}" fill="none"
+            stroke="rgba(255,255,255,.035)" stroke-width="${thick}"></circle>${paths}</svg>`;
+}
+
+async function renderAllocation() {
+  $("tblWrap").style.display = "none";
+  const by = state.allocBy;
+  const d = await (await fetch(`/api/portfolio/allocation?by=${by}`)).json();
+  if (d.empty) { $("panelExtra").innerHTML = `<div class="hint">Brak danych.</div>`; return; }
+
+  const meta = ALLOC_BY.find(b => b[0] === by);
+  const sel = state.allocSel;
+  const g = sel != null ? d.groups[sel] : null;
+  const top = d.groups[0];
+  const conc = d.groups.slice(0, 3).reduce((a, x) => a + x.pct, 0);
+  const showConc = d.groups.length > 3;
+
+  $("panelExtra").innerHTML = `
+    <div class="chart-tools" style="padding:2px 0 14px">
+      <div class="seg" id="allocSeg">
+        ${ALLOC_BY.map(([id, label]) =>
+          `<button data-a="${id}" class="${by === id ? "active" : ""}">${label}</button>`).join("")}
+      </div>
+    </div>
+    <div class="insight">
+      ${meta[2]} Największa część to <b>${top.label}</b> —
+      <b>${top.pct.toLocaleString("pl-PL", { maximumFractionDigits: 1 })}%</b> portfela.
+      ${showConc ? `Trzy największe grupy to razem <b>${conc.toLocaleString("pl-PL", { maximumFractionDigits: 1 })}%</b>.
+        ${conc > 75 ? "To spora koncentracja — warto rozważyć szersze rozłożenie kapitału." : ""}` : ""}
+    </div>
+    <div class="alloc">
+      <div class="alloc-card">
+        <div class="donut-wrap">
+          ${donutSvg(d.groups)}
+          <div class="donut-center">
+            <div class="dc-k">${g ? g.label : "Wartość portfela"}</div>
+            <div class="dc-v num">${fmtPLN.format(g ? g.value : d.total)}</div>
+            ${g ? `<div class="dc-s">${g.pct.toLocaleString("pl-PL", { maximumFractionDigits: 1 })}% portfela</div>` : ""}
+          </div>
+        </div>
+        <div class="donut-hint">${g ? "Kliknij ponownie, aby odznaczyć" : "Kliknij wycinek lub wiersz, aby wyróżnić"}</div>
+      </div>
+      <div class="legend">
+        ${d.groups.map((x, i) => `
+          <div class="leg-row ${sel === i ? "on" : ""}" data-i="${i}">
+            <div class="leg-top">
+              <span class="leg-dot" style="background:${cColor(i)}"></span>
+              <span class="leg-label">${x.label}</span>
+              <span class="leg-pct num">${x.pct.toLocaleString("pl-PL", { maximumFractionDigits: 1 })}%</span>
+            </div>
+            <div class="leg-bar"><i style="--w:${Math.max(1, x.pct)}%;background:${cColor(i)};animation-delay:${i * 45}ms"></i></div>
+            <div class="leg-bottom">
+              <span class="num" style="color:var(--text)">${fmtPLN.format(x.value)}</span>
+              <span>${x.count > 0 ? `${x.count} ${plural(x.count, "pozycja", "pozycje", "pozycji")}` : "wolne środki"}
+                ${x.pl ? `<span class="${x.pl >= 0 ? "pos" : "neg"}" style="margin-left:8px">${sgn(x.pl)}</span>` : ""}</span>
+            </div>
+            ${sel === i && x.tickers.length ? `<div class="leg-tickers">${x.tickers.join("  ·  ")}</div>` : ""}
+          </div>`).join("")}
+      </div>
+    </div>
+    <div id="allocPro"></div>`;
+
+  renderAllocPro();
+
+  $("allocSeg").onclick = e => {
+    const b = e.target.closest("button[data-a]"); if (!b) return;
+    state.allocBy = b.dataset.a; state.allocSel = null; renderAllocation();
+  };
+  $("panelExtra").querySelectorAll("[data-i]").forEach(el => {
+    el.addEventListener("click", () => {
+      const i = +el.dataset.i;
+      state.allocSel = state.allocSel === i ? null : i;
+      renderAllocation();
+    });
+  });
+}
+
+/* ---------- rentgen ryzyka (premium) ----------
+ *
+ * Bez premium NIE pytamy serwera — pod kłódką rysuje się szkielet o właściwym
+ * kształcie. Liczenie zmienności dla kogoś, kto i tak nie zobaczy wyniku, byłoby
+ * marnowaniem czasu serwera.
+ */
+async function renderAllocPro() {
+  const host = $("allocPro");
+  if (!host || !window.Portfel || !Portfel.premium) return;
+
+  const cat = await Portfel.premium.catalog();
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginTop = "18px";
+  card.setAttribute("data-premium", "alloc.risk");
+
+  if (!cat.premium) {
+    card.style.minHeight = "260px";
+    card.innerHTML = riskSkeletonHtml();
+    host.appendChild(card);
+    Portfel.premium.scan(host);
+    return;
+  }
+
+  card.innerHTML = `<div class="hint" style="padding:18px">Liczę ryzyko portfela…</div>`;
+  host.appendChild(card);
+  try {
+    const d = await (await fetch("/api/portfolio/allocation/risk")).json();
+    card.innerHTML = d.empty ? `<div class="hint" style="padding:18px">Brak danych.</div>`
+                             : riskHtml(d);
+  } catch {
+    card.innerHTML = `<div class="hint" style="padding:18px">Nie udało się policzyć ryzyka.</div>`;
+  }
+}
+
+function riskHtml(d) {
+  const c = d.concentration, v = d.volatility;
+  const num = (x, f = 1) => x == null ? "—" : x.toLocaleString("pl-PL", { maximumFractionDigits: f });
+  const cell = (k, val, hint, hot) => `
+    <div style="flex:1 1 150px">
+      <div style="color:var(--dim);font-size:10.5px;font-weight:700;letter-spacing:.6px">${k}</div>
+      <div class="num" style="font-size:22px;font-weight:800;margin-top:4px;
+           ${hot ? "color:#ffb454" : ""}">${val}</div>
+      <div style="color:var(--dim);font-size:11px;margin-top:2px">${hint || ""}</div>
+    </div>`;
+
+  return `
+    <div style="padding:18px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:16px">Rentgen ryzyka</div>
+      <div style="display:flex;flex-wrap:wrap;gap:18px">
+        ${cell("EFEKTYWNIE POZYCJI", num(c.effective_n), `z ${d.positions} w portfelu`)}
+        ${cell("NAJWIĘKSZA", num(c.top1_pct) + "%", "udział jednej pozycji", c.top1_pct > 20)}
+        ${cell("TRZY NAJWIĘKSZE", num(c.top3_pct) + "%", "razem")}
+        ${cell("ZMIENNOŚĆ ROCZNA", v.annual_pct == null ? "—" : num(v.annual_pct) + "%",
+               v.sessions ? `${v.sessions} sesji` : "za mało historii")}
+      </div>
+
+      ${d.warnings.map(w => `
+        <div style="margin-top:12px;padding:12px 14px;border-radius:12px;font-size:12.5px;line-height:1.55;
+             border:1px solid ${w.level === "alert" ? "rgba(255,92,108,.35)" : "rgba(255,180,84,.3)"};
+             background:${w.level === "alert" ? "rgba(255,92,108,.07)" : "rgba(255,180,84,.07)"};
+             color:${w.level === "alert" ? "#ff5c6c" : "#ffb454"}">${w.text}</div>`).join("")}
+
+      ${d.risk_contribution.length ? `
+        <div style="margin-top:22px;font-size:14px;font-weight:800">Kto robi wahania</div>
+        <div class="hint" style="margin:5px 0 12px">Udział w ryzyku, nie w pieniądzach.
+          Mnożnik powyżej 1 znaczy, że pozycja waży w wahaniach więcej, niż zajmuje w portfelu.</div>
+        ${d.risk_contribution.slice(0, 8).map(r => `
+          <div style="display:flex;align-items:center;gap:12px;padding:8px 0">
+            <div style="width:96px;font-weight:800;font-size:13px">${r.ticker}</div>
+            <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.05)">
+              <div style="height:100%;border-radius:3px;width:${Math.max(1, Math.min(100, r.risk_pct))}%;
+                   background:${r.ratio > 1.3 ? "#ffb454" : "#5b8cff"}"></div>
+            </div>
+            <div class="num" style="width:58px;text-align:right;font-weight:800">${num(r.risk_pct)}%</div>
+            <div class="num" style="width:52px;text-align:right;color:${r.ratio > 1.3 ? "#ffb454" : "var(--dim)"};
+                 font-size:11.5px">${r.ratio == null ? "" : "×" + num(r.ratio, 2)}</div>
+          </div>`).join("")}` : ""}
+    </div>`;
+}
+
+function riskSkeletonHtml() {
+  const bar = (w, h = 9) => `<div style="width:${w};height:${h}px;border-radius:5px;
+                                  background:rgba(255,255,255,.09)"></div>`;
+  return `
+    <div style="padding:18px">
+      <div style="font-size:15px;font-weight:800;margin-bottom:16px">Rentgen ryzyka</div>
+      <div style="display:flex;flex-wrap:wrap;gap:18px">
+        ${["EFEKTYWNIE POZYCJI", "NAJWIĘKSZA", "TRZY NAJWIĘKSZE", "ZMIENNOŚĆ ROCZNA"].map(k => `
+          <div style="flex:1 1 150px">
+            <div style="color:var(--dim);font-size:10.5px;font-weight:700;letter-spacing:.6px">${k}</div>
+            <div style="margin-top:8px">${bar("62px", 19)}</div>
+          </div>`).join("")}
+      </div>
+      <div style="margin-top:26px;display:grid;gap:14px">
+        ${[92, 74, 58, 41].map(w => `
+          <div style="display:flex;align-items:center;gap:12px">
+            ${bar("96px", 8)}
+            <div style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.05)">
+              <div style="height:100%;border-radius:3px;width:${w}%;background:#5b8cff"></div>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`;
+}
+
+/* ================= statystyki zamkniętych ================= */
+async function renderClosedStats() {
+  if (!state.closedStats) state.closedStats = await (await fetch("/api/portfolio/closed-summary")).json();
+  const cs = state.closedStats;
+  if (cs.empty) { $("panelExtra").innerHTML = ""; return; }
+  const scope = state.closedScope;
+  const st = cs[scope];
+  const c2 = v => (v >= 0 ? "+" : "") + fmtNum.format(v);
+
+  if (!st || !st.count) {
+    $("panelExtra").innerHTML = closedSegHtml(scope) +
+      `<div class="hint">Brak transakcji w tej kategorii.</div>`;
+    bindClosedSeg();
+    return;
+  }
+
+  $("panelExtra").innerHTML = closedSegHtml(scope) + `
+    <div class="cs-grid">
+      <div class="alloc-card">
+        <h2 style="font-size:11.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0">Wynik łączny</h2>
+        <div class="cs-big num ${st.profit >= 0 ? "pos" : "neg"}">${c2(st.profit)}</div>
+        <div style="color:var(--dim);font-size:12px;margin-top:3px">
+          z ${st.count} transakcji · w walucie konta</div>
+        <div class="wl-legend">
+          <span class="pos">${st.wins} ${plural(st.wins, "zyskowna", "zyskowne", "zyskownych")}</span>
+          <span class="neg">${st.losses} ${plural(st.losses, "stratna", "stratne", "stratnych")}</span></div>
+        <div class="wl-bar">
+          <span style="flex:${Math.max(st.wins, .001)};background:var(--green)"></span>
+          <span style="flex:${Math.max(st.losses, .001)};background:var(--red)"></span>
+        </div>
+        <div style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:10px">
+          Skuteczność <b style="color:var(--text)">${st.win_rate.toLocaleString("pl-PL", { maximumFractionDigits: 1 })}%</b></div>
+      </div>
+      <div class="alloc-card">
+        <div class="cs-rows">
+          <div class="cs-row"><span class="k">Średni zysk</span><span class="v num pos">${c2(st.avg_win)}</span></div>
+          <div class="cs-row"><span class="k">Średnia strata</span><span class="v num neg">${c2(st.avg_loss)}</span></div>
+          <div class="cs-row"><span class="k">Profit factor</span>
+            <span class="v num ${(st.profit_factor ?? 0) >= 1 ? "pos" : "neg"}">
+              ${st.profit_factor == null ? "—" : st.profit_factor.toLocaleString("pl-PL", { maximumFractionDigits: 2 })}</span></div>
+          <div class="cs-row"><span class="k">Średni czas trzymania</span>
+            <span class="v num">${st.avg_days == null ? "—"
+              : Math.round(st.avg_days) + " " + plural(Math.round(st.avg_days), "dzień", "dni", "dni")}</span></div>
+          <div class="cs-row"><span class="k">Najlepsza</span><span class="v num pos">${st.best.ticker} ${c2(st.best.profit)}</span></div>
+          <div class="cs-row"><span class="k">Najgorsza</span><span class="v num neg">${st.worst.ticker} ${c2(st.worst.profit)}</span></div>
+        </div>
+      </div>
+      <div class="alloc-card">
+        <h2 style="font-size:11.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 10px">
+          Najlepsze i najgorsze instrumenty</h2>
+        ${[...cs.top.filter(t => t.profit > 0), ...cs.flop.filter(t => t.profit < 0)].map((t, i) => {
+          const max = Math.max(...[...cs.top, ...cs.flop].map(x => Math.abs(x.profit)), 1);
+          return `<div class="rank-row">
+            <span class="rank-t">${t.ticker}</span>
+            <span class="leg-bar" style="flex:1;margin:0">
+              <i style="--w:${Math.abs(t.profit) / max * 100}%;background:${t.profit >= 0 ? "var(--green)" : "var(--red)"};animation-delay:${i * 40}ms"></i></span>
+            <span class="rank-v num ${t.profit >= 0 ? "pos" : "neg"}">${c2(t.profit)}</span>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+    <div class="hint" style="padding:0 4px 12px">
+      <b>Profit factor</b> to suma zysków podzielona przez sumę strat — powyżej 1,0 strategia zarabia.
+      Kwoty w tej sekcji są w walucie rozliczenia konta (tak liczy je XTB).
+    </div>`;
+  bindClosedSeg();
+}
+
+const closedSegHtml = scope => `
+  <div class="chart-tools" style="padding:2px 0 14px">
+    <div class="seg" id="closedSeg">
+      <button data-s="all" class="${scope === "all" ? "active" : ""}">Wszystko</button>
+      <button data-s="stocks" class="${scope === "stocks" ? "active" : ""}">Akcje / ETF</button>
+      <button data-s="cfd" class="${scope === "cfd" ? "active" : ""}">CFD</button>
+    </div>
+  </div>`;
+
+function bindClosedSeg() {
+  const seg = $("closedSeg"); if (!seg) return;
+  seg.onclick = e => {
+    const b = e.target.closest("button[data-s]"); if (!b) return;
+    state.closedScope = b.dataset.s;
+    renderClosedStats(); renderClosed();
+  };
+}
+
+function renderTab() {
+  if (state.tab !== "accounts") $("tblHint").textContent = "";
+  $("panelExtra").innerHTML = "";
+  $("tblWrap").style.display = "";
+  if (state.tab === "positions") renderPositions();
+  else if (state.tab === "allocation") renderAllocation();
+  else if (state.tab === "closed") { renderClosedStats(); renderClosed(); }
+  else if (state.tab === "ops") renderOps();
+  else renderAccounts();
+}
+
+$("tbl").addEventListener("click", async e => {
+  const del = e.target.closest("[data-del]");
+  if (del) {
+    if (!confirm(`Usunąć konto ${del.dataset.del} i wszystkie jego operacje?`)) return;
+    await fetch("/api/portfolio/account/delete", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account: del.dataset.del }) });
+    state.closed = state.ops = state.closedStats = null;
+    toast(`Konto ${del.dataset.del} usunięte`, true);
+    await refreshAll(); if (state.tab === "accounts") renderAccounts();
+    return;
+  }
+  if (e.target.closest("#btnWipe")) {
+    if (!confirm("Na pewno usunąć WSZYSTKIE dane portfela? (raporty trzeba będzie wgrać ponownie)")) return;
+    await fetch("/api/portfolio/wipe", { method: "POST" });
+    state.closed = state.ops = state.closedStats = null;
+    toast("Dane portfela wyczyszczone", true);
+    await refreshAll();
+  }
+});
+
+/* ================= benchmark chips ================= */
+function renderBenchChips() {
+  $("benchChips").innerHTML = Object.entries(BENCH_META).map(([id, m]) =>
+    `<button class="bchip ${state.bench.has(id) ? "on" : ""}" data-b="${id}"
+      style="${state.bench.has(id) ? `background:${m.color}` : `border-color:${m.color}55;color:${m.color}`}">${m.label}</button>`).join("");
+}
+
+/* ================= import ================= */
+async function importFiles(files) {
+  const btn = $("btnImport");
+  btn.disabled = true; btn.textContent = "Wgrywam…";
+  let okCount = 0, errs = [];
+  for (const f of files) {
+    try {
+      const r = await fetch(`/api/portfolio/import?filename=${encodeURIComponent(f.name)}`,
+                            { method: "POST", body: f });
+      const js = await r.json();
+      if (js.ok) okCount += js.results.reduce((s, x) => s + x.ops_new, 0);
+      else errs.push(`${f.name}: ${js.error}`);
+    } catch (e) { errs.push(`${f.name}: ${e}`); }
+  }
+  btn.disabled = false; btn.textContent = "＋ Wgraj raport";
+  if (errs.length) toast(errs.join(" · "), false);
+  else toast(okCount ? `Zaimportowano ${okCount} nowych operacji ✓` : "Plik już był zaimportowany (0 nowych)", true);
+  state.closed = state.ops = state.closedStats = null;
+  await refreshAll();
+}
+
+function toast(msg, ok) {
+  const t = $("toast");
+  t.textContent = msg; t.className = ok ? "ok show" : "err show";
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 5000);
+}
+
+/* ================= sterowanie ================= */
+async function refreshAll() {
+  await loadSummary();
+  if (state.summary.empty) {
+    $("emptyState").style.display = "";
+    $("dashboard").style.display = "none";
+    return;
+  }
+  $("emptyState").style.display = "none";
+  $("dashboard").style.display = "";
+  const w = state.summary.price_warnings || [];
+  $("importWarn").style.display = w.length ? "" : "none";
+  $("importWarn").textContent = w.length ? `⚠ brak notowań: ${w.join(", ")}` : "";
+  await loadSeries();
+  if (!chart) initChart();
+  renderHero(); renderStats(); renderLive(); drawChart(); renderTab();
+}
+
+$("ranges").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.range = b.dataset.r;
+  $("ranges").querySelectorAll("button").forEach(x => x.classList.toggle("active", x === b));
+  await loadSeries(); renderHero(); drawChart();
+});
+
+$("modeSeg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.mode = b.dataset.m;
+  $("modeSeg").querySelectorAll("button").forEach(x => x.classList.toggle("active", x === b));
+  drawChart();
+});
+
+$("benchChips").addEventListener("click", async e => {
+  const b = e.target.closest(".bchip"); if (!b) return;
+  const id = b.dataset.b;
+  state.bench.has(id) ? state.bench.delete(id) : state.bench.add(id);
+  if (state.bench.size && state.mode === "value") {   // benchmarki mają sens w trybie %
+    state.mode = "pct";
+    $("modeSeg").querySelectorAll("button").forEach(x => x.classList.toggle("active", x.dataset.m === "pct"));
+  }
+  renderBenchChips();
+  await loadSeries(); drawChart();
+});
+
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab"); if (!b) return;
+  state.tab = b.dataset.t;
+  $("tabs").querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === b));
+  renderTab();
+});
+
+$("tbl").addEventListener("click", e => {
+  const th = e.target.closest("th[data-k]"); if (!th || state.tab !== "positions") return;
+  const k = th.dataset.k;
+  if (state.sortKey === k) state.sortDir *= -1; else { state.sortKey = k; state.sortDir = -1; }
+  renderPositions();
+});
+
+$("btnImport").onclick = () => $("fileInput").click();
+$("dropZone")?.addEventListener("click", () => $("fileInput").click());
+$("fileInput").onchange = e => { if (e.target.files.length) importFiles([...e.target.files]); e.target.value = ""; };
+
+$("btnRefresh").onclick = async () => {
+  const b = $("btnRefresh"); b.disabled = true; b.textContent = "Liczę…";
+  try { await fetch("/api/portfolio/refresh", { method: "POST" }); state.closed = state.ops = state.closedStats = null; await refreshAll(); toast("Przeliczono ✓", true); }
+  finally { b.disabled = false; b.textContent = "↻ Odśwież"; }
+};
+
+/* drag & drop na całą stronę */
+let dragDepth = 0;
+document.addEventListener("dragenter", e => { e.preventDefault(); if (++dragDepth) document.body.classList.add("dragging"); });
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  const files = [...e.dataTransfer.files].filter(f => /\.(xlsx|zip)$/i.test(f.name));
+  if (files.length) importFiles(files);
+});
+
+/* ---- ciche odświeżanie w tle: portfel sam się aktualizuje ---- */
+const AUTO_MS = 30000;
+let autoBusy = false;
+
+async function autoTick() {
+  if (autoBusy || document.hidden || !state.summary || state.summary.empty) return;
+  autoBusy = true;
+  try {
+    const prev = state.summary.summary.value;
+    await loadSummary();
+    await loadSeries();
+    renderHero(); renderStats(); renderLive(); drawChart();
+    if (state.tab === "positions") renderPositions();
+    else if (state.tab === "allocation") renderAllocation();
+    if (state.summary.summary.value !== prev) {
+      const el = $("heroValue");
+      el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    }
+  } catch { /* sieć mogła mrugnąć — spróbujemy za 30 s */ } finally {
+    autoBusy = false;
+  }
+}
+
+setInterval(autoTick, AUTO_MS);
+setInterval(renderLive, 10000);   // sam licznik „X min temu" tyka częściej
+document.addEventListener("visibilitychange", () => { if (!document.hidden) autoTick(); });
+$("liveBar").onclick = autoTick;
+
+renderBenchChips();
+refreshAll();
+</script>
+
+<!-- Konto i blokady premium. Ładowane na końcu, żeby nie opóźniać rysowania panelu. -->
+<script src="/static/auth.js"></script>
+<script src="/static/premium.js"></script>
+<script>
+(async function () {
+  const chip = document.getElementById("acctChip");
+  if (!chip) return;
+  await Portfel.auth.ready().catch(() => {});
+  if (!Portfel.auth.configured) { chip.style.display = "none"; return; }
+
+  const u = Portfel.auth.user;
+  if (!u) { chip.textContent = "Zaloguj się"; return; }
+
+  const cat = await Portfel.premium.catalog();
+  const short = (u.name || u.email || "").split("@")[0].split(" ")[0];
+  chip.textContent = (cat.premium ? "★ " : "") + short;
+  chip.title = u.email + (cat.premium ? " · premium" : " · wersja darmowa");
+  if (cat.premium) chip.classList.add("premium");
+})();
+</script>
+</body>
+</html>
