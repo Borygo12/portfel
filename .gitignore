@@ -4,6 +4,8 @@
 !*.env.example
 keys/
 bot/.env
+bot/saxo_token*.json
+*token*.json
 
 # --- aplikacja mobilna ma własne repozytorium --------------------------------
 mobile/
