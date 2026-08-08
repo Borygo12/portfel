@@ -41,7 +41,11 @@ EXPOSE 8080
 # WYŁĄCZNIE IPv4. Aplikacja wtedy chodzi, tylko healthcheck i proxy nie mają jak
 # się do niej dobić — deploy przechodzi, a zaraz po nim leci "Healthcheck failure".
 # "::" w Linuksie nasłuchuje na obu rodzinach adresów naraz.
-ENV PANEL_HOST=:: \
-    PORT=8080
+# Celowo NIE ustawiamy tu PORT. Gdyby obraz narzucał własny numer, nie dałoby się
+# odróżnić portu podanego przez hosting od naszego domyślnego — a to jest dokładnie
+# ta informacja, która tłumaczy „deploy OK, healthcheck failure". Bez tej zmiennej
+# aplikacja bierze PORT od hostingu, a gdy go nie dostanie, wpada na 8080 (jak EXPOSE)
+# i wypisuje to wprost w logu.
+ENV PANEL_HOST=::
 
 CMD ["python", "bot/dashboard.py", "--no-browser"]

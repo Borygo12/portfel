@@ -1258,7 +1258,11 @@ import sys as _sys  # noqa: E402
 HOST = os.environ.get("PANEL_HOST", "0.0.0.0" if "--lan" in _sys.argv else "127.0.0.1")
 # Railway (i większość hostingów) podaje port w zmiennej PORT i oczekuje, że
 # aplikacja go użyje — inaczej ruch nie trafia do kontenera.
-PORT = int(os.environ.get("PORT") or os.environ.get("PANEL_PORT") or "8500")
+# Kolejność: port od hostingu (PORT) -> ustawiony ręcznie (PANEL_PORT) -> domyślny.
+# W chmurze domyślny to 8080, czyli to samo, co EXPOSE w Dockerfile — dzięki temu
+# port ogłaszany i faktyczny nie mogą się rozjechać. Lokalnie zostaje 8500.
+PORT = int(os.environ.get("PORT") or os.environ.get("PANEL_PORT")
+           or ("8080" if os.environ.get("PORTEVO_CLOUD") else "8500"))
 URL = f"http://localhost:{PORT}/"
 
 
@@ -1299,9 +1303,23 @@ if __name__ == "__main__":
             runner.start()
     threading.Thread(target=_autostart, daemon=True).start()
 
-    # Jedna linia do logu hostingu: gdy healthcheck padnie, od razu widać,
-    # czy serwer stoi tam, gdzie proxy go szuka.
-    print(f"Portevo: nasluch na {HOST}:{PORT} | dane w {paths.DATA_DIR} | "
+    # Log dla hostingu. Najważniejsza jest informacja, SKĄD wziął się port:
+    # gdy hosting go nie poda, a jego proxy puka pod własny zapamiętany numer,
+    # healthcheck pada mimo działającego serwera — i bez tej linii wygląda to
+    # identycznie jak aplikacja, która w ogóle nie wstała.
+    skad = ("PORT od hostingu" if os.environ.get("PORT")
+            else "PANEL_PORT" if os.environ.get("PANEL_PORT")
+            else "domyslny, hosting nie podal portu")
+    print(f"Portevo: nasluch na {HOST}:{PORT} ({skad}) | dane w {paths.DATA_DIR} | "
           f"baza {'skonfigurowana' if os.environ.get('SUPABASE_DB_URL') else 'BRAK URL'}",
           flush=True)
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    if not os.environ.get("PORT") and os.environ.get("PORTEVO_CLOUD"):
+        print("Portevo UWAGA: hosting nie podal zmiennej PORT. Jesli healthcheck "
+              "pada mimo tego komunikatu, ustaw PORT=8080 w zmiennych serwisu "
+              "albo popraw port docelowy w ustawieniach sieci.", flush=True)
+
+    # W chmurze zostawiamy poziom "info" — uvicorn wypisuje wtedy wprost
+    # "Uvicorn running on ...", czyli dowód, że gniazdo faktycznie zostalo otwarte.
+    # Lokalnie to zbedny szum, wiec zostaje "warning".
+    uvicorn.run(app, host=HOST, port=PORT,
+                log_level="info" if os.environ.get("PORTEVO_CLOUD") else "warning")
