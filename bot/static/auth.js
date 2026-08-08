@@ -14,15 +14,29 @@
  */
 (function () {
   const KEY = "portfel.session";
+  // Ten sam obiekt sesji, ale pod kluczem, którego szuka aplikacja. Logowanie
+  // przechodzi przez tę stronę (powrót z Google), a wraca się do aplikacji —
+  // gdyby sesja leżała tylko tutaj, zalogowany użytkownik trafiałby do aplikacji
+  // dalej jako gość. Kształt jest identyczny: access_token, refresh_token, expires_at.
+  const KEY_APP = "portfel.supabase.session";
   const state = { cfg: null, session: null, user: null, listeners: [] };
 
   const load = () => {
-    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; }
+    try {
+      return JSON.parse(localStorage.getItem(KEY)
+                        || localStorage.getItem(KEY_APP) || "null");
+    } catch { return null; }
   };
   const save = (s) => {
     state.session = s;
-    if (s) localStorage.setItem(KEY, JSON.stringify(s));
-    else localStorage.removeItem(KEY);
+    if (s) {
+      const json = JSON.stringify(s);
+      localStorage.setItem(KEY, json);
+      localStorage.setItem(KEY_APP, json);
+    } else {
+      localStorage.removeItem(KEY);
+      localStorage.removeItem(KEY_APP);
+    }
   };
 
   async function config() {
