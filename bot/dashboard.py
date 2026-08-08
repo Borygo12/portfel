@@ -94,6 +94,23 @@ _NO_DB_USER_PREFIXES = ("/api/bot/", "/api/live/", "/api/signals", "/api/params"
                         "/api/prompts", "/api/status")
 
 
+# Odczyty, które gościowi zwracamy jako pustkę zamiast odmowy. Kształt odpowiedzi
+# musi pasować do tego, czego spodziewa się aplikacja: listy jako listy, reszta
+# jako obiekt z „empty", bo tak samo wygląda konto bez zaimportowanych raportów.
+_GOSC_PUSTE_LISTY = ("/api/portfolio/operations", "/api/portfolio/closed",
+                     "/api/portfolio/benchmarks", "/api/portfolio/accounts",
+                     "/api/market/watchlist")
+
+
+def _pusty_stan_goscia(path: str):
+    """Co pokazać niezalogowanemu zamiast jego (nieistniejących) danych."""
+    if path in _GOSC_PUSTE_LISTY:
+        return []
+    if path.startswith("/api/portfolio/"):
+        return {"empty": True, "guest": True}
+    return None
+
+
 @app.middleware("http")
 async def _authenticate(request, call_next):
     """Ustala kto pyta, odsiewa niezalogowanych i podaje tożsamość bazie.
@@ -120,6 +137,15 @@ async def _authenticate(request, call_next):
     owner_by_token = bool(panel_token) and panel_token == api_token()
 
     if not (viewer.logged_in or local or owner_by_token):
+        # Gość ma się najpierw rozejrzeć. Odczyt własnych danych zwraca mu więc
+        # PUSTY STAN, a nie odmowę — dzięki temu aplikacja rysuje ekran powitalny
+        # zamiast wyskakiwać z logowaniem, zanim ktokolwiek o cokolwiek poprosił.
+        # Każdy zapis i tak wymaga konta, bo tu przepuszczamy wyłącznie GET.
+        if request.method == "GET":
+            pusty = _pusty_stan_goscia(path)
+            if pusty is not None:
+                return JSONResponse(pusty)
+
         # Człowiek w przeglądarce dostaje ekran logowania, a nie surowy JSON.
         # Aplikacja i telefon pytają o JSON (Accept: application/json), więc
         # dla nich nic się nie zmienia — dostają kod, który potrafią obsłużyć.
@@ -176,9 +202,17 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 # wpisać własne domeny — wtedy cudza strona nie odpyta API w imieniu użytkownika.
 _ORIGINS = [o.strip() for o in (os.environ.get("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
 
+# Adresy lokalne wpuszczamy ZAWSZE, obok listy z ALLOWED_ORIGINS. Bez tego
+# ustawienie listy produkcyjnej odcina aplikację uruchomioną w trakcie pracy
+# na komputerze (Expo web chodzi na losowym porcie localhost) — a to nie jest
+# zagrożenie: „localhost" u kogoś obcego wskazuje jego własny komputer, nie nasz.
+_LOCAL_ORIGIN_RE = r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+
 app.add_middleware(
-    CORSMiddleware, allow_origins=_ORIGINS or ["*"], allow_methods=["*"],
-    allow_headers=["*"], allow_credentials=False,
+    CORSMiddleware,
+    allow_origins=_ORIGINS or ["*"],
+    allow_origin_regex=_LOCAL_ORIGIN_RE if _ORIGINS else None,
+    allow_methods=["*"], allow_headers=["*"], allow_credentials=False,
 )
 
 
