@@ -1,10 +1,12 @@
-anthropic>=0.40
 requests>=2.31
 curl_cffi>=0.7
 python-dotenv>=1.0
 fastapi>=0.110
 uvicorn>=0.29
 feedparser>=6.0.10
+
+# import raportów maklerskich (.xlsx) — portfolio/importer.py
+openpyxl>=3.1
 
 # --- baza: Supabase (Postgres) ---
 psycopg[binary]>=3.1
@@ -14,3 +16,6 @@ psycopg-pool>=3.2
 # Opcjonalne: importowane leniwie, serwer działa bez nich (moduł /live zgłasza
 # wtedy brak zależności). W chmurze ich nie instalujemy — transkrypcja miele CPU
 # godzinami i to najdroższa rzecz w całym rachunku. Patrz requirements-live.txt.
+#
+# Pillow też tu nie ma: używa go wyłącznie make_icon.py, czyli narzędzie do
+# generowania ikony na pulpicie, którego serwer nigdy nie uruchamia.

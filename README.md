@@ -194,8 +194,7 @@ mu byłoby dziurą.
 | `SUPABASE_SERVICE_KEY` | Supabase → API | uprawnienia i role — **tylko serwer** |
 | `OWNER_EMAIL` | Twój adres | konto właściciela |
 | `PANEL_API_TOKEN` | wymyślasz sam | połączenie telefonu bez logowania |
-| `OPENROUTER_API_KEY` | openrouter.ai → Keys | analiza wiadomości (główny) |
-| `ANTHROPIC_API_KEY` | console.anthropic.com | analiza wiadomości (zapas) |
+| `OPENROUTER_API_KEY` | openrouter.ai → Keys | analiza wiadomości |
 | `SCRAPECREATORS_API_KEY` | scrapecreators.com | Truth Social |
 | `QUIVER_API_KEY` | api.quiverquant.com | transakcje kongresmenów (planowane) |
 

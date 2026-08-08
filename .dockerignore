@@ -30,6 +30,12 @@ bot/sources/sitemap_state.json
 # moduł /live nie jedzie do chmury
 bot/requirements-live.txt
 
+# narzędzia uruchamiane wyłącznie na komputerze — serwer ich nie woła,
+# a ciągną zależności (Pillow), których nie ma po co instalować w obrazie
+bot/make_icon.py
+bot/launch_lan.vbs
+bot/_test_squawk.py
+
 __pycache__/
 *.pyc
 .expo/
