@@ -43,6 +43,13 @@ dist/
 
 # grafika i dokumentacja nie są potrzebne serwerowi
 tła/
-*.png
-*.ico
+/*.png
+/*.ico
+bot/*.png
+bot/*.ico
+
+# Zbudowana aplikacja wchodzi do obrazu W CALOSCI — jej grafika i ikona są
+# częścią interfejsu, a nie dokumentacją. Ten wyjątek stoi na końcu celowo:
+# w .dockerignore wygrywa ostatnia pasująca reguła.
+!web/**
 README.md

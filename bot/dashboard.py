@@ -254,11 +254,20 @@ if _WEB_READY:
 
 @app.get("/")
 def index():
-    """Adres główny = aplikacja. Gdy build jej nie ma, zostaje strona statusu."""
+    """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze."""
     if _WEB_READY:
         return FileResponse(_WEB_INDEX,
                             headers={"Cache-Control": "no-cache, must-revalidate"})
-    return _page("home.html")
+    # Świadomie NIE pokazujemy tu żadnej strony zastępczej: strona „o serwerze"
+    # z linkami donikąd była ślepą uliczką, w której lądował każdy po zalogowaniu.
+    # Lepiej krzyczeć błędem niż udawać, że tak ma być.
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        {"error": "Brak zbudowanej aplikacji w obrazie (katalog web/). "
+                  "Uruchom: npx expo export --platform web w mobile/ i skopiuj do web/.",
+         "code": "web_build_missing"},
+        status_code=503,
+    )
 
 
 @app.get("/premium")

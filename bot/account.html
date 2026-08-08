@@ -240,6 +240,12 @@ async function render() {
   // stan czytamy z gettera, a nie z tego, co zwróciło ready()
   await Portevo.auth.ready().catch(() => {});
   const user = Portevo.auth.user;
+  // Zalogowany ma iść PROSTO DO APLIKACJI. Ta strona jest tylko przystankiem na
+  // czas logowania i powrotu z Google — zatrzymywanie tu kogoś, kto właśnie się
+  // zalogował, było ślepą uliczką bez wyjścia.
+  // ?konto=1 pozwala zostać na tej stronie (wylogowanie, podgląd subskrypcji)
+  const zostan = new URLSearchParams(location.search).has("konto");
+  if (user && !zostan) { location.replace(backTo); return; }
   if (user) renderAccount(user);
   else renderAuth(Portevo.auth.configured);
 }

@@ -24,6 +24,10 @@ RUN pip install --no-cache-dir -r bot/requirements.txt
 
 COPY bot/ bot/
 
+# Zbudowana aplikacja webowa — to ona jest interfejsem pod adresem głównym.
+# Bez tej linii obraz nie zawiera aplikacji i serwer nie ma czego podać.
+COPY web/ web/
+
 # Katalog na pliki robocze (parametry, feed analiz, token). W Railway podpina się
 # tu dysk, żeby przeżyły wdrożenie. Bez dysku aplikacja też wstanie — po prostu
 # ustawienia wrócą do domyślnych po każdym deployu.
