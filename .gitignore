@@ -34,3 +34,6 @@ bot/sources/sitemap_state.json
 
 # katalog danych używany w chmurze (gdy ktoś ustawi go lokalnie na ./data)
 data/
+
+# gotowy blok zmiennych do wklejenia w hostingu — zawiera klucze
+railway-variables.txt

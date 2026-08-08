@@ -78,7 +78,11 @@ _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 # Ścieżki dostępne BEZ logowania — inaczej nie dałoby się pokazać ekranu
 # logowania ani strony sprzedażowej komuś, kto konta jeszcze nie ma.
-_PUBLIC_PATHS = {"/premium", "/account", "/api/auth/config", "/api/premium/features",
+# "/" musi tu być: po zalogowaniu przez Google Supabase odsyła na adres główny,
+# a gdy ten wymaga logowania, użytkownik ląduje na surowym JSON-ie „login_required"
+# tuż po tym, jak się zalogował. Sama strona niczego nie zdradza — dane do
+# połączenia telefonu ma własną blokadę „tylko z tego komputera".
+_PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/features",
                  "/api/premium/event", "/api/me", "/api/version", "/api/health",
                  "/favicon.ico"}
 _PUBLIC_PREFIXES = ("/static/",)
@@ -116,6 +120,12 @@ async def _authenticate(request, call_next):
     owner_by_token = bool(panel_token) and panel_token == api_token()
 
     if not (viewer.logged_in or local or owner_by_token):
+        # Człowiek w przeglądarce dostaje ekran logowania, a nie surowy JSON.
+        # Aplikacja i telefon pytają o JSON (Accept: application/json), więc
+        # dla nich nic się nie zmienia — dostają kod, który potrafią obsłużyć.
+        if "text/html" in (request.headers.get("accept") or ""):
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse("/account", status_code=303)
         return JSONResponse(
             {"error": "Zaloguj się, żeby korzystać z aplikacji", "code": "login_required"},
             status_code=401,
