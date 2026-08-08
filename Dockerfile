@@ -34,8 +34,14 @@ RUN mkdir -p /data
 RUN useradd --create-home --uid 10001 portevo && chown -R portevo:portevo /app /data
 USER portevo
 
-EXPOSE 8500
+EXPOSE 8080
 
-# PORT podaje Railway; PANEL_HOST musi być 0.0.0.0, inaczej ruch z proxy nie wejdzie.
-ENV PANEL_HOST=0.0.0.0
+# Nasłuch na "::" zamiast "0.0.0.0" — to nie jest kosmetyka.
+# Sieć wewnętrzna Railway działa po IPv6, a gniazdo otwarte na 0.0.0.0 przyjmuje
+# WYŁĄCZNIE IPv4. Aplikacja wtedy chodzi, tylko healthcheck i proxy nie mają jak
+# się do niej dobić — deploy przechodzi, a zaraz po nim leci "Healthcheck failure".
+# "::" w Linuksie nasłuchuje na obu rodzinach adresów naraz.
+ENV PANEL_HOST=:: \
+    PORT=8080
+
 CMD ["python", "bot/dashboard.py", "--no-browser"]

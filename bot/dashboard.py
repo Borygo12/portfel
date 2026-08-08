@@ -1299,4 +1299,9 @@ if __name__ == "__main__":
             runner.start()
     threading.Thread(target=_autostart, daemon=True).start()
 
+    # Jedna linia do logu hostingu: gdy healthcheck padnie, od razu widać,
+    # czy serwer stoi tam, gdzie proxy go szuka.
+    print(f"Portevo: nasluch na {HOST}:{PORT} | dane w {paths.DATA_DIR} | "
+          f"baza {'skonfigurowana' if os.environ.get('SUPABASE_DB_URL') else 'BRAK URL'}",
+          flush=True)
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
