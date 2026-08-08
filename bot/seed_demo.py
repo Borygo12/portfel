@@ -52,6 +52,22 @@ ZAMKNIETE = [
 WPLATY = [(560, 7000.0), (400, 4000.0), (210, 2000.0), (95, 1000.0)]
 
 
+def _kurs_z_dnia(ticker: str, dzien_iso: str) -> float | None:
+    """Prawdziwe zamkniecie z dnia zakupu (albo najblizszej wczesniejszej sesji).
+
+    Bez tego cena zakupu nie zgadza sie z historia notowan, ktora silnik czyta
+    z Yahoo — a wtedy dzienna seria wartosci portfela robi sztuczny skok i stopa
+    zwrotu wychodzi ujemna mimo dodatniego wyniku. Demo wyglada wtedy na zepsute.
+    """
+    from portfolio import prices as pf_prices
+    seria, _waluta = pf_prices.price_series(ticker, "2023-01-01")
+    if not seria:
+        return None
+    dzien = dzien_iso[:10]
+    wczesniejsze = [d for d in seria if d <= dzien]
+    return round(float(seria[max(wczesniejsze)]), 2) if wczesniejsze else None
+
+
 def _dzien(ile_temu: int) -> str:
     return (_dt.date.today() - _dt.timedelta(days=ile_temu)).isoformat() + "T10:15:00"
 
@@ -124,13 +140,21 @@ def main() -> int:
 
     for ticker, nazwa, ile, cena, dni in POZYCJE:
         n += 1
+        realna = _kurs_z_dnia(ticker, _dzien(dni))
+        if realna:
+            print(f"  {ticker}: cena zakupu {cena} -> {realna} (kurs z {_dzien(dni)[:10]})")
+            cena = realna
         wartosc = round(ile * cena, 2)
         ops.append({"user_id": uid, "account": KONTO, "op_id": f"B{n}",
                     "type": "Stock purchase", "ticker": ticker, "instrument": nazwa,
                     "time": _dzien(dni), "amount": -wartosc,
                     "comment": f"OPEN BUY {ile} @ {cena}", "product": "AKCJE"})
 
+    realne_zamk = {}
     for ticker, nazwa, ile, kupno, sprzedaz, dni_o, dni_z in ZAMKNIETE:
+        kupno = _kurs_z_dnia(ticker, _dzien(dni_o)) or kupno
+        sprzedaz = _kurs_z_dnia(ticker, _dzien(dni_z)) or sprzedaz
+        realne_zamk[ticker] = (kupno, sprzedaz)
         n += 1
         ops.append({"user_id": uid, "account": KONTO, "op_id": f"C{n}o",
                     "type": "Stock purchase", "ticker": ticker, "instrument": nazwa,
@@ -147,6 +171,7 @@ def main() -> int:
 
     zamk = []
     for ticker, nazwa, ile, kupno, sprzedaz, dni_o, dni_z in ZAMKNIETE:
+        kupno, sprzedaz = realne_zamk.get(ticker, (kupno, sprzedaz))
         zysk = round(ile * (sprzedaz - kupno), 2)
         zamk.append({
             "user_id": uid, "key": f"{ticker}|{dni_z}|{ile}", "account": KONTO,

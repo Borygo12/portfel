@@ -96,21 +96,33 @@ _NO_DB_USER_PREFIXES = ("/api/bot/", "/api/live/", "/api/signals", "/api/params"
                         "/api/prompts", "/api/status")
 
 
-# Odczyty, które gościowi zwracamy jako pustkę zamiast odmowy. Kształt odpowiedzi
-# musi pasować do tego, czego spodziewa się aplikacja: listy jako listy, reszta
-# jako obiekt z „empty", bo tak samo wygląda konto bez zaimportowanych raportów.
-_GOSC_PUSTE_LISTY = ("/api/portfolio/operations", "/api/portfolio/closed",
-                     "/api/portfolio/benchmarks", "/api/portfolio/accounts",
-                     "/api/market/watchlist")
+# --- konto pokazowe -----------------------------------------------------------
+# Gość ma zobaczyć DZIAŁAJĄCĄ aplikację, a nie puste ramki — inaczej nie sposób
+# ocenić, po co ona komu. Podstawiamy mu więc portfel konta pokazowego: te same
+# endpointy, ta sama ścieżka kodu, tylko czyjeś inne dane. Wyłącznie do odczytu,
+# bo dalej przepuszczamy sam GET.
+_DEMO_UID = (os.environ.get("DEMO_USER_ID") or "").strip()
+_DEMO_EMAIL = (os.environ.get("DEMO_EMAIL") or "").strip().lower()
+
+# Odczyty, które gościowi pokazujemy z konta pokazowego.
+_DEMO_SCIEZKI = ("/api/portfolio/", "/api/market/watchlist")
 
 
-def _pusty_stan_goscia(path: str):
-    """Co pokazać niezalogowanemu zamiast jego (nieistniejących) danych."""
-    if path in _GOSC_PUSTE_LISTY:
-        return []
-    if path.startswith("/api/portfolio/"):
-        return {"empty": True, "guest": True}
-    return None
+def demo_user_id() -> str:
+    """Identyfikator konta pokazowego — z DEMO_USER_ID albo po adresie e-mail."""
+    global _DEMO_UID
+    if _DEMO_UID:
+        return _DEMO_UID
+    if _DEMO_EMAIL:
+        import supabase_auth
+        rows = supabase_auth._service_get("profiles", {"email": f"eq.{_DEMO_EMAIL}",
+                                                       "select": "id"})
+        _DEMO_UID = (rows[0].get("id") if rows else "") or ""
+    return _DEMO_UID
+
+
+def _sciezka_pokazowa(path: str) -> bool:
+    return path.startswith(_DEMO_SCIEZKI[0]) or path == _DEMO_SCIEZKI[1]
 
 
 @app.middleware("http")
@@ -139,14 +151,19 @@ async def _authenticate(request, call_next):
     owner_by_token = bool(panel_token) and panel_token == api_token()
 
     if not (viewer.logged_in or local or owner_by_token):
-        # Gość ma się najpierw rozejrzeć. Odczyt własnych danych zwraca mu więc
-        # PUSTY STAN, a nie odmowę — dzięki temu aplikacja rysuje ekran powitalny
-        # zamiast wyskakiwać z logowaniem, zanim ktokolwiek o cokolwiek poprosił.
-        # Każdy zapis i tak wymaga konta, bo tu przepuszczamy wyłącznie GET.
-        if request.method == "GET":
-            pusty = _pusty_stan_goscia(path)
-            if pusty is not None:
-                return JSONResponse(pusty)
+        # Gość ma się najpierw rozejrzeć — pokazujemy mu portfel konta pokazowego.
+        # Przepuszczamy wyłącznie GET, więc niczego nie da się w nim zmienić.
+        if request.method == "GET" and _sciezka_pokazowa(path):
+            uid = demo_user_id()
+            if uid:
+                db.set_current_user(uid)
+                request.state.demo = True
+                odpowiedz = await call_next(request)
+                # Nagłówek mówi aplikacji wprost: to nie są dane tej osoby.
+                odpowiedz.headers["X-Portevo-Demo"] = "1"
+                return odpowiedz
+            return JSONResponse([] if path == "/api/market/watchlist"
+                                else {"empty": True, "guest": True})
 
         # Człowiek w przeglądarce dostaje ekran logowania, a nie surowy JSON.
         # Aplikacja i telefon pytają o JSON (Accept: application/json), więc
