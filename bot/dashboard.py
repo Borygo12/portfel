@@ -1266,6 +1266,35 @@ PORT = int(os.environ.get("PORT") or os.environ.get("PANEL_PORT")
 URL = f"http://localhost:{PORT}/"
 
 
+def _dual_stack_socket(host: str, port: int):
+    """Gniazdo przyjmujące JEDNOCZEŚNIE IPv4 i IPv6. None = zostaw to uvicornowi.
+
+    Sedno problemu z hostingiem: `0.0.0.0` przyjmuje wyłącznie IPv4, a `::`
+    obsługuje obie rodziny tylko wtedy, gdy jądro ma `bindv6only=0`. Jeśli proxy
+    hostingu puka inną rodziną adresów niż ta, którą otworzyliśmy, aplikacja
+    działa, a healthcheck i tak raportuje „service unavailable" — objaw nie do
+    odróżnienia od aplikacji, która w ogóle nie wstała.
+
+    Zamiast polegać na domyślnym ustawieniu jądra, wyłączamy IPV6_V6ONLY jawnie.
+    Gdy IPv6 jest w systemie niedostępny, wracamy do zwykłego nasłuchu uvicorna.
+    """
+    import socket
+    if host not in ("::", "::0", "[::]"):
+        return None
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        s.bind((host, port))
+        s.listen(2048)
+        s.set_inheritable(True)
+        print(f"Portevo: gniazdo dwustosowe (IPv4 + IPv6) na porcie {port}", flush=True)
+        return s
+    except OSError as e:
+        print(f"Portevo: brak dwustosu ({e}) — zwykly nasluch na {host}", flush=True)
+        return None
+
+
 def _open_browser_when_ready():
     """Otwórz panel w przeglądarce DOPIERO gdy serwer faktycznie odpowiada."""
     import time
@@ -1318,8 +1347,10 @@ if __name__ == "__main__":
               "pada mimo tego komunikatu, ustaw PORT=8080 w zmiennych serwisu "
               "albo popraw port docelowy w ustawieniach sieci.", flush=True)
 
-    # W chmurze zostawiamy poziom "info" — uvicorn wypisuje wtedy wprost
-    # "Uvicorn running on ...", czyli dowód, że gniazdo faktycznie zostalo otwarte.
-    # Lokalnie to zbedny szum, wiec zostaje "warning".
-    uvicorn.run(app, host=HOST, port=PORT,
-                log_level="info" if os.environ.get("PORTEVO_CLOUD") else "warning")
+    _log_level = "info" if os.environ.get("PORTEVO_CLOUD") else "warning"
+    sock = _dual_stack_socket(HOST, PORT)
+    if sock is None:
+        uvicorn.run(app, host=HOST, port=PORT, log_level=_log_level)
+    else:
+        cfg = uvicorn.Config(app, log_level=_log_level)
+        uvicorn.Server(cfg).run(sockets=[sock])
