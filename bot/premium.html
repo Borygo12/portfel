@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Portfel Premium</title>
+<title>Portevo Premium</title>
 <link rel="stylesheet" href="/static/premium.css">
 <style>
   :root {
@@ -122,7 +122,7 @@
 
   <header class="hero">
     <span class="kicker">PORTFEL PREMIUM</span>
-    <h1 id="headline">Portfel widzi więcej, niż pokazuje</h1>
+    <h1 id="headline">Portevo widzi więcej, niż pokazuje</h1>
     <p id="subheadline"></p>
   </header>
 
@@ -156,7 +156,7 @@
     </details>
   </div>
 
-  <footer>news-trader · Portfel</footer>
+  <footer>Portevo · narzędzia analityczne, nie doradztwo inwestycyjne</footer>
 </div>
 
 <script src="/static/auth.js"></script>
@@ -215,15 +215,15 @@ function renderPlans(cat) {
 }
 
 (async function () {
-  await Portfel.auth.ready();
-  const cat = await Portfel.premium.catalog();
+  await Portevo.auth.ready();
+  const cat = await Portevo.premium.catalog();
 
-  const u = Portfel.auth.user;
+  const u = Portevo.auth.user;
   document.getElementById("who").innerHTML = u
     ? `zalogowany jako <b>${esc(u.email)}</b> · <a href="/account">konto</a>`
     : `<a href="/account">Zaloguj się</a>`;
 
-  document.getElementById("headline").textContent = cat.headline || "Portfel Premium";
+  document.getElementById("headline").textContent = cat.headline || "Portevo Premium";
   document.getElementById("subheadline").textContent = cat.subheadline || "";
 
   const f = cat.features.find((x) => x.id === wanted);
@@ -231,7 +231,7 @@ function renderPlans(cat) {
   document.getElementById("groups").innerHTML = renderGroups(cat, f && f.id);
   document.getElementById("plans").innerHTML = renderPlans(cat);
 
-  Portfel.premium.track("paywall_open", wanted);
+  Portevo.premium.track("paywall_open", wanted);
 
   if (cat.premium) {
     const d = document.createElement("div");
@@ -242,12 +242,12 @@ function renderPlans(cat) {
 
   document.querySelectorAll("[data-plan]").forEach((b) => {
     b.addEventListener("click", async () => {
-      Portfel.premium.track("checkout_start", b.dataset.plan);
-      if (!Portfel.auth.user) { location.href = "/account?wróć=/premium"; return; }
+      Portevo.premium.track("checkout_start", b.dataset.plan);
+      if (!Portevo.auth.user) { location.href = "/account?wróć=/premium"; return; }
       // TODO(owner): tu wpina się Stripe Checkout (keys/stripe.env).
       alert("Płatności jeszcze nie są podpięte.\n\n"
           + "Na razie premium nadaje się ręcznie w Supabase:\n"
-          + "select public.grant_premium('" + (Portfel.auth.user.email || "") + "', 'lifetime');");
+          + "select public.grant_premium('" + (Portevo.auth.user.email || "") + "', 'lifetime');");
     });
   });
 })();

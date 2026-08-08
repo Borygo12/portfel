@@ -1,4 +1,4 @@
-"""Serwer danych (port 8500) — API aplikacji Portfel.
+"""Serwer danych (port 8500) — API aplikacji Portevo.
 
 Uruchomienie:  python dashboard.py [--lan] [--no-browser]
 
@@ -36,7 +36,7 @@ from live import calendar as live_cal       # noqa: E402
 from live import manager as live_manager    # noqa: E402
 from sources import sitemap_monitor         # noqa: E402
 
-app = FastAPI(title="Portfel — serwer danych")
+app = FastAPI(title="Portevo — serwer danych")
 
 _DIR = os.path.dirname(__file__)
 _STARTED_AT = int(time.time())          # do rozpoznania, czy panel wstał po restarcie
@@ -45,11 +45,20 @@ _STARTED_AT = int(time.time())          # do rozpoznania, czy panel wstał po re
 # Panel steruje botem i pokazuje prywatny portfel, więc z LAN/VPN wpuszczamy TYLKO z tokenem.
 # Z localhost (przeglądarka na tym komputerze) wszystko działa jak dotąd, bez zmian.
 
-_TOKEN_FILE = os.path.join(_DIR, "portfolio_data", "api_token.txt")
+import paths                                   # noqa: E402
+
+_TOKEN_FILE = paths.data_path("api_token.txt")
 
 
 def api_token() -> str:
-    """Token dostępu z sieci — generowany raz i trzymany w pliku."""
+    """Token dostępu właściciela — ze zmiennej środowiskowej albo z pliku.
+
+    W chmurze token musi być stały między wdrożeniami, inaczej po każdym deployu
+    telefon traciłby połączenie. Dlatego pierwszeństwo ma PANEL_API_TOKEN.
+    """
+    from_env = (os.environ.get("PANEL_API_TOKEN") or "").strip()
+    if from_env:
+        return from_env
     try:
         with open(_TOKEN_FILE, encoding="utf-8") as f:
             tok = f.read().strip()
@@ -67,40 +76,98 @@ def api_token() -> str:
 
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
-# Ścieżki dostępne z sieci BEZ tokenu — inaczej nie dałoby się pokazać ekranu
-# logowania ani strony sprzedażowej komuś, kto tokenu jeszcze nie ma.
+# Ścieżki dostępne BEZ logowania — inaczej nie dałoby się pokazać ekranu
+# logowania ani strony sprzedażowej komuś, kto konta jeszcze nie ma.
 _PUBLIC_PATHS = {"/premium", "/account", "/api/auth/config", "/api/premium/features",
-                 "/api/premium/event", "/api/me", "/api/version", "/favicon.ico"}
+                 "/api/premium/event", "/api/me", "/api/version", "/api/health",
+                 "/favicon.ico"}
 _PUBLIC_PREFIXES = ("/static/",)
+
+# Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
+# analiz. To są dane serwera, nie czyjeś prywatne — wymagają uprawnień właściciela
+# albo zalogowania, ale nie potrzebują kontekstu użytkownika w Postgresie.
+_NO_DB_USER_PREFIXES = ("/api/bot/", "/api/live/", "/api/signals", "/api/params",
+                        "/api/prompts", "/api/status")
 
 
 @app.middleware("http")
-async def _require_token_from_network(request, call_next):
+async def _authenticate(request, call_next):
+    """Ustala kto pyta, odsiewa niezalogowanych i podaje tożsamość bazie.
+
+    Rozdział danych robi RLS w Postgresie (migracja 0002), ale baza musi wiedzieć,
+    czyim imieniem pytamy — i to ustawiamy tutaj, raz na żądanie. Gdy tożsamości
+    nie ma, `db.user_scope` rzuci wyjątkiem zamiast pokazać cudze wiersze.
+    """
     from fastapi.responses import JSONResponse
+
+    import db
+    import supabase_auth
+
+    path = request.url.path
+    if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        db.set_current_user("")
+        return await call_next(request)
+
+    viewer = supabase_auth.viewer_from_request(request)
     client = (request.client.host if request.client else "") or ""
-    if client not in _LOCAL_HOSTS:
-        path = request.url.path
-        public = path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES)
-        given = (request.headers.get("x-api-token")
-                 or request.query_params.get("token") or "")
-        # Wpuszczamy na dwa sposoby: tokenem panelu (telefon właściciela) albo
-        # kontem Supabase (zalogowany użytkownik). Uprawnienia premium sprawdzają
-        # już poszczególne endpointy — tu chodzi wyłącznie o „czy w ogóle wolno pukać”.
-        ok = public or given == api_token()
-        if not ok:
-            import supabase_auth
-            header = request.headers.get("authorization") or ""
-            token = header[7:].strip() if header.lower().startswith("bearer ") else ""
-            ok = bool(token and supabase_auth.verify_token(token))
-        if not ok:
-            return JSONResponse({"error": "Brak lub błędny token dostępu"}, status_code=401)
+    local = client in _LOCAL_HOSTS and not supabase_auth.REQUIRE_AUTH_LOCAL
+    panel_token = (request.headers.get("x-api-token")
+                   or request.query_params.get("token") or "")
+    owner_by_token = bool(panel_token) and panel_token == api_token()
+
+    if not (viewer.logged_in or local or owner_by_token):
+        return JSONResponse(
+            {"error": "Zaloguj się, żeby korzystać z aplikacji", "code": "login_required"},
+            status_code=401,
+        )
+
+    # Właściciel bywa rozpoznany tokenem panelu albo połączeniem lokalnym — wtedy
+    # nie ma tokenu Supabase, ale jego dane leżą pod konkretnym identyfikatorem.
+    uid = viewer.user_id
+    if not uid and (owner_by_token or local or viewer.owner):
+        uid = supabase_auth.owner_user_id()
+    db.set_current_user(uid)
+
+    if not uid and not path.startswith(_NO_DB_USER_PREFIXES):
+        return JSONResponse(
+            {"error": "Konto nie jest jeszcze połączone z bazą — zaloguj się w aplikacji",
+             "code": "no_account"},
+            status_code=401,
+        )
+
+    request.state.viewer = viewer
     return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def _friendly_errors(request, exc):
+    """Zamienia dwa typowe błędy konfiguracji na czytelną odpowiedź zamiast 500.
+
+    Bez tego pierwsze uruchomienie na nowym serwerze kończy się „Internal Server
+    Error" i zgadywaniem, czego brakuje.
+    """
+    from fastapi.responses import JSONResponse
+
+    import db
+    if isinstance(exc, db.NotConfigured):
+        return JSONResponse({"error": str(exc), "code": "db_not_configured"}, status_code=503)
+    if isinstance(exc, PermissionError):
+        return JSONResponse({"error": "Zaloguj się, żeby zobaczyć swoje dane",
+                             "code": "login_required"}, status_code=401)
+    log.exception("Nieobsłużony błąd: %s %s", request.method, request.url.path)
+    return JSONResponse({"error": "Błąd serwera", "code": "server_error"}, status_code=500)
 
 
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
+# Bez ALLOWED_ORIGINS wpuszczamy każdy adres — wygodne przy pracy lokalnej i
+# bezpieczne o tyle, że tożsamość idzie nagłówkiem Authorization, a nie ciasteczkiem
+# (więc obca strona nie „pożyczy" sesji przeglądarki). Na produkcji i tak warto
+# wpisać własne domeny — wtedy cudza strona nie odpyta API w imieniu użytkownika.
+_ORIGINS = [o.strip() for o in (os.environ.get("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
+    CORSMiddleware, allow_origins=_ORIGINS or ["*"], allow_methods=["*"],
     allow_headers=["*"], allow_credentials=False,
 )
 
@@ -861,13 +928,13 @@ def portfolio_benchmarks():
 def portfolio_operations(limit: int = 500):
     return pf_store.query(
         "SELECT account, type, ticker, instrument, time, amount, comment FROM cash_ops "
-        "ORDER BY time DESC LIMIT ?", (min(limit, 5000),))
+        "ORDER BY time DESC LIMIT %s", (min(limit, 5000),))
 
 
 @app.get("/api/portfolio/closed")
 def portfolio_closed(limit: int = 500):
     return pf_store.query(
-        "SELECT * FROM closed_positions ORDER BY close_time DESC LIMIT ?", (min(limit, 5000),))
+        "SELECT * FROM closed_positions ORDER BY close_time DESC LIMIT %s", (min(limit, 5000),))
 
 
 @app.post("/api/portfolio/refresh")
@@ -1066,6 +1133,29 @@ def portfolio_ping():
     return {"ok": True, "app": "news-trader-portfolio", "api": 1}
 
 
+@app.get("/api/health")
+def api_health():
+    """Stan serwera dla hostingu i ekranu diagnostycznego — bez logowania.
+
+    Celowo nie zdradza szczegółów konfiguracji: hosting potrzebuje tylko wiedzieć,
+    czy proces żyje i czy baza odpowiada.
+    """
+    import db
+    dbs = db.healthy()
+    return {
+        "ok": bool(dbs.get("ok")),
+        "db": "ok" if dbs.get("ok") else "błąd",
+        "auth": "ok" if _sa_configured() else "brak konfiguracji Supabase",
+        "started_at": _STARTED_AT,
+        "api": API_VERSION,
+    }
+
+
+def _sa_configured() -> bool:
+    import supabase_auth
+    return supabase_auth.configured()
+
+
 def _is_tailscale(ip: str) -> bool:
     """Adres z zakresu Tailscale (CGNAT 100.64.0.0/10) — działa też poza domem."""
     parts = ip.split(".")
@@ -1166,7 +1256,9 @@ import sys as _sys  # noqa: E402
 # w sieci lokalnej/VPN dla telefonu — wtedy każdy request spoza tego komputera
 # musi mieć token (middleware wyżej).
 HOST = os.environ.get("PANEL_HOST", "0.0.0.0" if "--lan" in _sys.argv else "127.0.0.1")
-PORT = int(os.environ.get("PANEL_PORT", "8500"))
+# Railway (i większość hostingów) podaje port w zmiennej PORT i oczekuje, że
+# aplikacja go użyje — inaczej ruch nie trafia do kontenera.
+PORT = int(os.environ.get("PORT") or os.environ.get("PANEL_PORT") or "8500")
 URL = f"http://localhost:{PORT}/"
 
 

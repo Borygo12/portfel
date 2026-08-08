@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Konto — Portfel</title>
+<title>Konto — Portevo</title>
 <style>
   :root {
     --bg: #0a0d13; --card: #141926; --elev: #10141d; --border: #232b3d;
@@ -162,7 +162,7 @@ function renderAuth(configured) {
 
   document.getElementById("swap").onclick = () => { mode = up ? "in" : "up"; renderAuth(true); };
   document.getElementById("google").onclick = () =>
-    Portfel.auth.signInGoogle().catch((e) => say(e.message));
+    Portevo.auth.signInGoogle().catch((e) => say(e.message));
 
   const submit = async () => {
     const email = document.getElementById("email").value.trim();
@@ -171,8 +171,8 @@ function renderAuth(configured) {
     const btn = document.getElementById("go");
     btn.disabled = true; btn.textContent = "Chwila…";
     try {
-      const user = up ? await Portfel.auth.signUp(email, pass)
-                      : await Portfel.auth.signIn(email, pass);
+      const user = up ? await Portevo.auth.signUp(email, pass)
+                      : await Portevo.auth.signIn(email, pass);
       if (!user) {
         // Supabase wymaga potwierdzenia adresu — konto powstało, sesji jeszcze nie ma
         say("Konto założone. Sprawdź skrzynkę i potwierdź adres, potem zaloguj się.", "ok");
@@ -190,7 +190,7 @@ function renderAuth(configured) {
 }
 
 async function renderAccount(user) {
-  const r = await Portfel.auth.fetch("/api/me");
+  const r = await Portevo.auth.fetch("/api/me");
   const me = await r.json().catch(() => ({}));
   const initial = (user.name || user.email || "?").trim().charAt(0).toUpperCase();
   const premium = !!me.premium;
@@ -208,7 +208,7 @@ async function renderAccount(user) {
         ? `<img src="${esc(user.avatar)}" alt="">` : esc(initial)}</div>
       <div>
         <div class="mail">${esc(user.name || user.email)}</div>
-        <div class="prov">${esc(user.name ? user.email : "konto Portfel")}</div>
+        <div class="prov">${esc(user.name ? user.email : "konto Portevo")}</div>
       </div>
     </div>
 
@@ -230,7 +230,7 @@ async function renderAccount(user) {
       premium wędrują między urządzeniami automatycznie.</p>`;
 
   document.getElementById("out").onclick = async () => {
-    await Portfel.auth.signOut();
+    await Portevo.auth.signOut();
     render();
   };
 }
@@ -238,10 +238,10 @@ async function renderAccount(user) {
 async function render() {
   // ready() zapamiętuje wynik pierwszego wywołania, więc po wylogowaniu bieżący
   // stan czytamy z gettera, a nie z tego, co zwróciło ready()
-  await Portfel.auth.ready().catch(() => {});
-  const user = Portfel.auth.user;
+  await Portevo.auth.ready().catch(() => {});
+  const user = Portevo.auth.user;
   if (user) renderAccount(user);
-  else renderAuth(Portfel.auth.configured);
+  else renderAuth(Portevo.auth.configured);
 }
 
 render();

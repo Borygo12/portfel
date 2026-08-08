@@ -9,15 +9,15 @@ czytelny kanał RSS (https://shorty.pl/api/events.rss). Ten sam wzorzec co
 sources/gpw_espi.py, który zamiast surowego systemu ESPI/PAP korzysta z
 przyjaźniejszego mirrora bankier.pl.
 
-Dlaczego to ma znaczenie (realna przewaga nawet wobec dużych graczy jak XTB):
-gdy duży fundusz (np. Marshall Wace) ZAMYKA dużą pozycję krótką na spadającej
-spółce, to często zapowiedź "short squeeze" — zniknięcie presji podażowej ze
-strony shortów potrafi wywołać gwałtowny ruch w górę, zanim to zauważy reszta
-rynku. Odwrotnie: duży fundusz OTWIERAJĄCY/ZWIĘKSZAJĄCY shorta = ktoś z dostępem
-do analizy uznał spółkę za przewartościowaną.
+Dlaczego to ma znaczenie: gdy duży fundusz (np. Marshall Wace) ZAMYKA dużą
+pozycję krótką na spadającej spółce, to często zapowiedź "short squeeze" —
+zniknięcie presji podażowej ze strony shortów potrafi wywołać gwałtowny ruch
+w górę, zanim to zauważy reszta rynku. Odwrotnie: duży fundusz
+OTWIERAJĄCY/ZWIĘKSZAJĄCY shorta = ktoś z dostępem do analizy uznał spółkę za
+przewartościowaną.
 
 Ticker NIE jest tu rozpoznawany programowo (shorty.pl podaje nazwę emitenta, a nie
-zawsze 1:1 symbol maklerski Saxo) — tekst zdarzenia leci normalną ścieżką LLM
+zawsze 1:1 symbol z GPW) — tekst zdarzenia leci normalną ścieżką LLM
 (source="gpw_espi"), tak jak reszta polskich newsów; AI zna popularne spółki GPW
 i samo dobiera ticker (patrz prompts.py, sekcja "polish" — tam też reguły
 interpretacji zamknięcia/zwiększenia pozycji).
@@ -106,7 +106,7 @@ def fetch_new_knf_events(max_age_minutes: float = 60) -> list[dict]:
 
 
 def prime():
-    """Oznacz obecne zdarzenia jako przeczytane — nie gramy na starych przy starcie."""
+    """Oznacz obecne zdarzenia jako przeczytane — przy starcie nie analizujemy starych."""
     try:
         fetch_new_knf_events(max_age_minutes=0)
     except Exception:

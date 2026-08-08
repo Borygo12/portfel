@@ -1,0 +1,42 @@
+# Im mniej wchodzi do obrazu, tym szybszy build i mniejsze ryzyko, że coś
+# prywatnego wyjedzie razem z kodem.
+
+.git/
+.github/
+.claude/
+
+# sekrety — do kontenera trafiają zmiennymi środowiskowymi, nigdy plikiem
+keys/
+.env
+*.env
+!*.env.example
+
+# aplikacja mobilna ma własne repozytorium i własny build
+mobile/
+node_modules/
+
+# dane robocze i lokalna baza — w chmurze pochodzą z dysku i z Supabase
+bot/portfolio_data/
+bot/live_logs/
+bot/backtests/
+bot/*.log
+bot/signals.jsonl
+bot/heartbeat.json
+bot/params.json
+bot/mentions.json
+bot/live_events.json
+bot/sources/sitemap_state.json
+
+# moduł /live nie jedzie do chmury
+bot/requirements-live.txt
+
+__pycache__/
+*.pyc
+.expo/
+dist/
+
+# grafika i dokumentacja nie są potrzebne serwerowi
+tła/
+*.png
+*.ico
+README.md

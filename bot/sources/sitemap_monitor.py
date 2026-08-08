@@ -32,9 +32,12 @@ import requests
 
 log = logging.getLogger("sitemap_monitor")
 
+import paths
+
 _DIR = os.path.dirname(__file__)
+# watchlista jest częścią kodu (edytowana ręcznie), stan narasta w trakcie pracy
 WATCHLIST_FILE = os.path.join(_DIR, "sitemap_watchlist.json")
-STATE_FILE = os.path.join(_DIR, "sitemap_state.json")
+STATE_FILE = paths.data_path("sitemap_state.json")
 
 _SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}

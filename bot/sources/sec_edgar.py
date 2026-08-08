@@ -131,7 +131,7 @@ def fetch_new_filings(max_age_minutes: float = 30, form: str = "8-K",
 
 
 def prime(tradable: set | None = None):
-    """Oznacz istniejące zgłoszenia jako widziane — nie gramy na starych."""
+    """Oznacz istniejące zgłoszenia jako widziane — nie analizujemy starych."""
     try:
         fetch_new_filings(max_age_minutes=0, tradable=tradable)
     except Exception:

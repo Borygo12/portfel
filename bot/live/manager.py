@@ -118,7 +118,7 @@ class LiveEventSession:
 
     def _handle_signal(self, res: dict, window: str, params: dict):
         ticker = str(res["ticker"]).upper()
-        direction = "short" if str(res.get("direction", "")).upper() == "SELL" else "long"
+        direction = "short" if str(res.get("direction", "")).upper() in ("SHORT", "SELL") else "long"
         cooldown = float(params.get("live_signal_cooldown_minutes", 5)) * 60
         key = (ticker, direction)
         if time.time() - self._sent.get(key, 0) < cooldown:
@@ -127,8 +127,7 @@ class LiveEventSession:
 
         conf = float(res.get("confidence") or 0)
         threshold = float(params.get("live_confidence_threshold", 0.85))
-        # stary klucz live_auto_trade zostaje jako zapas, żeby istniejące params.json działały
-        auto = params.get("live_auto_analyze", params.get("live_auto_trade", False))
+        auto = params.get("live_auto_analyze", False)
         sig_entry = {"ts": time.strftime("%H:%M:%S"), "ticker": ticker,
                      "direction": res.get("direction"), "confidence": conf,
                      "event_type": res.get("event_type"),
@@ -175,7 +174,9 @@ class LiveEventSession:
         state.log_signal({
             "post": f"🎙 [{self.event.get('title', '')[:80]}] „{quote[:180]}”",
             "signal": signal,
-            "decision": "FORWARDED" if result.get("action") == "forwarded" else ("SHORT" if direction == "short" else "BUY"),
+            "tone": "negatywny" if direction == "short" else "pozytywny",
+            "decision": "PRZEKAZANO" if result.get("action") == "forwarded"
+                        else ("NEGATYWNY" if direction == "short" else "POZYTYWNY"),
             "source": "live_event", "result": result,
             "latency": f"analiza {res.get('took_s', '?')} s",
         })

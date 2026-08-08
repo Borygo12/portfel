@@ -15,7 +15,7 @@
 
   async function catalog() {
     if (cache) return cache;
-    const auth = window.Portfel && window.Portfel.auth;
+    const auth = window.Portevo && window.Portevo.auth;
     const get = auth ? auth.fetch.bind(auth) : fetch;
     try {
       const r = await get("/api/premium/features");
@@ -33,7 +33,7 @@
 
   /** Ślad w analityce — wiemy, które kłódki ludzie naprawdę klikają. */
   function track(event, id) {
-    const auth = window.Portfel && window.Portfel.auth;
+    const auth = window.Portevo && window.Portevo.auth;
     const send = auth ? auth.fetch.bind(auth) : fetch;
     try {
       send("/api/premium/event", {
@@ -99,8 +99,8 @@
     });
   }
 
-  window.Portfel = window.Portfel || {};
-  window.Portfel.premium = {
+  window.Portevo = window.Portevo || {};
+  window.Portevo.premium = {
     catalog, feature, lock, badge, scan, open, track,
     get active() { return !!(cache && cache.premium); },
     /** Po zakupie: wyczyść cache i przeładuj widok. */
@@ -108,7 +108,7 @@
   };
 
   document.addEventListener("DOMContentLoaded", () => {
-    const auth = window.Portfel && window.Portfel.auth;
+    const auth = window.Portevo && window.Portevo.auth;
     (auth ? auth.ready() : Promise.resolve()).then(() => scan());
   });
 })();

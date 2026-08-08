@@ -1,4 +1,4 @@
-' Portfel — serwer danych dla aplikacji. Slucha takze w sieci lokalnej (--lan),
+' Portevo — serwer danych dla aplikacji. Slucha takze w sieci lokalnej (--lan),
 ' zeby aplikacja na telefonie mogla sie polaczyc. Dostep z sieci wymaga tokenu.
 ' Nie otwiera przegladarki: interfejsem jest aplikacja, nie ten serwer.
 

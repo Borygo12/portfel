@@ -15,7 +15,10 @@ log = logging.getLogger("live.nlp")
 LIVE_MODEL = os.environ.get("LIVE_MODEL", "google/gemini-2.5-flash")
 LIVE_FALLBACK_MODEL = os.environ.get("LIVE_FALLBACK_MODEL", "anthropic/claude-sonnet-5")
 
-SYSTEM = """Jesteś analitykiem tradingowym nasłuchującym TRANSMISJI NA ŻYWO.
+SYSTEM = """Jesteś analitykiem rynkowym nasłuchującym TRANSMISJI NA ŻYWO.
+Twoim zadaniem jest wychwycić informację, która może poruszyć kursem, i opisać
+oczekiwany kierunek jej wpływu. Nie wydajesz rekomendacji kupna ani sprzedaży —
+nikt na podstawie tej analizy niczego nie kupuje ani nie sprzedaje.
 Dostajesz fragment transkrypcji audio (ostatnie ~1-2 minuty wypowiedzi) + kontekst wydarzenia.
 
 KRYTYCZNE — jakość transkrypcji:
@@ -33,13 +36,13 @@ CZEGO SZUKASZ (zależnie od typu wydarzenia — podany w kontekście):
 3. NATO / Europa / geopolityka: eskalacja militarna, sankcje, przełomy pokojowe
    -> sygnał makro na indeks (US100 short przy eskalacji, long przy deeskalacji).
    Spółki zbrojeniowe (LMT, RTX, NOC, RHM.DE) przy zapowiedziach zbrojeń.
-4. Polska: decyzje rządu/NBP wpływające na spółki GPW lub kurs złotego. Jeśli broker
-   nie ma polskich instrumentów, wskaż powiązany instrument (np. EURPLN, USDPLN).
+4. Polska: decyzje rządu/NBP wpływające na spółki GPW lub kurs złotego. Gdy nie da się
+   wskazać jednej spółki, podaj powiązany instrument (np. EURPLN, USDPLN).
 
 BĄDŹ SUROWY:
 1. ZWRÓĆ UWAGĘ KTO MÓWI: Jeśli informację podaje reporter relacjonujący to, co już się wydarzyło, a nie bezpośrednio główny aktor (np. Trump/Powell na żywo), to rynek już to wycenił -> signal_detected=false.
 2. CZY TO NOWA INFORMACJA? Zignoruj podsumowania przeszłych wydarzeń i powtórzenia znanych faktów -> signal_detected=false.
-Sygnał dajesz TYLKO na całkowicie nową, grywalną informację, która pada po raz pierwszy TU I TERAZ na streamie.
+Sygnał dajesz TYLKO na całkowicie nową, istotną dla rynku informację, która pada po raz pierwszy TU I TERAZ na streamie.
 Fragment może urywać się w pół zdania — jeśli kluczowa informacja jest niekompletna (np. trwa liczenie głosów), zwróć signal_detected=false i krótko opisz w "context_note", co się właśnie dzieje.
 
 Odpowiedz WYŁĄCZNIE poprawnym JSON, bez tekstu przed ani po:
@@ -47,8 +50,8 @@ Odpowiedz WYŁĄCZNIE poprawnym JSON, bez tekstu przed ani po:
   "signal_detected": bool,
   "event_type": "fda_vote" | "political_statement" | "geopolitical" | "poland" | "other",
   "ticker": string | null,          // symbol instrumentu (np. "DELL", "US100", "EURPLN")
-  "direction": "BUY" | "SELL" | null,
-  "confidence": 0.0-1.0,            // pewność, że to grywalny sygnał
+  "direction": "LONG" | "SHORT" | null,   // oczekiwany kierunek wpływu na kurs
+  "confidence": 0.0-1.0,            // pewność, że to istotny sygnał
   "reasoning": string,              // 1-2 zdania po polsku
   "quote": string,                  // dosłowny cytat z transkrypcji, który wywołał sygnał
   "context_note": string            // 1 zdanie po polsku: co się teraz dzieje na streamie

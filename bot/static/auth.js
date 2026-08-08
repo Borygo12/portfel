@@ -8,9 +8,9 @@
  * z zapasem, przy każdym pobraniu.
  *
  * Użycie:
- *   await Portfel.auth.ready();          // wczytuje konfigurację i sesję
- *   Portfel.auth.user                    // null albo {id, email, name, avatar}
- *   await Portfel.auth.fetch("/api/me")  // fetch z dołączonym tokenem
+ *   await Portevo.auth.ready();          // wczytuje konfigurację i sesję
+ *   Portevo.auth.user                    // null albo {id, email, name, avatar}
+ *   await Portevo.auth.fetch("/api/me")  // fetch z dołączonym tokenem
  */
 (function () {
   const KEY = "portfel.session";
@@ -206,6 +206,6 @@
     return location.origin + "/account";
   }
 
-  window.Portfel = window.Portfel || {};
-  window.Portfel.auth = api;
+  window.Portevo = window.Portevo || {};
+  window.Portevo.auth = api;
 })();

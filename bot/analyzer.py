@@ -105,7 +105,7 @@ def _has_negation_before(text: str, start: int, window: int = 60) -> bool:
 def fast_regex_filter(text: str) -> dict | None:
     """Bypass LLM dla twardych, jednoznacznych komunikatów ESPI (Tier 1). Zwraca
     None gdy nic nie pasuje LUB gdy pasuje, ale nie da się bezpiecznie ustalić tickera
-    (bez pewnego tickera nie ma czym handlować -> lecimy normalną ścieżką AI)."""
+    (bez pewnego tickera nie ma czego przypisać -> lecimy normalną ścieżką AI)."""
     for pattern, kind, label in _GPW_HARD_PATTERNS:
         m = pattern.search(text)
         if not m or _has_negation_before(text, m.start()):

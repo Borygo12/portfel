@@ -1,0 +1,12 @@
+# Wystąpienia na żywo (/live) — instaluj TYLKO tam, gdzie moduł ma naprawdę działać.
+#
+# U Ciebie na komputerze:  pip install -r bot/requirements.txt -r bot/requirements-live.txt
+# W chmurze:               pomijamy — obraz jest ~7x mniejszy, a rachunek kilkukrotnie niższy.
+#
+# Wymaga też ffmpeg w PATH (Windows: winget install ffmpeg).
+
+-r requirements.txt
+
+yt-dlp>=2025.1.1
+faster-whisper>=1.0
+numpy>=1.26

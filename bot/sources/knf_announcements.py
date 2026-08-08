@@ -104,7 +104,7 @@ def fetch_new_knf_announcements(max_age_minutes: float = 120) -> list[dict]:
 
 
 def prime():
-    """Oznacz obecne komunikaty jako przeczytane — nie gramy na starych przy starcie."""
+    """Oznacz obecne komunikaty jako przeczytane — przy starcie nie analizujemy starych."""
     try:
         fetch_new_knf_announcements(max_age_minutes=0)
     except Exception:

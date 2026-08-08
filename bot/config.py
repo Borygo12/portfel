@@ -9,7 +9,9 @@ Suwaki główne (panel /) i zaawansowane (podstrona /settings).
 import json
 import os
 
-PARAMS_FILE = os.path.join(os.path.dirname(__file__), "params.json")
+import paths
+
+PARAMS_FILE = paths.data_path("params.json")
 
 DEFAULTS = {
     # --- główne wyłączniki ---

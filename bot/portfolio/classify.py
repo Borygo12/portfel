@@ -1,6 +1,7 @@
 """Klasyfikacja instrumentów — klasa aktywów, rynek, sektor.
 
-Dane z wyszukiwarki Yahoo (quoteType + sector/industry dla akcji), cache w SQLite.
+Dane z wyszukiwarki Yahoo (quoteType + sector/industry dla akcji), cache wspólny
+dla wszystkich kont — branża spółki nie zależy od tego, kto pyta.
 ETF-y nie mają sektora u Yahoo, więc rozpoznajemy je z nazwy (złoto, biotech, indeks…).
 Wszystkie etykiety po polsku — trafiają wprost do UI.
 """
@@ -10,6 +11,8 @@ import logging
 import re
 
 import requests
+
+import db
 
 from . import store
 from .prices import UA, yahoo_symbol
@@ -54,21 +57,9 @@ ETF_THEMES = [
     (r"silver|srebr|oil|gas|commodit|surow", "ETF — surowce"),
 ]
 
-SCHEMA_EXTRA = """
-CREATE TABLE IF NOT EXISTS instrument_meta (
-    ticker     TEXT PRIMARY KEY,
-    quote_type TEXT DEFAULT '',
-    sector     TEXT DEFAULT '',
-    industry   TEXT DEFAULT '',
-    long_name  TEXT DEFAULT '',
-    fetched_at TEXT DEFAULT ''
-);
-"""
-
-
 def init() -> None:
+    """Tabelę instrument_meta zakłada migracja 0002 — tu nie ma już czego tworzyć."""
     store.init()
-    store.execute_script(SCHEMA_EXTRA)
 
 
 def _fetch_meta(ticker: str) -> dict:
@@ -101,7 +92,8 @@ def _fetch_meta(ticker: str) -> dict:
 def meta(ticker: str, refresh_days: int = 30) -> dict:
     """Metadane instrumentu z cache (dociąga z Yahoo, gdy brak lub stare)."""
     init()
-    rows = store.query("SELECT * FROM instrument_meta WHERE ticker=?", (ticker,))
+    # metadane instrumentu są wspólne dla wszystkich kont — czytamy je poza RLS
+    rows = db.shared_query("SELECT * FROM instrument_meta WHERE ticker=%s", (ticker,))
     if rows:
         row = rows[0]
         try:
@@ -115,9 +107,9 @@ def meta(ticker: str, refresh_days: int = 30) -> dict:
     row = {"ticker": ticker, "fetched_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
            "quote_type": got.get("quote_type", ""), "sector": got.get("sector", ""),
            "industry": got.get("industry", ""), "long_name": got.get("long_name", "")}
-    store.execute(
+    db.shared_execute(
         """INSERT INTO instrument_meta(ticker, quote_type, sector, industry, long_name, fetched_at)
-           VALUES(?,?,?,?,?,?)
+           VALUES(%s,%s,%s,%s,%s,%s)
            ON CONFLICT(ticker) DO UPDATE SET quote_type=excluded.quote_type, sector=excluded.sector,
              industry=excluded.industry, long_name=excluded.long_name, fetched_at=excluded.fetched_at""",
         (row["ticker"], row["quote_type"], row["sector"], row["industry"],

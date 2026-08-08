@@ -49,7 +49,7 @@ def _fetch_direct() -> list[dict]:
 
 
 def _fetch_rss() -> list[dict]:
-    r = requests.get(RSS_URL, timeout=10, headers={"User-Agent": "news-trader-bot"})
+    r = requests.get(RSS_URL, timeout=10, headers={"User-Agent": "portevo-bot"})
     r.raise_for_status()
     out = []
     for item in ET.fromstring(r.content).iter("item"):
@@ -131,7 +131,7 @@ def fetch_new_posts(max_age_minutes: float = 10) -> list[dict]:
 
 
 def prime():
-    """Pierwsze uruchomienie: oznacz istniejące posty jako widziane (nie graj na starych)."""
+    """Pierwsze uruchomienie: oznacz istniejące posty jako widziane (starych nie analizujemy)."""
     try:
         fetch_new_posts(max_age_minutes=0)
     except RuntimeError:

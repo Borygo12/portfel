@@ -18,8 +18,9 @@ import time
 
 log = logging.getLogger("live.capture")
 
-_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGS_DIR = os.path.join(_DIR, "live_logs")
+import paths
+
+LOGS_DIR = os.path.join(paths.DATA_DIR, "live_logs")
 
 SAMPLE_RATE = 16000
 BYTES_PER_SECOND = SAMPLE_RATE * 2  # PCM s16le mono

@@ -21,7 +21,9 @@ from datetime import datetime, timezone
 
 log = logging.getLogger("strategy")
 
-MENTIONS_FILE = os.path.join(os.path.dirname(__file__), "mentions.json")
+import paths
+
+MENTIONS_FILE = paths.data_path("mentions.json")
 MENTION_WINDOW_DAYS = 7
 _mentions_lock = threading.Lock()
 

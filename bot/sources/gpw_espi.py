@@ -188,7 +188,7 @@ def fetch_new_gpw_reports(max_age_minutes: float = 30) -> list[dict]:
 
 
 def prime():
-    """Oznacz obecne raporty jako przeczytane — nie gramy na starych przy starcie."""
+    """Oznacz obecne raporty jako przeczytane — przy starcie nie analizujemy starych."""
     try:
         fetch_new_gpw_reports(max_age_minutes=0)
     except Exception:

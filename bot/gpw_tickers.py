@@ -1,12 +1,14 @@
 """Mapa najpłynniejszych spółek GPW (WIG20/mWIG40 blue chips) — nazwa -> ticker.
 
-Jedno źródło prawdy używane w trzech miejscach:
+Jedno źródło prawdy używane w dwóch miejscach:
   - prompts.py: generuje z tego listę tickerów w sekcji "polish" (prompt dla AI)
   - analyzer.py: fast_regex_filter() szuka tu nazwy spółki, żeby ominąć LLM
-  - broker_saxo.py: cokolwiek NIE jest w tym zbiorze traktowane jest jako mała/
-    niepłynna spółka GPW (NewConnect/sWIG80) -> wejście przez Limit zamiast Market
 
-Rozszerzaj śmiało — to zwykły dict, żadna z powyższych trzech ścieżek nie wymaga
+Zbiór wyznacza też granicę płynności: spółka spoza niego to mikrospółka
+(NewConnect/sWIG80), przy której pojedynczy komunikat rusza kursem inaczej niż
+przy blue chipie — AI dostaje o tym informację w prompcie.
+
+Rozszerzaj śmiało — to zwykły dict, żadna z powyższych ścieżek nie wymaga
 dodatkowych zmian kodu przy dopisaniu kolejnej spółki.
 """
 

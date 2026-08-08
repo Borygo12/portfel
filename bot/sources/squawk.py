@@ -137,7 +137,7 @@ def fetch_new_squawks(max_age_minutes: float = 10) -> list[dict]:
     return out
 
 def prime():
-    """Oznacza obecne squawki jako przeczytane, żeby nie grać na starych newsach przy starcie."""
+    """Oznacza obecne squawki jako przeczytane, żeby przy starcie nie analizować starych newsów."""
     try:
         fetch_new_squawks(max_age_minutes=0)
     except Exception:

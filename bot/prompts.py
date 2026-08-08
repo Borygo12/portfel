@@ -67,14 +67,14 @@ Jeśli zdarzenie jest OCZYWISTYM longiem/shortem, dawaj wysoką siłę (85-100).
    szok celny na wszystkie towary): target {"ticker": "US100", "direction": "short"}.
    Wyraźnie pro-rynkowy przełom (koniec wojny, wielka deregulacja): US100 long.
    Strength 50-80. Tylko naprawdę duże wydarzenia — nie każda polityczna kłótnia.
-4. CRYPTO — wiadomości ze świata kryptowalut. Gramy KONKRETNĄ kryptowalutę, której
+4. CRYPTO — wiadomości ze świata kryptowalut. Wskazujemy KONKRETNĄ kryptowalutę, której
    dotyczy news: Bitcoin → ticker "BTC", Ethereum → "ETH", Solana → "SOL" itd.
    Użyj STANDARDOWEGO symbolu krypto (BTC, ETH, SOL, XRP, ADA, DOGE, LTC, BNB, DOT).
    W tej kategorii NIE szukamy amerykańskich spółek, ignorujemy klasyczne schematy giełdowe.
 
    ZASADY FILTROWANIA KRYPTO (KRYTYCZNE — przestrzegaj ściśle):
-   a) Gramy TYLKO newsy o DUŻYCH, ROZPOZNAWALNYCH kryptowalutach (BTC, ETH, SOL itp.).
-      News o nieznanym altcoinie/tokenie/memcoinie → tradable=false (nie mamy instrumentu).
+   a) Analizujemy TYLKO newsy o DUŻYCH, ROZPOZNAWALNYCH kryptowalutach (BTC, ETH, SOL itp.).
+      News o nieznanym altcoinie/tokenie/memcoinie → tradable=false (nie śledzimy takich).
    b) News musi być ISTOTNY — liczymy się tylko z:
       - Dużymi zakupami instytucji/wielorybów (MicroStrategy, BlackRock, Fidelity, wielkie fundusze)
       - Ruchami rozpoznawalnych graczy (Michael Saylor, rządy, banki centralne)
@@ -85,12 +85,12 @@ Jeśli zdarzenie jest OCZYWISTYM longiem/shortem, dawaj wysoką siłę (85-100).
       komentarze mediów bez nowego faktu, newsy o nieznanych firmach krypto,
       małe hacki, ruchy małych/anonimowych graczy, szum memcoinowy.
    d) HACKI: hack dużej giełdy dotyczący BTC/ETH na gigantyczną skalę → rozważ short.
-      Hack małego altcoina/protokołu → tradable=false (nie gramy tego).
-   Daj wysoki wynik (>75) TYLKO gdy do gry wchodzi wielki, nowy kapitał lub twarda
+      Hack małego altcoina/protokołu → tradable=false (pomijamy).
+   Daj wysoki wynik (>75) TYLKO gdy na rynek wchodzi wielki, nowy kapitał lub twarda
    decyzja regulacyjna od rozpoznawalnego podmiotu.""",
 
     "strict": """BĄDŹ SUROWY: ogólna polityka, memy, ataki na osoby bez związku ze spółką => tradable=false.
-KLUCZOWA ZASADA — gramy tylko NOWE informacje i twarde konkrety:
+KLUCZOWA ZASADA — liczą się tylko NOWE informacje i twarde konkrety:
 - News musi wnosić coś, czego rynek jeszcze nie wycenił: nowa pochwała/atak od kogoś ważnego,
   nowa decyzja rządu/sądu, nowy kontrakt, groźba ceł.
 - Jeśli tylko POWTARZA znane fakty (odgrzewa starą pochwałę, komentuje wczorajsze wyniki,
@@ -110,7 +110,7 @@ Tytuł ma format "NAZWA SPÓŁKI: temat raportu". Zasady dla tego źródła:
     oferty, obniżona prognoza, słabe wyniki, rezygnacja prezesa/zarządu, kara UOKiK/KNF,
     utrata dużego kontraktu, restrukturyzacja/upadłość, zerwanie umowy.
 - PŁYNNOŚĆ: spółki z NewConnect i mikrospółki (bardzo niska płynność) — obniż siłę albo
-  tradable=false; realnie gramy głównie WIG20/mWIG40.
+  tradable=false; realnie skupiamy się na WIG20/mWIG40.
 - RUTYNA bez wpływu na kurs (rejestracja zmiany statutu, pisma formalne, terminy publikacji,
   MREL, zmiana adresu, transakcje animatora) => tradable=false lub strength <50.
 - Wydarzenie ogólnopolskie/makro (decyzja RPP/NBP o stopach, budżet, dane GUS) bez jednej
@@ -167,7 +167,7 @@ notowana na GPW (albo jej istotna spółka-córka)? Jeśli TAK:
   nałożenie kary (wynik niepewny, ale sam fakt bywa rynkotwórczy), strength <=55.
 Jeśli podmiot NIE jest spółką notowaną na GPW (osoba fizyczna, TFI, mała
 instytucja płatnicza, zagraniczny ubezpieczyciel bez polskiego tickera) ->
-tradable=false, nie mamy czym zagrać.""",
+tradable=false, nie ma tu spółki z GPW do wskazania.""",
 
     "verify": """Jesteś starszym analitykiem sprawdzającym analizę wykonaną przez inny model.
 Dostajesz treść wiadomości i przypisany jej wydźwięk. Oceniasz rzetelność tej analizy,

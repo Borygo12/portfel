@@ -25,9 +25,12 @@ import requests
 
 log = logging.getLogger("live.calendar")
 
-_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EVENTS_FILE = os.path.join(_DIR, "live_events.json")
-CHANNELS_FILE = os.path.join(_DIR, "live_channels.json")
+import paths
+
+# lista wydarzeń zmienia się w trakcie pracy -> katalog danych;
+# katalog kanałów jest częścią kodu i jedzie razem z wdrożeniem
+EVENTS_FILE = paths.data_path("live_events.json")
+CHANNELS_FILE = os.path.join(paths.BOT_DIR, "live_channels.json")
 
 FEDREG_API = "https://www.federalregister.gov/api/v1/documents.json"
 _HEADERS = {

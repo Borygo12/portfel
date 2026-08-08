@@ -432,7 +432,7 @@ def catalog(viewer=None) -> dict:
         "features": items,
         "plans": PLANS,
         # jedno zdanie na górze strony sprzedażowej — łatwo podmienić w testach
-        "headline": "Portfel widzi więcej, niż pokazuje",
+        "headline": "Portevo widzi więcej, niż pokazuje",
         "subheadline": (
             "Wersja premium dokłada to, czego nie policzysz w arkuszu: ryzyko portfela, "
             "sygnały z wiadomości w czasie rzeczywistym i rozliczenia."

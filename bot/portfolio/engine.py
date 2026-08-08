@@ -40,17 +40,25 @@ def _transfer_accounts(comment: str):
             return m.group(1), m.group(2)
     return None
 
-_memo = {"at": 0.0, "data": None}
+# Memo MUSI być per użytkownik. Jedno wspólne miejsce oznaczałoby, że przez
+# MEMO_TTL sekund kolejna osoba dostaje portfel poprzedniej — czyli wyciek danych,
+# którego RLS by nie złapał, bo do bazy w ogóle byśmy nie poszli.
+_memo: dict = {}                       # user_id -> {"at": float, "data": dict}
 _memo_lock = threading.Lock()
 # Krótkie memo: samo liczenie jest tanie, a dzięki temu świeże kursy (QUOTE_TTL
 # w prices.py) docierają do UI niemal natychmiast. Sieć i tak chroni własny cache.
 MEMO_TTL = 8  # s
 
 
+def _memo_key() -> str:
+    import db
+    return db.current_user() or "?"
+
+
 def invalidate() -> None:
+    """Kasuje memo zalogowanego użytkownika (cudzych nie ruszamy)."""
     with _memo_lock:
-        _memo["data"] = None
-        _memo["at"] = 0.0
+        _memo.pop(_memo_key(), None)
 
 
 def _dstr(iso_time: str) -> str:
@@ -155,15 +163,17 @@ def _cum(delta_by_date: dict) -> dict:
 
 def compute(force: bool = False) -> dict:
     """Pełny przelicz: dzienna seria wartości, przepływy, pozycje, TWR, XIRR."""
+    key = _memo_key()
     with _memo_lock:
-        if not force and _memo["data"] and _time.time() - _memo["at"] < MEMO_TTL:
-            return _memo["data"]
+        hit = _memo.get(key)
+        if not force and hit and hit["data"] and _time.time() - hit["at"] < MEMO_TTL:
+            return hit["data"]
 
     parsed = _parse_ops()
     if not parsed:
         data = {"empty": True}
         with _memo_lock:
-            _memo.update(data=data, at=_time.time())
+            _memo[key] = {"data": data, "at": _time.time()}
         return data
 
     today = datetime.date.today().isoformat()
@@ -357,7 +367,7 @@ def compute(force: bool = False) -> dict:
         "quotes": _quotes_freshness(quotes, positions),
     }
     with _memo_lock:
-        _memo.update(data=data, at=_time.time())
+        _memo[key] = {"data": data, "at": _time.time()}
     return data
 
 

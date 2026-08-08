@@ -6,8 +6,11 @@ fastapi>=0.110
 uvicorn>=0.29
 feedparser>=6.0.10
 
+# --- baza: Supabase (Postgres) ---
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+
 # --- Wystąpienia na żywo (/live): kalendarz + audio -> tekst -> AI ---
-yt-dlp>=2025.1.1
-faster-whisper>=1.0
-numpy>=1.26
-# UWAGA: potrzebny też ffmpeg w PATH (Windows: winget install ffmpeg)
+# Opcjonalne: importowane leniwie, serwer działa bez nich (moduł /live zgłasza
+# wtedy brak zależności). W chmurze ich nie instalujemy — transkrypcja miele CPU
+# godzinami i to najdroższa rzecz w całym rachunku. Patrz requirements-live.txt.

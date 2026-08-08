@@ -25,7 +25,9 @@ import time
 
 log = logging.getLogger("outcomes")
 
-_FILE = os.path.join(os.path.dirname(__file__), "outcomes.json")
+import paths
+
+_FILE = paths.data_path("outcomes.json")
 _lock = threading.Lock()
 
 # po jakim czasie sprawdzamy kurs (sekundy) -> etykieta w danych

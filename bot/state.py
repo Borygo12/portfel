@@ -5,9 +5,10 @@ import os
 import threading
 import time
 
-_DIR = os.path.dirname(__file__)
-SIGNALS_FILE = os.path.join(_DIR, "signals.jsonl")
-HEARTBEAT_FILE = os.path.join(_DIR, "heartbeat.json")
+import paths
+
+SIGNALS_FILE = paths.data_path("signals.jsonl")
+HEARTBEAT_FILE = paths.data_path("heartbeat.json")
 
 _state_lock = threading.Lock()
 
