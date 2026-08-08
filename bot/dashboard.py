@@ -85,7 +85,9 @@ _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/features",
                  "/api/premium/event", "/api/me", "/api/version", "/api/health",
                  "/favicon.ico"}
-_PUBLIC_PREFIXES = ("/static/",)
+# Pliki samej aplikacji (skrypty, czcionki, grafika) muszą być dostępne dla każdego —
+# inaczej bramka odsyła 401 na bundle i użytkownik widzi białą stronę zamiast apki.
+_PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/")
 
 # Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
 # analiz. To są dane serwera, nie czyjeś prywatne — wymagają uprawnień właściciela
@@ -235,9 +237,27 @@ def _page(name):
                         headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
+# Zbudowana aplikacja webowa (Expo export). Serwer podaje ją pod adresem głównym,
+# więc wejście na domenę = wejście do aplikacji, a nie na stronę o serwerze.
+_WEB_DIR = os.path.join(os.path.dirname(_DIR), "web")
+_WEB_INDEX = os.path.join(_WEB_DIR, "index.html")
+_WEB_READY = os.path.isfile(_WEB_INDEX)
+
+if _WEB_READY:
+    # zasoby aplikacji (JS, czcionki, obrazki) — nazwy plików zawierają skrót
+    # zawartości, więc mogą leżeć w cache przeglądarki dowolnie długo
+    app.mount("/_expo", StaticFiles(directory=os.path.join(_WEB_DIR, "_expo")), name="expo")
+    _assets = os.path.join(_WEB_DIR, "assets")
+    if os.path.isdir(_assets):
+        app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+
 @app.get("/")
 def index():
-    """Serwer nie ma już własnego interfejsu — interfejsem jest aplikacja."""
+    """Adres główny = aplikacja. Gdy build jej nie ma, zostaje strona statusu."""
+    if _WEB_READY:
+        return FileResponse(_WEB_INDEX,
+                            headers={"Cache-Control": "no-cache, must-revalidate"})
     return _page("home.html")
 
 

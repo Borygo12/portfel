@@ -16,7 +16,7 @@ node_modules/
 __pycache__/
 *.pyc
 .expo/
-dist/
+mobile/dist/
 
 # --- dane robocze i pamięć podręczna (odtwarzalne) ---------------------------
 bot/portfolio_data/
