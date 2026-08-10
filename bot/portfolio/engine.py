@@ -45,9 +45,12 @@ def _transfer_accounts(comment: str):
 # którego RLS by nie złapał, bo do bazy w ogóle byśmy nie poszli.
 _memo: dict = {}                       # user_id -> {"at": float, "data": dict}
 _memo_lock = threading.Lock()
-# Krótkie memo: samo liczenie jest tanie, a dzięki temu świeże kursy (QUOTE_TTL
-# w prices.py) docierają do UI niemal natychmiast. Sieć i tak chroni własny cache.
-MEMO_TTL = 8  # s
+# Tyle samo, co QUOTE_TTL w prices.py — i to nie przypadek. Bieżące notowania mają
+# 15-sekundowy cache, więc przeliczanie portfela co 8 sekund dawało co drugi raz
+# DOKŁADNIE te same liczby, tyle że okupione kompletem odczytów serii dziennych.
+# Zrównanie obu terminów niczego nie postarza (nowe kursy i tak pojawiają się co 15 s),
+# a o połowę zmniejsza liczbę przeliczeń.
+MEMO_TTL = 15  # s
 
 # Jeden przelicz na użytkownika NARAZ.
 #

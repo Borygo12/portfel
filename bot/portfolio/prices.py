@@ -128,7 +128,48 @@ def _yahoo_search(base: str) -> list:
         return []
 
 
+
+# ---------------- pamięć podręczna serii dziennych (w procesie) ----------------
+#
+# `price_series` i `fx_series` czytają z Postgresa: metadane + CAŁĄ serię dzienną
+# waloru, po trzy zapytania na ticker. Silnik woła je przy każdym przeliczeniu
+# portfela, czyli dla portfela z trzydziestoma pozycjami to ~90 zapytań i
+# trzydzieści dużych wyników — za każdym razem, gdy wygaśnie memo silnika.
+#
+# To są dane WSPÓLNE (price_cache jest jedno dla całego serwera, poza RLS), więc
+# pamięć podręczna też może być wspólna — w przeciwieństwie do memo portfela,
+# które musi być per użytkownik. Notowanie dzienne zmienia się raz na sesję,
+# a bieżący kurs i tak dokłada się osobno (QUOTE_TTL), więc pięć minut nie
+# postarza niczego, co widać na ekranie.
+SERIES_MEMO_TTL = 300       # s
+_series_memo: dict = {}
+_series_memo_lock = threading.Lock()
+
+
+def _memoizuj(klucz, ttl, licz):
+    with _series_memo_lock:
+        hit = _series_memo.get(klucz)
+    if hit and time.time() - hit["at"] < ttl:
+        return hit["val"]
+    val = licz()
+    with _series_memo_lock:
+        _series_memo[klucz] = {"val": val, "at": time.time()}
+    return val
+
+
 def price_series(xtb_ticker: str, from_date: str) -> tuple:
+    """({data: close}, waluta) dla tickera XTB — z pamięcią podręczną procesu."""
+    return _memoizuj(("px", (xtb_ticker or "").strip().upper(), from_date),
+                     SERIES_MEMO_TTL, lambda: _price_series_now(xtb_ticker, from_date))
+
+
+def fx_series(currency: str, from_date: str) -> dict:
+    """{data: kurs} dla waluty — z pamięcią podręczną procesu."""
+    return _memoizuj(("fx", (currency or "PLN").upper(), from_date),
+                     SERIES_MEMO_TTL, lambda: _fx_series_now(currency, from_date))
+
+
+def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
     """({data: close}, waluta) dla tickera XTB. Puste dict, gdy nic nie znaleziono.
 
     Gdy zmapowany symbol nie ma notowań na Yahoo (np. BTEC.DE), szukamy tego samego
@@ -554,7 +595,7 @@ def extended_quotes(tickers: list) -> dict:
 
 # ---------------- NBP (FX -> PLN) ----------------
 
-def fx_series(currency: str, from_date: str) -> dict:
+def _fx_series_now(currency: str, from_date: str) -> dict:
     """{data: kurs_PLN_za_1_jednostkę}. Dla PLN zwraca pusty dict (kurs=1 obsługuje engine)."""
     cur = (currency or "PLN").upper()
     if cur == "PLN":
