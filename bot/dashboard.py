@@ -105,7 +105,15 @@ _DEMO_UID = (os.environ.get("DEMO_USER_ID") or "").strip()
 _DEMO_EMAIL = (os.environ.get("DEMO_EMAIL") or "").strip().lower()
 
 # Odczyty, które gościowi pokazujemy z konta pokazowego.
-_DEMO_SCIEZKI = ("/api/portfolio/", "/api/market/watchlist")
+#
+# Są tu też `/api/market/` i `/api/earnings/`, choć podają dane publiczne (notowania,
+# terminy publikacji wyników). Powód jest prozaiczny: oba doklejają do odpowiedzi
+# „czy masz to w portfelu / obserwowanych", więc sięgają do bazy i bez tożsamości
+# kończą się błędem. Bez tego gość, który dotknął pozycji w portfelu pokazowym albo
+# wszedł w Earnings, dostawał zamiast ekranu napis „Zaloguj się, żeby korzystać
+# z tej funkcji" — czyli dokładnie ślepą uliczkę, której konto pokazowe miało
+# nie być. Przepuszczamy wyłącznie GET, więc niczego nie da się tu zmienić.
+_DEMO_SCIEZKI = ("/api/portfolio/", "/api/market/", "/api/earnings/")
 
 
 def demo_user_id() -> str:
@@ -122,7 +130,7 @@ def demo_user_id() -> str:
 
 
 def _sciezka_pokazowa(path: str) -> bool:
-    return path.startswith(_DEMO_SCIEZKI[0]) or path == _DEMO_SCIEZKI[1]
+    return path.startswith(_DEMO_SCIEZKI)
 
 
 @app.middleware("http")
@@ -267,6 +275,22 @@ if _WEB_READY:
     _assets = os.path.join(_WEB_DIR, "assets")
     if os.path.isdir(_assets):
         app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+
+
+@app.get("/favicon.ico")
+def favicon():
+    """Ikonka karty w przeglądarce.
+
+    Plik leży w `web/` od zawsze, ale nic go nie podawało — przeglądarka pytała
+    o niego przy każdym wejściu i dostawała 404, więc karta z Portevo była bez
+    znaku firmowego. Kosztowało to jedną linijkę, której po prostu nie było.
+    """
+    for kandydat in (os.path.join(_WEB_DIR, "favicon.ico"),
+                     os.path.join(_DIR, "icon.png")):
+        if os.path.isfile(kandydat):
+            return FileResponse(kandydat, headers={"Cache-Control": "public, max-age=86400"})
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 @app.get("/")
@@ -592,32 +616,45 @@ def _multipart_file(body: bytes, content_type: str):
 
     Parsujemy ręcznie zamiast przez `python-multipart` — to jedyne miejsce w panelu
     z uploadem, a jedna prosta funkcja jest tańsza niż kolejna zależność.
+
+    Dwie rzeczy, na które jest tu miejsce celowo:
+
+    * nagłówki oddzielone samym `\\n` zamiast `\\r\\n` (spotykane u pośredników,
+      które „normalizują" ciało żądania);
+    * część BEZ `filename=`. To nie jest teoria: klient, który dołączył plik
+      niewłaściwie, przysyła część o nazwie `file` bez nazwy pliku, a odrzucenie
+      całości kończyło się komunikatem „nie udało się odczytać pliku" przy
+      zupełnie poprawnym raporcie. Skoro format i tak rozpoznajemy po zawartości,
+      taką część bierzemy — nazwę weźmiemy z adresu żądania.
     """
     m = _re.search(r'boundary="?([^";]+)"?', content_type or "", _re.I)
     if not m:
         return None
     sep = b"--" + m.group(1).strip().encode()
+    zapas = None
     for part in body.split(sep):
         head, delim, payload = part.partition(b"\r\n\r\n")
-        if not delim or b"filename" not in head.lower():
+        if not delim:
+            head, delim, payload = part.partition(b"\n\n")
+        if not delim or b"content-disposition" not in head.lower():
             continue
+        payload = payload[:-2] if payload.endswith(b"\r\n") else payload.rstrip(b"\n")
         name = _re.search(rb'filename\*?=(?:"([^"]*)"|([^;\r\n]+))', head, _re.I)
-        fname = ""
         if name:
             fname = (name.group(1) or name.group(2) or b"").decode("utf-8", "replace").strip()
-        if payload.endswith(b"\r\n"):
-            payload = payload[:-2]
-        return payload, fname.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-    return None
+            return payload, fname.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        if zapas is None and payload:
+            zapas = (payload, "")
+    return zapas
 
 
 @app.post("/api/portfolio/import")
 async def portfolio_import(request: Request, filename: str = "report.xlsx",
                            encoding: str = ""):
-    """Import raportu XTB — xlsx albo zip, dowolnym z trzech sposobów wysyłki.
+    """Import raportu — xlsx, csv albo zip, dowolnym z trzech sposobów wysyłki.
 
     Telefon wysyła plik jako multipart (React Native robi to natywnie, bez
-    przepakowywania bajtów), panel w przeglądarce wrzuca surowe bajty, a starsze
+    przepakowywania bajtów), strona w przeglądarce wrzuca surowe bajty, a starsze
     wersje apki potrafią jeszcze przysłać base64. Rozpoznajemy wszystkie trzy po
     zawartości, bo pomyłka w wykrywaniu kończyła się mylącym „to nie jest zip".
 
@@ -631,19 +668,34 @@ async def portfolio_import(request: Request, filename: str = "report.xlsx",
     if ct.lower().startswith("multipart/form-data"):
         part = _multipart_file(body, ct)
         if part is None:
-            return {"ok": False, "error": "Nie udało się odczytać przesłanego pliku"}
+            return {"ok": False,
+                    "error": "Nie udało się odczytać przesłanego pliku — spróbuj "
+                             "wybrać go jeszcze raz"}
         data, part_name = part
         name = part_name or filename
-    elif encoding == "base64" or (body[:2] != b"PK" and pf_importer.looks_base64(body)):
-        # Base64 tylko wtedy, gdy to naprawdę base64 — plik zaczynający się od „PK"
-        # jest już gotowymi bajtami i dekodowanie zrobiłoby z niego śmieć.
+    elif encoding == "base64":
+        # Klient sam mówi, czym to jest — wierzymy mu bez zgadywania.
         try:
             data = pf_importer.decode_base64(body)
         except Exception:
             return {"ok": False, "error": "Nie udało się odkodować pliku (base64)"}
+    elif pf_importer.looks_base64(body):
+        # Nikt nie zadeklarował base64, więc tylko ZGADUJEMY — i przyjmujemy zgadkę
+        # dopiero, gdy z rozkodowania wyszedł plik. Sam wygląd nie wystarcza:
+        # tekstowy raport złożony z samych liter i cyfr też przechodzi test
+        # „wygląda na base64", a rozłożenie go na bajty zrobiłoby z niego śmieć.
+        try:
+            odkodowane = pf_importer.decode_base64(body)
+        except Exception:
+            odkodowane = b""
+        if odkodowane[:2] in (b"PK", b"\xd0\xcf"):
+            data = odkodowane
 
     if not data:
-        return {"ok": False, "error": "Pusty plik — wybierz raport jeszcze raz"}
+        return {"ok": False,
+                "error": "Plik przyszedł pusty. Jeśli trzymasz raport w iCloud Drive "
+                         "lub na Dysku Google, otwórz go najpierw w aplikacji Pliki, "
+                         "poczekaj aż się ściągnie, i wybierz jeszcze raz."}
     try:
         results, warnings = pf_importer.import_report(data, name)
     except Exception as e:

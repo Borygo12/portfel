@@ -19,6 +19,11 @@
   // gdyby sesja leżała tylko tutaj, zalogowany użytkownik trafiałby do aplikacji
   // dalej jako gość. Kształt jest identyczny: access_token, refresh_token, expires_at.
   const KEY_APP = "portfel.supabase.session";
+  // Ślad po świadomym wylogowaniu. Bez niego Google przy kolejnym logowaniu
+  // wybiera po cichu ostatnie konto i nie da się przesiąść na inne; z nim
+  // prosimy o ekran wyboru konta — ale tylko ten jeden raz, żeby zwykłe
+  // wejście na urządzeniu dalej było bezobsługowe.
+  const KEY_PICK = "portfel.pickAccount";
   const state = { cfg: null, session: null, user: null, listeners: [] };
 
   const load = () => {
@@ -187,8 +192,15 @@
     signInGoogle() {
       return config().then((cfg) => {
         if (!cfg.configured) throw new Error("Logowanie nie jest skonfigurowane");
+        let extra = "";
+        try {
+          if (localStorage.getItem(KEY_PICK)) {
+            extra = "&prompt=select_account";
+            localStorage.removeItem(KEY_PICK);
+          }
+        } catch {}
         location.href = cfg.url + "/auth/v1/authorize?provider=google&redirect_to="
-                      + encodeURIComponent(redirectUrl());
+                      + encodeURIComponent(redirectUrl()) + extra;
       });
     },
 
@@ -196,6 +208,7 @@
       const t = await token();
       if (t) { try { await gotrue("/logout", {}, t); } catch {} }
       save(null); state.user = null; emit();
+      try { localStorage.setItem(KEY_PICK, "1"); } catch {}
     },
 
     /** fetch do naszego serwera z dołączonym kontem i tokenem panelu. */
