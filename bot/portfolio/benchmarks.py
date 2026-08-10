@@ -7,6 +7,8 @@ Inflacja PL: indeks HICP (Eurostat, 2015=100), miesięczny -> schodkowo dziennie
 
 import datetime
 import logging
+import threading
+import time
 
 import requests
 
@@ -32,8 +34,33 @@ def available() -> list:
     return [{"id": k, "label": v[0]} for k, v in BENCHMARKS.items()]
 
 
+# Gotowe serie benchmarków: (nazwa, data początkowa) -> {"at", "data"}.
+#
+# To są dane RYNKOWE, nie czyjeś — S&P 500 jest ten sam dla każdego, więc memo jest
+# wspólne dla całego serwera (w przeciwieństwie do memo portfela, które MUSI być
+# per użytkownik). Bez tego każde kliknięcie w „Złoto" na nowo czytało serię z bazy
+# i mnożyło ją dzień po dniu przez kurs waluty — kilkaset milisekund za odpowiedź,
+# którą przed chwilą już policzyliśmy. Notowania dzienne i tak zmieniają się raz
+# na sesję, więc pięć minut niczego nie postarza.
+_SERIES_MEMO: dict = {}
+_SERIES_TTL = 300          # s
+_series_lock = threading.Lock()
+
+
 def series(name: str, from_date: str) -> dict:
     """{data: poziom_indeksu} — surowa seria; normalizację do początku zakresu robi UI."""
+    klucz = (name, from_date)
+    with _series_lock:
+        hit = _SERIES_MEMO.get(klucz)
+    if hit and time.time() - hit["at"] < _SERIES_TTL:
+        return hit["data"]
+    out = _series_now(name, from_date)
+    with _series_lock:
+        _SERIES_MEMO[klucz] = {"data": out, "at": time.time()}
+    return out
+
+
+def _series_now(name: str, from_date: str) -> dict:
     if name == "inflation":
         return _hicp_pl(from_date)
     if name == "usd":

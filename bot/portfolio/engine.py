@@ -49,16 +49,81 @@ _memo_lock = threading.Lock()
 # w prices.py) docierają do UI niemal natychmiast. Sieć i tak chroni własny cache.
 MEMO_TTL = 8  # s
 
+# Jeden przelicz na użytkownika NARAZ.
+#
+# Ekran przeglądu pyta o trzy rzeczy jednocześnie (podsumowanie, seria, przebieg
+# śróddzienny) i każda z nich woła `compute`. Przy wygasłym memo wszystkie trzy
+# zaczynały liczyć RÓWNOLEGLE — a każde liczenie to komplet zapytań do Yahoo
+# o kursy i waluty. Zamiast jednego przeliczenia robiły się trzy, potrojony ruch
+# w sieć i trzykrotnie większa szansa, że któreś z nich utknie. Po kliknięciu
+# w zakres albo benchmark odpowiedź potrafiła przez to iść kilka sekund.
+#
+# Tutaj pierwszy wątek liczy, pozostałe czekają pod drzwiami i biorą gotowy wynik.
+_flight_locks: dict = {}
+_flight_lock = threading.Lock()
+
 
 def _memo_key() -> str:
     import db
     return db.current_user() or "?"
 
 
+def _flight_lock_for(key: str) -> threading.Lock:
+    with _flight_lock:
+        lk = _flight_locks.get(key)
+        if lk is None:
+            lk = _flight_locks[key] = threading.Lock()
+        return lk
+
+
+# Numer kolejnego przeliczenia. Zegar do tego NIE nadaje się: na Windowsie
+# `time.time()` tyka co ~15 ms, więc „policzone po mojej chwili" wychodziło
+# prawdziwe dla wyniku sprzed ułamka sekundy — i wymuszone odświeżenie dostawało
+# odgrzewane dane. Licznik jest dokładny niezależnie od zegara.
+_gen = 0
+
+
+def _memo_stan(key: str) -> tuple:
+    """(wynik, numer przeliczenia) z memo. (None, 0) gdy pusto."""
+    with _memo_lock:
+        hit = _memo.get(key)
+    if not hit or not hit["data"]:
+        return None, 0
+    return hit, hit.get("gen", 0)
+
+
+def _zapisz_memo(key: str, data: dict) -> dict:
+    global _gen
+    with _memo_lock:
+        _gen += 1
+        _memo[key] = {"data": data, "at": _time.time(), "gen": _gen}
+    return data
+
+
+def _from_memo(key: str, after_gen: int = -1):
+    """Wynik z memo albo None.
+
+    `after_gen >= 0` pyta o wynik policzony PÓŹNIEJ niż podany numer — tak czeka
+    wymuszone odświeżenie. Bez tego argumentu obowiązuje zwykły termin ważności.
+    """
+    hit, gen = _memo_stan(key)
+    if not hit:
+        return None
+    if after_gen >= 0:
+        return hit["data"] if gen > after_gen else None
+    return hit["data"] if _time.time() - hit["at"] < MEMO_TTL else None
+
+
 def invalidate() -> None:
     """Kasuje memo zalogowanego użytkownika (cudzych nie ruszamy)."""
     with _memo_lock:
         _memo.pop(_memo_key(), None)
+    intraday_invalidate(_memo_key())
+
+
+# Memo przebiegu śróddziennego — ustawiane przez moduł `intraday`, żeby jego cache
+# znikał razem z tym silnika (import raportu zmienia oba naraz).
+intraday_invalidate = lambda _key: None      # noqa: E731
 
 
 def _dstr(iso_time: str) -> str:
@@ -162,19 +227,36 @@ def _cum(delta_by_date: dict) -> dict:
 
 
 def compute(force: bool = False) -> dict:
-    """Pełny przelicz: dzienna seria wartości, przepływy, pozycje, TWR, XIRR."""
-    key = _memo_key()
-    with _memo_lock:
-        hit = _memo.get(key)
-        if not force and hit and hit["data"] and _time.time() - hit["at"] < MEMO_TTL:
-            return hit["data"]
+    """Pełny przelicz: dzienna seria wartości, przepływy, pozycje, TWR, XIRR.
 
+    Równoległe wywołania nie liczą po swojemu — pierwsze liczy, reszta czeka
+    i dostaje ten sam wynik (patrz `_flight_locks`).
+    """
+    key = _memo_key()
+    if not force:
+        gotowe = _from_memo(key)
+        if gotowe is not None:
+            return gotowe
+
+    _, gen_przed = _memo_stan(key)
+    with _flight_lock_for(key):
+        # Ktoś policzył, gdy staliśmy w kolejce — bierzemy jego wynik. Liczy się
+        # tylko przelicz NOWSZY niż ten, który zastaliśmy wchodząc; dzięki temu
+        # `force=True` dostaje wynik policzony po jego żądaniu, a nie odgrzewany.
+        gotowe = _from_memo(key, after_gen=gen_przed)
+        if gotowe is not None:
+            return gotowe
+        if not force:
+            gotowe = _from_memo(key)
+            if gotowe is not None:
+                return gotowe
+        return _compute_now(key)
+
+
+def _compute_now(key: str) -> dict:
     parsed = _parse_ops()
     if not parsed:
-        data = {"empty": True}
-        with _memo_lock:
-            _memo[key] = {"data": data, "at": _time.time()}
-        return data
+        return _zapisz_memo(key, {"empty": True})
 
     today = datetime.date.today().isoformat()
     dates = _daterange(parsed["first_date"], today)
@@ -366,9 +448,7 @@ def compute(force: bool = False) -> dict:
         "computed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
         "quotes": _quotes_freshness(quotes, positions),
     }
-    with _memo_lock:
-        _memo[key] = {"data": data, "at": _time.time()}
-    return data
+    return _zapisz_memo(key, data)
 
 
 def holdings(days: list) -> dict:

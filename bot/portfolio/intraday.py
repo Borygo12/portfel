@@ -25,6 +25,7 @@ notowało (weekend, święto, wczesny ranek), pokazujemy ostatnią sesję z noto
 
 import datetime
 import logging
+import threading
 import time
 from bisect import bisect_right
 
@@ -75,8 +76,58 @@ class _Track:
         return self.close[i - 1] if i else self.base
 
 
+# Memo przebiegu śróddziennego: (użytkownik, zakres) -> {"at", "data"}.
+#
+# Ten przebieg jest DROGI: składa wartość portfela ze słupków 5-minutowych dla
+# każdego waloru i każdej waluty, dzień po dniu. Same słupki mają swój cache
+# (HIST_TTL, 5 minut), ale samo składanie liczyło się od nowa przy KAŻDYM pytaniu —
+# a ekran przeglądu pyta o nie przy zmianie zakresu, przy każdym przełączeniu
+# benchmarku i co 30 sekund w tle. To była najdroższa pojedyncza rzecz na tym
+# ekranie: pomiar na produkcji dawał ~1,5 s przy gotowym wszystkim innym.
+#
+# TTL jest krótsze niż cache słupków, więc nic świeżego nie ma prawa się zgubić,
+# a ostatni punkt i tak kotwiczymy w wycenie „na żywo" z engine.compute().
+_HIST_MEMO: dict = {}
+_HIST_MEMO_TTL = 25          # s
+_hist_memo_lock = threading.Lock()
+
+
+def _memo_user() -> str:
+    import db
+    return db.current_user() or "?"
+
+
+def invalidate(user_key: str = "") -> None:
+    """Kasuje memo przebiegu — wołane razem z `engine.invalidate` (import raportu)."""
+    key = user_key or _memo_user()
+    with _hist_memo_lock:
+        for k in [k for k in _HIST_MEMO if k[0] == key]:
+            _HIST_MEMO.pop(k, None)
+
+
+# Silnik nie zna tego modułu (to on jest importowany tutaj, nie odwrotnie), więc
+# podpinamy sprzątanie stąd. Bez tego memo przebiegu przeżywałoby import raportu.
+engine.intraday_invalidate = invalidate
+
+
 def session() -> dict:
-    """Śróddzienny przebieg wartości portfela + zmiana dnia per pozycja."""
+    """Śróddzienny przebieg wartości portfela + zmiana dnia per pozycja.
+
+    Memo jak w `history` — zakres „1D" jest odpytywany co 30 s przez ekran przeglądu,
+    a składanie słupków dla całego portfela nie jest tanie.
+    """
+    klucz = (_memo_user(), "__session__")
+    with _hist_memo_lock:
+        hit = _HIST_MEMO.get(klucz)
+    if hit and time.time() - hit["at"] < _HIST_MEMO_TTL:
+        return hit["data"]
+    out = _session_now()
+    with _hist_memo_lock:
+        _HIST_MEMO[klucz] = {"data": out, "at": time.time()}
+    return out
+
+
+def _session_now() -> dict:
     d = engine.compute()
     if d.get("empty"):
         return {"empty": True}
@@ -378,6 +429,19 @@ def _thin(ts: list, values: list, values_net: list, invested: list,
 
 def history(rng: str) -> dict:
     """Przebieg wartości portfela w rozdzielczości śróddziennej dla podanego zakresu."""
+    klucz = (_memo_user(), rng)
+    with _hist_memo_lock:
+        hit = _HIST_MEMO.get(klucz)
+    if hit and time.time() - hit["at"] < _HIST_MEMO_TTL:
+        return hit["data"]
+
+    out = _history_now(rng)
+    with _hist_memo_lock:
+        _HIST_MEMO[klucz] = {"data": out, "at": time.time()}
+    return out
+
+
+def _history_now(rng: str) -> dict:
     d = engine.compute()
     if d.get("empty"):
         return {"empty": True}
