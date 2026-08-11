@@ -87,7 +87,14 @@ _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/
                  "/favicon.ico"}
 # Pliki samej aplikacji (skrypty, czcionki, grafika) muszą być dostępne dla każdego —
 # inaczej bramka odsyła 401 na bundle i użytkownik widzi białą stronę zamiast apki.
-_PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/")
+_PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/", "/api/legal/")
+
+# Dokumenty prawne MUSZĄ być publiczne. Adresy polityki prywatności i wsparcia
+# wpisuje się w formularzu App Store i Google Play, a recenzent otwiera je bez
+# konta — strona za logowaniem to gotowe odrzucenie zgłoszenia.
+import legal                                    # noqa: E402
+
+_PUBLIC_PATHS |= set(legal.ROUTES)
 
 # Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
 # analiz. To są dane serwera, nie czyjeś prywatne — wymagają uprawnień właściciela
@@ -321,6 +328,41 @@ def premium_page():
 def account_page():
     """Logowanie, stan subskrypcji i powrót z OAuth Google."""
     return _page("account.html")
+
+
+# ---------------- dokumenty prawne (strona + aplikacja) ----------------
+#
+# Apple i Google nie przyjmą aplikacji bez PUBLICZNEGO adresu polityki prywatności
+# i wsparcia. Muszą działać bez logowania i bez JavaScriptu, więc podajemy je jako
+# zwykły HTML z serwera, a nie jako ekran aplikacji webowej.
+
+from fastapi import HTTPException                # noqa: E402
+from fastapi.responses import HTMLResponse       # noqa: E402
+
+
+def _legal_page(slug: str) -> HTMLResponse:
+    html = legal.render_html(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiego dokumentu")
+    # dokumenty zmieniają się rzadko, ale zmiana ma dojść szybko — godzina wystarczy
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600"})
+
+
+for _path, _slug in legal.ROUTES.items():
+    # domknięcie po `_slug` przez argument domyślny — bez tego wszystkie ścieżki
+    # pokazywałyby ostatni dokument z pętli
+    app.get(_path, include_in_schema=False)(
+        (lambda slug=_slug: (lambda: _legal_page(slug)))()
+    )
+
+
+@app.get("/api/legal/{slug}")
+def legal_doc(slug: str):
+    """Ta sama treść dla aplikacji — telefon rysuje ją swoimi komponentami."""
+    d = legal.doc(slug)
+    if not d:
+        raise HTTPException(404, "Nie ma takiego dokumentu")
+    return d
 
 
 # ---------------- Mózg AI (prompty, kategorie, autorytet) ----------------
@@ -1257,14 +1299,14 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 3
+API_VERSION = 4
 
 
 @app.get("/api/version")
 def api_version():
     return {
         "api": API_VERSION,
-        "features": ["premium", "accounts", "sync", "allocation_pro", "etf"],
+        "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal"],
         "started_at": _STARTED_AT,
     }
 

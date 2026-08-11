@@ -66,6 +66,28 @@ def me_refresh(request: Request, v: sa.Viewer = Depends(viewer)):
     return v.to_json()
 
 
+@router.delete("/api/me")
+def me_delete(v: sa.Viewer = Depends(require_login)):
+    """Kasuje konto razem z całym portfelem. Nieodwracalnie.
+
+    Wymóg App Store („Account Deletion"): apka, w której da się założyć konto,
+    musi umieć je skasować bez pisania maili i bez wychodzenia do przeglądarki.
+    Kasujemy naprawdę wszystko — kaskada w bazie zabiera operacje, pozycje,
+    ustawienia i obserwowane; nie zostawiamy „konta zawieszonego".
+
+    Konta właściciela świadomie nie da się skasować tym przyciskiem: to samo
+    konto trzyma dane panelu, a jedno przypadkowe kliknięcie wyczyściłoby
+    produkcję bez możliwości cofnięcia.
+    """
+    if not v.user_id:
+        raise HTTPException(400, "To konto nie jest kontem Supabase — nie ma czego kasować")
+    if v.owner or v.role == "owner":
+        raise HTTPException(403, "Konta właściciela nie kasujemy z aplikacji")
+    if not sa.delete_user(v.user_id):
+        raise HTTPException(502, "Nie udało się skasować konta. Spróbuj później albo napisz do nas.")
+    return {"deleted": True}
+
+
 # ------------------------------------------------------------------- premium
 
 

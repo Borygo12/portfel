@@ -242,6 +242,40 @@ def forget(user_id: str) -> None:
         _role_cache.pop(user_id, None)
 
 
+def delete_user(user_id: str) -> bool:
+    """Kasuje konto w Supabase — nieodwracalnie, razem z danymi.
+
+    Wymóg App Store: aplikacja z rejestracją MUSI umieć skasować konto z własnego
+    wnętrza. Jedno wywołanie wystarcza, bo wszystkie tabele użytkownika mają
+    `references auth.users (id) on delete cascade` (migracje 0001 i 0002) —
+    portfel, operacje, ustawienia i obserwowane znikają razem z kontem.
+
+    Robi to KLUCZ SERWEROWY, nie token użytkownika: GoTrue nie pozwala kasować
+    samego siebie zwykłym tokenem.
+    """
+    if not (URL and SERVICE and user_id):
+        return False
+    try:
+        r = requests.delete(
+            f"{URL}/auth/v1/admin/users/{user_id}",
+            headers={"apikey": SERVICE, "Authorization": f"Bearer {SERVICE}"},
+            timeout=15,
+        )
+    except requests.RequestException:
+        return False
+    if r.status_code not in (200, 204, 404):     # 404 = konta już nie ma, cel osiągnięty
+        return False
+
+    # token skasowanego konta nie może przez minutę dalej działać z cache
+    with _lock:
+        _ent_cache.pop(user_id, None)
+        _role_cache.pop(user_id, None)
+        for k, v in list(_token_cache.items()):
+            if (v[1] or {}).get("id") == user_id:
+                _token_cache.pop(k, None)
+    return True
+
+
 # ------------------------------------------------------------ role (konta dev)
 
 _role_cache: dict[str, tuple[float, str]] = {}
