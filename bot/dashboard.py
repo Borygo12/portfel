@@ -223,6 +223,49 @@ async def _authenticate(request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def _naglowki_bezpieczenstwa(request, call_next):
+    """Nagłówki, których przeglądarka używa do ograniczenia szkód po cudzej stronie.
+
+    Żaden z nich nie zmienia tego, co widzi użytkownik — zmieniają to, co wolno
+    zrobić z naszą stroną komuś innemu. Przy serwisie o finansach to nie jest
+    ozdoba: bez nich cudza witryna może osadzić Portevo w ramce i podstawić nad
+    nim swoje przyciski, a adresy z naszymi parametrami wyciekają do obcych
+    serwerów w nagłówku `Referer`.
+
+    Czego tu NIE MA i dlaczego: `Content-Security-Policy`. Aplikacja to bundle
+    z Expo, który korzysta z osadzonych stylów i skryptów, a zbyt ciasna polityka
+    kończy się białym ekranem — czyli awarią gorszą niż problem, który miała
+    rozwiązać. Do jej wprowadzenia trzeba osobnego przejścia z trybem
+    raportowania, a nie dopisania jednej linijki.
+    """
+    odpowiedz = await call_next(request)
+
+    # `nosniff` — przeglądarka ma wierzyć deklarowanemu typowi zawartości zamiast
+    # zgadywać go z bajtów. Zgadywanie bywa drogą do wykonania cudzego skryptu.
+    odpowiedz.headers.setdefault("X-Content-Type-Options", "nosniff")
+    # Zakaz osadzania w ramce z obcej domeny (obrona przed clickjackingiem).
+    odpowiedz.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    # Do obcych serwerów idzie sama domena, bez ścieżki i parametrów — inaczej
+    # dostawca notowań widziałby w logach, jaką spółkę ktoś właśnie ogląda.
+    odpowiedz.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # Aplikacja nie używa kamery, mikrofonu ani lokalizacji, więc odbieramy je
+    # z góry: gdyby kiedyś wstrzyknięto tu obcy skrypt, nie ma o co prosić.
+    odpowiedz.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+
+    # HSTS ustawiamy WYŁĄCZNIE, gdy żądanie faktycznie przyszło po HTTPS.
+    # Nagłówek jest bezterminowym zobowiązaniem: przeglądarka, która raz go
+    # zobaczy dla danego hosta, przez rok odmówi połączenia po HTTP. Wysłany
+    # przy pracy na komputerze zablokowałby `http://localhost:8500` i panel
+    # przestałby się otwierać — bez oczywistego powodu i bez łatwego odwrotu.
+    # Za TLS odpowiada proxy hostingu, więc protokół czytamy z jego nagłówka.
+    if (request.headers.get("x-forwarded-proto") or request.url.scheme) == "https":
+        odpowiedz.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return odpowiedz
+
+
 @app.exception_handler(Exception)
 async def _friendly_errors(request, exc):
     """Zamienia dwa typowe błędy konfiguracji na czytelną odpowiedź zamiast 500.
