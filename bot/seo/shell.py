@@ -37,7 +37,8 @@ from . import features, glossary, guides, site
 log = logging.getLogger("seo.shell")
 
 _zamek = threading.Lock()
-_pamiec: dict = {"mtime": 0.0, "html": ""}
+#: tytuł strony -> (mtime pliku, gotowy HTML)
+_pamiec: dict = {}
 
 #: Adresy zakładek aplikacji. Pod każdym serwer podaje TĘ SAMĄ aplikację, a to,
 #: którą zakładkę otworzyć, aplikacja odczytuje sobie z adresu (`webRoutes.ts`).
@@ -62,8 +63,34 @@ def _esc(t: str) -> str:
     return _html.escape(t or "", quote=True)
 
 
-def _meta() -> str:
-    tytul = "Portevo — kalendarz wyników spółek i portfel inwestycyjny"
+TYTUL_GLOWNY = "Portevo — kalendarz wyników spółek i portfel inwestycyjny"
+
+#: Tytuł karty przeglądarki per adres zakładki.
+#:
+#: Po co, skoro te adresy i tak są `noindex`: tytuł to jedyna rzecz, po której
+#: rozpoznaje się kartę wśród kilkunastu otwartych, i to on pokazuje się, gdy
+#: ktoś wyśle link znajomemu. Jeden wspólny tytuł na wszystkich zakładkach
+#: znaczył w praktyce tyle, co brak tytułu.
+TYTULY = {
+    "/": TYTUL_GLOWNY,
+    "/przeglad": "Przegląd portfela — Portevo",
+    "/alokacja": "Alokacja portfela — Portevo",
+    "/zamkniete": "Zamknięte pozycje — Portevo",
+    "/earnings": "Kalendarz wyników spółek — Portevo",
+    "/bot-newsow": "Bot newsów — Portevo",
+    "/narzedzia": "Narzędzia — Portevo",
+    "/wiecej": "Więcej — Portevo",
+}
+
+
+def tytul_dla(adres: str) -> str:
+    czysty = (adres or "/").split("?")[0].split("#")[0]
+    if len(czysty) > 1:
+        czysty = czysty.rstrip("/")
+    return TYTULY.get(czysty or "/", TYTUL_GLOWNY)
+
+
+def _meta(tytul: str = TYTUL_GLOWNY) -> str:
     opis = site.DESCRIPTION
     kanoniczny = site.absolute("/")
     obrazek = site.absolute(site.OG_IMAGE)
@@ -190,20 +217,19 @@ padding-left:14px}}
 </noscript>"""
 
 
-def _zbuduj(surowy: str) -> str:
+def _zbuduj(surowy: str, adres: str = "/") -> str:
     """Wstrzykuje meta i treść zapasową w wyeksportowany plik aplikacji."""
+    tytul = tytul_dla(adres)
     out = surowy.replace('<html lang="en">', '<html lang="pl">', 1)
     if '<html lang="pl">' not in out:
         # Expo bywa aktualizowane i potrafi zmienić ten fragment — wtedy sam
         # znacznik zostaje, ale reszta wstrzyknięcia ma zadziałać mimo to.
         log.warning("Nie znaleziono <html lang=\"en\"> w index.html — sprawdź eksport Expo")
 
-    out = out.replace(
-        "<title>Portevo</title>",
-        "<title>Portevo — kalendarz wyników spółek i portfel inwestycyjny</title>", 1)
+    out = out.replace("<title>Portevo</title>", f"<title>{_esc(tytul)}</title>", 1)
 
     if "</head>" in out:
-        out = out.replace("</head>", _meta() + "\n</head>", 1)
+        out = out.replace("</head>", _meta(tytul) + "\n</head>", 1)
     else:
         log.error("Brak </head> w index.html — meta nie zostały dodane")
 
@@ -212,26 +238,31 @@ def _zbuduj(surowy: str) -> str:
     return out
 
 
-def index_html(sciezka: str) -> str:
-    """Zawartość strony aplikacji, z cache po czasie modyfikacji pliku.
+def index_html(plik: str, adres: str = "/") -> str:
+    """Zawartość strony aplikacji dla danego adresu, z cache.
 
-    Cache po `mtime`, a nie na stałe: gdy podmienisz `web/` nową wersją aplikacji,
-    serwer ma to zauważyć bez restartu.
+    Cache jest po `mtime` pliku ORAZ po adresie: strony różnią się tytułem, więc
+    jedna zapamiętana wersja podawałaby pod wszystkimi adresami tytuł tego,
+    kto wszedł pierwszy. Wariantów jest osiem, więc pamięć to nie problem.
+
+    `mtime` w kluczu jest po to, żeby podmiana `web/` nową wersją aplikacji była
+    widoczna bez restartu serwera.
     """
     try:
-        mtime = os.path.getmtime(sciezka)
+        mtime = os.path.getmtime(plik)
     except OSError:
         mtime = 0.0
 
+    klucz = tytul_dla(adres)
     with _zamek:
-        if _pamiec["html"] and _pamiec["mtime"] == mtime:
-            return _pamiec["html"]
+        zapisane = _pamiec.get(klucz)
+        if zapisane and zapisane[0] == mtime:
+            return zapisane[1]
 
-    with open(sciezka, encoding="utf-8") as f:
+    with open(plik, encoding="utf-8") as f:
         surowy = f.read()
-    gotowy = _zbuduj(surowy)
+    gotowy = _zbuduj(surowy, adres)
 
     with _zamek:
-        _pamiec["mtime"] = mtime
-        _pamiec["html"] = gotowy
+        _pamiec[klucz] = (mtime, gotowy)
     return gotowy

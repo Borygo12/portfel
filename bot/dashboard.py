@@ -366,7 +366,7 @@ def favicon():
     return Response(status_code=204)
 
 
-def _aplikacja(noindex: bool = False):
+def _aplikacja(adres: str = "/", noindex: bool = False):
     """Zbudowana aplikacja webowa jako odpowiedź HTTP.
 
     Plik nie idzie prosto z dysku: `seo.shell` dokleja do niego tytuł, opis, Open
@@ -392,7 +392,7 @@ def _aplikacja(noindex: bool = False):
 
     from fastapi.responses import HTMLResponse as _HTML
     try:
-        return _HTML(seo_shell.index_html(_WEB_INDEX), headers=naglowki)
+        return _HTML(seo_shell.index_html(_WEB_INDEX, adres), headers=naglowki)
     except Exception:  # noqa: BLE001
         # Aplikacja ma się otworzyć nawet wtedy, gdy wstrzykiwanie zawiedzie —
         # brak meta jest gorszy niż nic, ale biała strona jest gorsza od obu.
@@ -413,8 +413,11 @@ def index():
 # Samo przełączanie zakładek dzieje się w przeglądarce bez pytania serwera, ale
 # gdy ktoś wciśnie F5 albo otworzy link od znajomego, żądanie przychodzi tutaj —
 # i bez tej pętli dostawałby czterysta czwórkę zamiast aplikacji.
+# Domknięcie po `_sciezka` przez argument domyślny — bez tego wszystkie trasy
+# podawałyby tytuł ostatniej zakładki z pętli.
 for _sciezka in seo_shell.SCIEZKI_APLIKACJI:
-    app.get(_sciezka, include_in_schema=False)(lambda: _aplikacja(noindex=True))
+    app.get(_sciezka, include_in_schema=False)(
+        lambda _s=_sciezka: _aplikacja(_s, noindex=True))
 
 
 @app.get("/premium")
