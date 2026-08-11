@@ -39,6 +39,24 @@ log = logging.getLogger("seo.shell")
 _zamek = threading.Lock()
 _pamiec: dict = {"mtime": 0.0, "html": ""}
 
+#: Adresy zakładek aplikacji. Pod każdym serwer podaje TĘ SAMĄ aplikację, a to,
+#: którą zakładkę otworzyć, aplikacja odczytuje sobie z adresu (`webRoutes.ts`).
+#:
+#: Po co: bez tego adres w przeglądarce zawsze brzmiał „portevo.pl" niezależnie
+#: od tego, co się ogląda — nie dało się wysłać komuś linku do Alokacji ani
+#: wrócić strzałką wstecz. Odświeżenie strony pod takim adresem musi jednak
+#: dostać z serwera aplikację, a nie czterysta czwórkę, i po to jest ta lista.
+#:
+#: Te adresy są CELOWO wyłączone z indeksowania (`noindex` w routingu). Dla
+#: robota są pustym pojemnikiem na JavaScript — treść pod te tematy stoi na
+#: podstronach pozycjonowanych (`/analiza-portfela`, `/kalendarz-wynikow-spolek`).
+#: Gdyby weszły do indeksu, konkurowałyby z nimi o to samo zapytanie i Google
+#: wybierałby jedną z dwóch, zwykle tę pustą.
+SCIEZKI_APLIKACJI = (
+    "/przeglad", "/alokacja", "/zamkniete", "/earnings", "/bot-newsow",
+    "/narzedzia", "/wiecej",
+)
+
 
 def _esc(t: str) -> str:
     return _html.escape(t or "", quote=True)

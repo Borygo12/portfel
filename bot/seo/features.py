@@ -46,7 +46,7 @@ STRONY = {
                 "z warszawskiej giełdy obok amerykańskich, z prognozą zysku na akcję, "
                 "godziną publikacji i informacją, jak kurs zachowywał się po "
                 "poprzednich wynikach.",
-        "akcje": [("/", "Otwórz kalendarz"), ("/wyniki-finansowe", "Wyniki spółek A–Z")],
+        "akcje": [("/earnings", "Otwórz kalendarz"), ("/wyniki-finansowe", "Wyniki spółek A–Z")],
         "sekcje": [
             {
                 "h2": "Co pokazuje kalendarz wyników",
@@ -156,7 +156,7 @@ STRONY = {
                 "z niego cały portfel: pozycje, wpłaty, prowizje i wycenę dzień po "
                 "dniu w złotówkach. Bez przepisywania transakcji do arkusza i bez "
                 "podawania komukolwiek danych logowania do brokera.",
-        "akcje": [("/", "Otwórz portfel"), ("/analiza-portfela", "Analiza i ryzyko")],
+        "akcje": [("/przeglad", "Otwórz portfel"), ("/analiza-portfela", "Analiza i ryzyko")],
         "sekcje": [
             {
                 "h2": "Skąd biorą się dane o portfelu",
@@ -257,7 +257,7 @@ STRONY = {
         "lead": "Fundusze ETF opisane po polsku, z filtrami, które mają znaczenie przy "
                 "wyborze: region, sektor, klasa aktywów, waluta notowania i opłata za "
                 "zarządzanie. Bez przekopywania się przez angielskie karty funduszy.",
-        "akcje": [("/", "Otwórz skaner")],
+        "akcje": [("/narzedzia", "Otwórz skaner")],
         "sekcje": [
             {
                 "h2": "Po czym filtrujesz",
@@ -334,7 +334,7 @@ STRONY = {
         "lead": "Portfel z dwudziestu spółek bywa mniej zdywersyfikowany niż z pięciu — "
                 "jeśli wszystkie stoją w tej samej branży i tej samej walucie. Analiza "
                 "pokazuje ten obraz wprost, zamiast zostawiać go domysłom.",
-        "akcje": [("/", "Otwórz analizę"), ("/portfel-inwestycyjny", "Zacznij od portfela")],
+        "akcje": [("/alokacja", "Otwórz analizę"), ("/portfel-inwestycyjny", "Zacznij od portfela")],
         "sekcje": [
             {
                 "h2": "Sześć sposobów spojrzenia na ten sam portfel",
@@ -409,7 +409,7 @@ STRONY = {
                 "działalności, wskaźniki finansowe i medianę tych samych wskaźników "
                 "dla spółek z branży — bo sam wskaźnik C/Z nic nie mówi, dopóki nie ma "
                 "do czego go przyłożyć.",
-        "akcje": [("/", "Otwórz wyszukiwarkę"), ("/wyniki-finansowe", "Wyniki spółek A–Z")],
+        "akcje": [("/przeglad", "Otwórz wyszukiwarkę"), ("/wyniki-finansowe", "Wyniki spółek A–Z")],
         "sekcje": [
             {
                 "h2": "Wyszukiwarka obejmuje cały świat",
@@ -477,7 +477,7 @@ STRONY = {
         "lead": "Odczyt inflacji albo decyzja o stopach potrafi w kilka minut przykryć "
                 "wszystkie dobre raporty spółek z danego dnia. Kalendarz makro pokazuje "
                 "te terminy obok kalendarza wyników, żeby jedno nie zaskakiwało drugiego.",
-        "akcje": [("/", "Otwórz kalendarz"),
+        "akcje": [("/earnings", "Otwórz kalendarz"),
                   ("/kalendarz-wynikow-spolek", "Kalendarz wyników spółek")],
         "sekcje": [
             {
@@ -538,7 +538,7 @@ STRONY = {
                 "Portevo nasłuchuje źródeł, oddaje komunikat modelowi językowemu "
                 "i pokazuje ocenę wydźwięku wraz z uzasadnieniem — a potem sprawdza, "
                 "co kurs zrobił naprawdę.",
-        "akcje": [("/", "Otwórz analizy")],
+        "akcje": [("/bot-newsow", "Otwórz analizy")],
         "sekcje": [
             {
                 "h2": "Czego to narzędzie NIE robi",
@@ -655,7 +655,10 @@ def zbuduj(sciezka: str) -> str | None:
             "Powiązane tematy", html_dodatkowy=render.chipsy(d["powiazane"])))
 
     tytul_cta, tekst_cta = d["cta"]
-    bloki.append(render.zacheta(tytul_cta, tekst_cta))
+    # Przycisk na dole prowadzi tam samo, co ten na górze — czyli w zakładkę
+    # aplikacji opisaną na tej stronie, a nie na ogólny adres główny.
+    cel = (d.get("akcje") or [("/", "")])[0][0]
+    bloki.append(render.zacheta(tytul_cta, tekst_cta, adres=cel))
     bloki.append(render.zastrzezenie())
 
     okruchy = [("/funkcje", "Funkcje"), ("", d["h1"])]

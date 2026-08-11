@@ -101,8 +101,13 @@ _PUBLIC_PATHS |= set(legal.ROUTES)
 # logowania zamiast treści i cała warstwa SEO byłaby niewidoczna. Listę podaje
 # sam moduł, żeby dołożenie nowej sekcji nie wymagało pamiętania o tym pliku.
 from seo import routes as seo_routes             # noqa: E402
+from seo import shell as seo_shell               # noqa: E402
 
 _PUBLIC_PATHS |= seo_routes.PUBLICZNE_SCIEZKI
+# Adresy zakładek aplikacji też muszą być publiczne — inaczej wejście wprost na
+# „/earnings" kończyłoby się przekierowaniem na ekran logowania zamiast aplikacji,
+# choć sama aplikacja jest dostępna dla gościa.
+_PUBLIC_PATHS |= set(seo_shell.SCIEZKI_APLIKACJI)
 _PUBLIC_PREFIXES += seo_routes.PUBLICZNE_PREFIKSY
 
 # Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
@@ -318,37 +323,55 @@ def favicon():
     return Response(status_code=204)
 
 
-@app.get("/")
-def index():
-    """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze.
+def _aplikacja(noindex: bool = False):
+    """Zbudowana aplikacja webowa jako odpowiedź HTTP.
 
     Plik nie idzie prosto z dysku: `seo.shell` dokleja do niego tytuł, opis, Open
     Graph, ikony i manifest, a dla przeglądarek bez JavaScriptu treść zapasową
     z linkami do podstron. Eksport z Expo nadpisuje `index.html` przy każdej
     przebudowie aplikacji, więc wpisanie tego do pliku i tak by nie przetrwało.
     """
-    if _WEB_READY:
-        from fastapi.responses import HTMLResponse as _HTML
-        from seo import shell as seo_shell
-        try:
-            return _HTML(seo_shell.index_html(_WEB_INDEX),
-                         headers={"Cache-Control": "no-cache, must-revalidate"})
-        except Exception:  # noqa: BLE001
-            # Aplikacja ma się otworzyć nawet wtedy, gdy wstrzykiwanie zawiedzie —
-            # brak meta jest gorszy niż nic, ale biała strona jest gorsza od obu.
-            log.exception("Wstrzykiwanie meta do index.html nie powiodło się")
-            return FileResponse(_WEB_INDEX,
-                                headers={"Cache-Control": "no-cache, must-revalidate"})
-    # Świadomie NIE pokazujemy tu żadnej strony zastępczej: strona „o serwerze"
-    # z linkami donikąd była ślepą uliczką, w której lądował każdy po zalogowaniu.
-    # Lepiej krzyczeć błędem niż udawać, że tak ma być.
-    from fastapi.responses import JSONResponse
-    return JSONResponse(
-        {"error": "Brak zbudowanej aplikacji w obrazie (katalog web/). "
-                  "Uruchom: npx expo export --platform web w mobile/ i skopiuj do web/.",
-         "code": "web_build_missing"},
-        status_code=503,
-    )
+    naglowki = {"Cache-Control": "no-cache, must-revalidate"}
+    if noindex:
+        naglowki["X-Robots-Tag"] = "noindex, follow"
+
+    if not _WEB_READY:
+        # Świadomie NIE pokazujemy tu żadnej strony zastępczej: strona „o serwerze"
+        # z linkami donikąd była ślepą uliczką, w której lądował każdy po zalogowaniu.
+        # Lepiej krzyczeć błędem niż udawać, że tak ma być.
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            {"error": "Brak zbudowanej aplikacji w obrazie (katalog web/). "
+                      "Uruchom: npx expo export --platform web w mobile/ i skopiuj do web/.",
+             "code": "web_build_missing"},
+            status_code=503,
+        )
+
+    from fastapi.responses import HTMLResponse as _HTML
+    try:
+        return _HTML(seo_shell.index_html(_WEB_INDEX), headers=naglowki)
+    except Exception:  # noqa: BLE001
+        # Aplikacja ma się otworzyć nawet wtedy, gdy wstrzykiwanie zawiedzie —
+        # brak meta jest gorszy niż nic, ale biała strona jest gorsza od obu.
+        log.exception("Wstrzykiwanie meta do index.html nie powiodło się")
+        return FileResponse(_WEB_INDEX, headers=naglowki)
+
+
+@app.get("/")
+def index():
+    """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze."""
+    return _aplikacja()
+
+
+# Adresy zakładek aplikacji („/alokacja", „/earnings"…). Każdy podaje tę samą
+# aplikację, a zakładkę do otwarcia wybiera ona sama na podstawie adresu.
+#
+# Ten kawałek istnieje po to, żeby ODŚWIEŻENIE strony pod takim adresem działało.
+# Samo przełączanie zakładek dzieje się w przeglądarce bez pytania serwera, ale
+# gdy ktoś wciśnie F5 albo otworzy link od znajomego, żądanie przychodzi tutaj —
+# i bez tej pętli dostawałby czterysta czwórkę zamiast aplikacji.
+for _sciezka in seo_shell.SCIEZKI_APLIKACJI:
+    app.get(_sciezka, include_in_schema=False)(lambda: _aplikacja(noindex=True))
 
 
 @app.get("/premium")
