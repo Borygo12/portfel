@@ -96,6 +96,15 @@ import legal                                    # noqa: E402
 
 _PUBLIC_PATHS |= set(legal.ROUTES)
 
+# Strony pozycjonowane MUSZĄ być publiczne. Robot Google nie ma konta i nie
+# zaloguje się — gdyby trafił na bramkę, dostałby przekierowanie na ekran
+# logowania zamiast treści i cała warstwa SEO byłaby niewidoczna. Listę podaje
+# sam moduł, żeby dołożenie nowej sekcji nie wymagało pamiętania o tym pliku.
+from seo import routes as seo_routes             # noqa: E402
+
+_PUBLIC_PATHS |= seo_routes.PUBLICZNE_SCIEZKI
+_PUBLIC_PREFIXES += seo_routes.PUBLICZNE_PREFIKSY
+
 # Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
 # analiz. To są dane serwera, nie czyjeś prywatne — wymagają uprawnień właściciela
 # albo zalogowania, ale nie potrzebują kontekstu użytkownika w Postgresie.
@@ -257,6 +266,10 @@ from fastapi.staticfiles import StaticFiles    # noqa: E402
 
 app.include_router(account_api.router)
 
+# Podstrony pozycjonowane: funkcje, wyniki spółek, poradniki, słownik, a także
+# sitemap.xml, robots.txt, llms.txt i manifest aplikacji webowej.
+app.include_router(seo_routes.router)
+
 # Skrypty i style stron logowania oraz strony sprzedażowej.
 app.mount("/static", StaticFiles(directory=os.path.join(_DIR, "static")), name="static")
 
@@ -291,8 +304,13 @@ def favicon():
     Plik leży w `web/` od zawsze, ale nic go nie podawało — przeglądarka pytała
     o niego przy każdym wejściu i dostawała 404, więc karta z Portevo była bez
     znaku firmowego. Kosztowało to jedną linijkę, której po prostu nie było.
+
+    Pierwszy w kolejce jest ikonek z `static/seo/`: ten z `web/` pochodzi
+    z szablonu Expo i pokazywał obcy znak, a nie Portevo. Generuje go
+    `bot/seo/make_assets.py` z tego samego znaku firmowego co reszta grafiki.
     """
-    for kandydat in (os.path.join(_WEB_DIR, "favicon.ico"),
+    for kandydat in (os.path.join(_DIR, "static", "seo", "favicon.ico"),
+                     os.path.join(_WEB_DIR, "favicon.ico"),
                      os.path.join(_DIR, "icon.png")):
         if os.path.isfile(kandydat):
             return FileResponse(kandydat, headers={"Cache-Control": "public, max-age=86400"})
@@ -302,10 +320,25 @@ def favicon():
 
 @app.get("/")
 def index():
-    """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze."""
+    """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze.
+
+    Plik nie idzie prosto z dysku: `seo.shell` dokleja do niego tytuł, opis, Open
+    Graph, ikony i manifest, a dla przeglądarek bez JavaScriptu treść zapasową
+    z linkami do podstron. Eksport z Expo nadpisuje `index.html` przy każdej
+    przebudowie aplikacji, więc wpisanie tego do pliku i tak by nie przetrwało.
+    """
     if _WEB_READY:
-        return FileResponse(_WEB_INDEX,
-                            headers={"Cache-Control": "no-cache, must-revalidate"})
+        from fastapi.responses import HTMLResponse as _HTML
+        from seo import shell as seo_shell
+        try:
+            return _HTML(seo_shell.index_html(_WEB_INDEX),
+                         headers={"Cache-Control": "no-cache, must-revalidate"})
+        except Exception:  # noqa: BLE001
+            # Aplikacja ma się otworzyć nawet wtedy, gdy wstrzykiwanie zawiedzie —
+            # brak meta jest gorszy niż nic, ale biała strona jest gorsza od obu.
+            log.exception("Wstrzykiwanie meta do index.html nie powiodło się")
+            return FileResponse(_WEB_INDEX,
+                                headers={"Cache-Control": "no-cache, must-revalidate"})
     # Świadomie NIE pokazujemy tu żadnej strony zastępczej: strona „o serwerze"
     # z linkami donikąd była ślepą uliczką, w której lądował każdy po zalogowaniu.
     # Lepiej krzyczeć błędem niż udawać, że tak ma być.
