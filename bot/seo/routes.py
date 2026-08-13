@@ -40,6 +40,7 @@ PUBLICZNE_SCIEZKI = {
     "/funkcje", "/wyniki-finansowe", "/poradniki", "/slownik",
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
+    "/api/seo/strony",
 } | set(features.STRONY)
 
 PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/")
@@ -194,6 +195,94 @@ def sitemap():
     czesci.append("</urlset>")
     return Response("".join(czesci), media_type="application/xml",
                     headers={"Cache-Control": "public, max-age=3600"})
+
+
+# --------------------------------------------------------------- spis dla aplikacji
+
+
+def _grupy_stron() -> list[dict]:
+    """Katalog wszystkich podstron pozycjonowanych, pogrupowany tematycznie.
+
+    Ten sam spis, z którego powstaje sitemapa, tylko z tytułami i opisami —
+    sitemapa jest dla robota, a to jest dla człowieka.
+    """
+    funkcje = [{
+        "adres": s,
+        "tytul": features.STRONY[s]["h1"].split(" — ")[0],
+        "opis": features.STRONY[s]["opis"],
+        "tag": features.STRONY[s].get("nadtytul", ""),
+    } for s in features.STRONY]
+
+    poradniki = [{
+        "adres": f"/poradniki/{slug}",
+        "tytul": guides.PORADNIKI[slug]["h1"],
+        "opis": guides.PORADNIKI[slug]["opis"],
+        "tag": "",
+    } for slug in guides.KOLEJNOSC]
+
+    slownik = [{
+        "adres": f"/slownik/{h[0]}",
+        "tytul": h[1],
+        "opis": h[2],
+        "tag": "",
+    } for h in glossary.HASLA]
+
+    spolki = [{
+        "adres": companies.adres(s),
+        "tytul": s["name"],
+        "opis": s.get("sector_pl") or companies.gielda_pl(s),
+        "tag": companies.ticker(s),
+        "rynek": s["market"],
+    } for s in companies.SPOLKI]
+
+    return [
+        {"id": "funkcje", "tytul": "Funkcje", "opis": "Podstrony opisujące narzędzia aplikacji",
+         "strony": funkcje, "spis": "/funkcje"},
+        {"id": "poradniki", "tytul": "Poradniki", "opis": "Teksty odpowiadające na pytania inwestorów",
+         "strony": poradniki, "spis": "/poradniki"},
+        {"id": "slownik", "tytul": "Słownik giełdowy", "opis": "Pojęcia z definicją i przykładem liczbowym",
+         "strony": slownik, "spis": "/slownik"},
+        {"id": "spolki", "tytul": "Wyniki spółek", "opis": "Karta wyników każdej spółki z katalogu",
+         "strony": spolki, "spis": "/wyniki-finansowe"},
+    ]
+
+
+#: Strony spoza warstwy SEO, ale też publiczne i warte podejrzenia.
+_POZOSTALE = [
+    {"adres": "/premium", "tytul": "Wersja płatna", "opis": "Strona sprzedażowa premium", "tag": ""},
+    {"adres": "/kontakt", "tytul": "Kontakt i pomoc", "opis": "Adres kontaktowy i wsparcie", "tag": ""},
+    {"adres": "/regulamin", "tytul": "Regulamin", "opis": "Warunki korzystania z serwisu", "tag": ""},
+    {"adres": "/prywatnosc", "tytul": "Polityka prywatności", "opis": "Jak przetwarzamy dane", "tag": ""},
+]
+
+#: Pliki techniczne — nie treść, ale też chce się je czasem podejrzeć.
+_PLIKI = [
+    {"adres": "/sitemap.xml", "tytul": "sitemap.xml", "opis": "Mapa serwisu dla wyszukiwarek", "tag": ""},
+    {"adres": "/robots.txt", "tytul": "robots.txt", "opis": "Reguły dla robotów, w tym AI", "tag": ""},
+    {"adres": "/llms.txt", "tytul": "llms.txt", "opis": "Opis serwisu dla modeli językowych", "tag": ""},
+    {"adres": "/manifest.webmanifest", "tytul": "manifest.webmanifest",
+     "opis": "Manifest aplikacji webowej", "tag": ""},
+]
+
+
+@router.get("/api/seo/strony", include_in_schema=False)
+def spis_stron_json():
+    """Spis podstron dla przeglądarki wewnątrz aplikacji.
+
+    Po co osobny endpoint, skoro te adresy są w sitemapie: sitemapa nie niesie
+    tytułów ani opisów, a przepisanie listy do kodu aplikacji oznaczałoby dwa
+    źródła prawdy rozjeżdżające się przy każdej nowej podstronie. Tutaj spis
+    powstaje z tych samych modułów, z których powstają same strony — nowa
+    podstrona pojawia się w aplikacji sama, bez dotykania czegokolwiek.
+    """
+    grupy = _grupy_stron()
+    return {
+        "grupy": grupy,
+        "pozostale": _POZOSTALE,
+        "pliki": _PLIKI,
+        "razem": sum(len(g["strony"]) for g in grupy) + len(_POZOSTALE),
+        "baza": site.URL,
+    }
 
 
 # --------------------------------------------------------------- robots.txt

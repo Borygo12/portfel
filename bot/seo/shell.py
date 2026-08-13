@@ -55,7 +55,7 @@ _pamiec: dict = {}
 #: wybierałby jedną z dwóch, zwykle tę pustą.
 SCIEZKI_APLIKACJI = (
     "/przeglad", "/alokacja", "/zamkniete", "/earnings", "/bot-newsow",
-    "/narzedzia", "/wiecej",
+    "/narzedzia", "/artykuly", "/wiecej", "/aplikacja",
 )
 
 
@@ -79,7 +79,9 @@ TYTULY = {
     "/earnings": "Kalendarz wyników spółek — Portevo",
     "/bot-newsow": "Bot newsów — Portevo",
     "/narzedzia": "Narzędzia — Portevo",
+    "/artykuly": "Artykuły i dane — Portevo",
     "/wiecej": "Więcej — Portevo",
+    "/aplikacja": "Portevo na telefon — pobierz aplikację",
 }
 
 

@@ -84,7 +84,13 @@ _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 # połączenia telefonu ma własną blokadę „tylko z tego komputera".
 _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/features",
                  "/api/premium/event", "/api/me", "/api/version", "/api/health",
-                 "/favicon.ico"}
+                 "/favicon.ico",
+                 # Wizytówka bota — warstwa sprzedażowa musi działać dla kogoś BEZ konta.
+                 # Ktoś wchodzi z Google na /analiza-newsow-ai, klika „Otwórz analizy"
+                 # i ląduje w zakładce bota: gdyby ten adres wymagał logowania,
+                 # zobaczyłby ekran logowania zamiast produktu. Endpoint nie oddaje
+                 # ani treści analiz, ani promptów — tylko to, co i tak jest reklamą.
+                 "/api/bot/showcase"}
 # Pliki samej aplikacji (skrypty, czcionki, grafika) muszą być dostępne dla każdego —
 # inaczej bramka odsyła 401 na bundle i użytkownik widzi białą stronę zamiast apki.
 _PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/", "/api/legal/")
@@ -220,6 +226,41 @@ async def _authenticate(request, call_next):
         )
 
     request.state.viewer = viewer
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def _kanoniczna_domena(request, call_next):
+    """Przeglądarka spod adresu hostingu wraca na domenę.
+
+    Supabase po zalogowaniu przez Google odsyła na `redirect_to` TYLKO wtedy, gdy
+    ten adres jest na liście dozwolonych w panelu Supabase. Gdy go tam nie ma,
+    cicho podstawia „Site URL" — i człowiek, który kliknął logowanie na
+    `portevo.pl`, ląduje na `…up.railway.app`. To jest zapasowa bariera na ten
+    przypadek: token logowania wraca w części adresu po `#`, a tę przeglądarka
+    przenosi przez przekierowanie, więc sesja się nie gubi.
+
+    Zawężenia, bez których to by szkodziło:
+    - tylko GET/HEAD z `Accept: text/html`, czyli wejście człowieka w przeglądarce.
+      Aplikacja i telefon proszą o JSON i mają rozmawiać z serwerem tam, gdzie się
+      z nim połączyły;
+    - tylko host hostingu. `localhost` i adres w LAN muszą działać dalej, bo na
+      nich stoi panel na komputerze.
+
+    Kod 302, a nie 301: przekierowanie stałe przeglądarka zapamiętuje na długo
+    i gdyby domena kiedyś przestała działać, nie dałoby się wrócić pod adres
+    Railway nawet ręcznie.
+    """
+    from seo import site as seo_site
+
+    host = (request.headers.get("host") or "").split(":", 1)[0].lower()
+    if (request.method in ("GET", "HEAD")
+            and host.endswith("railway.app")
+            and not seo_site.kanoniczny_host(host)
+            and "text/html" in (request.headers.get("accept") or "")):
+        from fastapi.responses import RedirectResponse
+        cel = request.url.replace(scheme="https", netloc=seo_site.HOST)
+        return RedirectResponse(str(cel), status_code=302)
     return await call_next(request)
 
 
@@ -693,6 +734,125 @@ def get_state():
 @app.post("/api/params")
 def set_params(updates: dict):
     return save_params(updates)
+
+
+# ---------------- Wizytówka bota (widok bez premium, także dla gościa) ----------------
+#
+# Osobny endpoint zamiast okrojonego `/api/state`, z dwóch powodów.
+#
+# 1. GRANICA. `/api/state` niesie treść analiz — czyli dokładnie ten towar, za który
+#    płaci się w premium. Wizytówka nie może go dotykać nawet przypadkiem, więc nie
+#    filtrujemy tamtej odpowiedzi, tylko budujemy nową z rzeczy jawnych: co bot
+#    obserwuje, jak często, ile już przeanalizował i jak wygląda ścieżka decyzji.
+#    Promptów też tu nie ma — oddajemy ich SPIS (tytuły sekcji), nie treść.
+# 2. DOSTĘP. Ten adres jest publiczny, a `/api/state` wymaga konta.
+
+_WIZYTOWKA = {"ts": 0.0, "dane": None}
+_WIZYTOWKA_TTL = 20.0     # tyle sekund trzyma się odpowiedź; liczniki i tak tykają w apce
+
+
+def _statystyka_analiz() -> tuple[int, dict | None]:
+    """Ile analiz w ostatniej dobie i kiedy była ostatnia.
+
+    Czytamy ogon pliku, nie całość: ten endpoint odpytuje każdy gość, a `signals.jsonl`
+    rośnie w nieskończoność. Tysiąc wpisów to z zapasem doba nawet w sezonie wyników.
+    """
+    teraz = time.time()
+    prog = teraz - 24 * 3600
+    ile = 0
+    ostatnia = None
+    for wpis in state.recent_signals(1000):        # od najnowszego
+        try:
+            kiedy = time.mktime(time.strptime(str(wpis.get("ts", "")), "%Y-%m-%d %H:%M:%S"))
+        except (ValueError, TypeError):
+            continue
+        if ostatnia is None:
+            ostatnia = {"ago": max(0.0, teraz - kiedy), "source": wpis.get("source") or ""}
+        if kiedy >= prog:
+            ile += 1
+    return ile, ostatnia
+
+
+@app.get("/api/bot/showcase")
+def bot_showcase():
+    """Publiczna wizytówka bota: nasłuch na żywo + ścieżka decyzji, bez treści analiz."""
+    if _WIZYTOWKA["dane"] and time.time() - _WIZYTOWKA["ts"] < _WIZYTOWKA_TTL:
+        # server_time musi być świeży, inaczej odliczanie w apce skacze w tył
+        return {**_WIZYTOWKA["dane"], "server_time": time.time()}
+
+    p = load_params()
+    polls = runner.status().get("polls", {}) or {}
+
+    # Klucze źródeł trzymamy w jednym miejscu z rytmem odpytywania — apka dokłada
+    # do nich nazwy i kolory, bo to warstwa wyglądu, a nie danych.
+    ZRODLA = [
+        ("truth", "truth_social_enabled", "truth_social_poll_seconds"),
+        ("squawk", "squawk_enabled", "squawk_poll_seconds"),
+        ("edgar", "sec_edgar_enabled", "sec_poll_seconds"),
+        ("gov", "gov_rss_enabled", "gov_rss_poll_seconds"),
+        ("gpw", "gpw_espi_enabled", "gpw_espi_poll_seconds"),
+        ("knf", "knf_enabled", "knf_poll_seconds"),
+        ("knf_ann", "knf_ann_enabled", "knf_ann_poll_seconds"),
+        ("sitemap", "sitemap_enabled", "sitemap_poll_seconds"),
+    ]
+    zrodla = []
+    sprawdzen_na_dobe = 0
+    for klucz, flaga, rytm in ZRODLA:
+        wlaczone = bool(p.get(flaga))
+        interval = int(polls.get(klucz, {}).get("interval") or p.get(rytm) or 0)
+        zrodla.append({"key": klucz, "enabled": wlaczone, "interval": interval,
+                       "ts": float(polls.get(klucz, {}).get("ts") or 0)})
+        if wlaczone and interval > 0:
+            sprawdzen_na_dobe += round(86400 / interval)
+
+    cfg = prompts.load_config()
+    kategorie = [{"label": k.get("label", ""), "mult": float(k.get("mult", 1) or 1),
+                  "desc": k.get("desc", "")}
+                 for k in (cfg.get("categories") or {}).values() if k.get("enabled", True)]
+    kategorie.sort(key=lambda k: -k["mult"])
+    autorytet = [{"label": a.get("label", ""), "mult": float(a.get("mult", 1) or 1),
+                  "desc": a.get("desc", "")}
+                 for a in (cfg.get("authority") or {}).values()]
+    autorytet.sort(key=lambda a: -a["mult"])
+
+    # Objętość promptu zamiast promptu: pokazuje, że za analizą stoi kilka stron
+    # instrukcji, a nie jedno zdanie — bez oddawania samych instrukcji.
+    prompt_znakow = len(prompts.build_system("gpw_espi"))
+
+    analiz_24h, ostatnia = _statystyka_analiz()
+
+    dane = {
+        "bot_alive": runner.is_running(),
+        "paused": bool(p.get("kill_switch")),
+        "sources": zrodla,
+        "counts": {
+            "sources_on": sum(1 for z in zrodla if z["enabled"]),
+            "sources_all": len(zrodla),
+            "checks_per_day": sprawdzen_na_dobe,
+            "analyses_24h": analiz_24h,
+            "categories": len(kategorie),
+            "authority": len(autorytet),
+            "prompt_chars": prompt_znakow,
+        },
+        "last_analysis": ostatnia,
+        "brain": {
+            "sections": [{"key": k, "title": t, "desc": d} for k, t, d in prompts.SECTION_META],
+            "categories": kategorie,
+            "authority": autorytet,
+            "models": {"free": analyzer.free_models(),
+                       "paid_fast": analyzer.paid_fast_model(),
+                       "verify": analyzer.verify_model()},
+            "min_strength": int(p.get("min_signal_strength") or 0),
+            "verify_enabled": bool(p.get("verify_enabled", True)),
+            "thematic_enabled": bool(p.get("thematic_enabled", True)),
+            "macro_enabled": bool(p.get("macro_enabled", True)),
+            "max_post_age_minutes": p.get("max_post_age_minutes"),
+            "max_filing_age_minutes": p.get("max_filing_age_minutes"),
+            "max_gpw_age_minutes": p.get("max_gpw_age_minutes"),
+        },
+    }
+    _WIZYTOWKA.update(ts=time.time(), dane=dane)
+    return {**dane, "server_time": time.time()}
 
 
 # ---------------- Sitemap Monitor (panel /settings — podgląd watchlisty) ----------------
@@ -1401,7 +1561,7 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 4
+API_VERSION = 5
 
 
 @app.get("/api/version")
