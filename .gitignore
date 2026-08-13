@@ -31,6 +31,8 @@ bot/mentions.json
 bot/live_events.json
 bot/outcomes.json
 bot/sources/sitemap_state.json
+bot/sitemap_state.json
+bot/feedback.jsonl
 
 # katalog danych używany w chmurze (gdy ktoś ustawi go lokalnie na ./data)
 data/

@@ -26,6 +26,25 @@ def require_login(v: sa.Viewer = Depends(viewer)) -> sa.Viewer:
     return v
 
 
+def require_owner(v: sa.Viewer = Depends(viewer)) -> sa.Viewer:
+    """Zależność dla akcji, które zmieniają CAŁY serwer, a nie dane jednego konta.
+
+    Nasłuch newsów jest jeden i wspólny dla wszystkich, więc jego włącznik nie może
+    stać otworem dla każdego zalogowanego. A stał: `/api/bot/stop` wymagało wcześniej
+    tylko zalogowania, czyli dowolne konto mogło zgasić bota całej usłudze — albo
+    włączyć go i naliczać rachunek za AI właścicielowi.
+
+    403, nie 402: to nie jest funkcja, którą da się dokupić.
+
+    Kim jest właściciel, ustala `supabase_auth._is_owner_request`: konto o adresie
+    z `OWNER_EMAIL`, połączenie z tego komputera albo token panelu z pliku. Dzięki
+    temu sterowanie działa także wtedy, gdy Supabase akurat nie odpowiada.
+    """
+    if not (v.owner or v.role == "owner"):
+        raise HTTPException(403, "Ta operacja jest dostępna tylko dla konta właściciela")
+    return v
+
+
 def require_premium(feature_id: str):
     """Fabryka zależności dla endpointów płatnych.
 
@@ -94,6 +113,74 @@ def me_delete(v: sa.Viewer = Depends(require_login)):
 @router.get("/api/premium/features")
 def premium_features(v: sa.Viewer = Depends(viewer)):
     return premium.catalog(v)
+
+
+@router.post("/api/premium/checkout")
+async def premium_checkout(request: Request, v: sa.Viewer = Depends(require_login)):
+    """Rozpoczęcie płatności — GOTOWE POD STRIPE, ale jeszcze nieuzbrojone.
+
+    Aplikacja woła tu z wybranym planem. Gdy w `keys/stripe.env` pojawią się
+    identyfikatory cen (`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`),
+    w miejscu oznaczonym niżej tworzy się sesję Stripe Checkout i zwraca `url`.
+    Dopóki ich nie ma, zwracamy `ready: false` — apka pokazuje uprzejmy komunikat
+    zamiast prowadzić donikąd.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    plan_id = str(body.get("plan") or "")
+    if plan_id not in premium.PLAN_BY_ID:
+        raise HTTPException(400, "Nieznany plan")
+
+    price_id = premium.stripe_price_id(plan_id)
+    if not price_id:
+        return {
+            "ready": False,
+            "message": (
+                "Płatności online uruchamiamy razem z wydaniem w sklepie. "
+                "Do tego czasu premium nadajemy ręcznie na koncie "
+                + (v.email or "") + "."
+            ),
+        }
+
+    # TODO(owner): tu wpina się Stripe Checkout — utworzyć sesję dla `price_id`
+    # przypisaną do `v.user_id` i zwrócić `{"ready": True, "url": session.url}`.
+    return {"ready": False, "message": "Bramka płatności jest w trakcie konfiguracji."}
+
+
+@router.post("/api/contact")
+async def contact(request: Request, v: sa.Viewer = Depends(require_login)):
+    """Wiadomość od użytkownika prosto do twórców — perk wersji premium.
+
+    Przepuszcza treść na skrzynkę z `mailer.CONTACT_TO` (Reply-To = adres autora
+    wiadomości) i zawsze zapisuje kopię lokalnie, żeby nic nie zginęło, nawet
+    zanim SMTP zostanie uzbrojony. Bez premium zwraca `need_premium`, a apka
+    kieruje do strony premium.
+    """
+    import mailer
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    message = str(body.get("message") or "").strip()
+    topic = str(body.get("topic") or "").strip()[:120]
+    if not message:
+        raise HTTPException(400, "Napisz treść wiadomości")
+    message = message[:4000]
+
+    if not v.premium:
+        return {
+            "ok": False, "need_premium": True,
+            "message": "Bezpośredni kontakt z twórcami jest częścią wersji premium.",
+        }
+
+    mailer.store_feedback(v.user_id, v.email, topic, message)
+    delivered = mailer.send_contact(v.email, topic, message)
+    sync.log_event(v.user_id or None, "contact_message", topic or "", "mobile",
+                   {"delivered": delivered, "len": len(message)})
+    return {"ok": True, "delivered": delivered}
 
 
 @router.post("/api/premium/event")

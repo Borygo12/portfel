@@ -12,38 +12,58 @@ w tym pliku, bez wypuszczania nowej wersji apki.
 from __future__ import annotations
 
 # --------------------------------------------------------------------- cennik
-# TODO(owner): ustalić docelowe ceny przed uruchomieniem płatności.
-# `price_id` uzupełnia się identyfikatorami ze Stripe (keys/stripe.env).
+# Ceny są w jednym miejscu: telefon i panel web pobierają je stąd, więc zmiana
+# kwoty nie wymaga wydania nowej wersji apki.
+#
+# GOTOWE DO STRIPE, ale jeszcze NIE podpięte: każdy plan ma `price_id_env` —
+# nazwę zmiennej środowiskowej z identyfikatorem ceny ze Stripe. Wystarczy
+# wpisać te trzy identyfikatory do `keys/stripe.env`, a endpoint
+# `/api/premium/checkout` (bot/account_api.py) sam ruszy. Dopóki ich nie ma,
+# przycisk „Wykup" pokazuje uprzejmy komunikat zamiast płatności.
+
+# Promocja startowa — jedno źródło prawdy dla banera na stronie sprzedażowej.
+# `active` wyłącza całą oprawę promocyjną (przekreślone ceny, baner) jednym flagiem.
+PROMO = {
+    "active": True,
+    "label": "Promocja obowiązuje tylko przez najbliższy miesiąc",
+    "sub": "Ceny wracają do zwykłych po zakończeniu promocji.",
+}
 
 PLANS = [
     {
         "id": "monthly",
         "label": "Miesięcznie",
-        "price": 29.0,
+        # cena w promocji; `price_original` to kwota przekreślona (cena zwykła)
+        "price": 5.99,
+        "price_original": 10.99,
         "currency": "PLN",
         "period": "mies.",
-        "note": "Rezygnujesz kiedy chcesz",
+        "note": "Odnawia się co miesiąc · rezygnujesz kiedy chcesz",
+        "perks": [
+            "Pełny dostęp do wszystkich funkcji premium",
+            "Aplikacja na telefon i panel na komputerze",
+            "Rezygnujesz jednym kliknięciem, bez zobowiązań",
+        ],
         "price_id_env": "STRIPE_PRICE_MONTHLY",
     },
     {
         "id": "yearly",
         "label": "Rocznie",
-        "price": 249.0,
+        "price": 29.99,
+        # gdybyś płacił co miesiąc: 12 × 5,99 zł = 71,88 zł
+        "price_original": 71.88,
         "currency": "PLN",
         "period": "rok",
-        "note": "Dwa miesiące gratis",
-        "badge": "Najczęściej wybierany",
+        "note": "≈ 2,50 zł miesięcznie · jedna płatność w roku",
+        "badge": "Najkorzystniej",
         "highlight": True,
+        "save_label": "Oszczędzasz 58%",
+        "perks": [
+            "Wszystko z planu miesięcznego",
+            "Ponad połowa taniej niż płacąc co miesiąc",
+            "Cena zamrożona na cały rok",
+        ],
         "price_id_env": "STRIPE_PRICE_YEARLY",
-    },
-    {
-        "id": "lifetime",
-        "label": "Dożywotnio",
-        "price": 699.0,
-        "currency": "PLN",
-        "period": "raz",
-        "note": "Jedna płatność, wszystkie przyszłe funkcje",
-        "price_id_env": "STRIPE_PRICE_LIFETIME",
     },
 ]
 
@@ -417,6 +437,21 @@ FEATURES: list[dict] = [
 ]
 
 BY_ID = {f["id"]: f for f in FEATURES}
+PLAN_BY_ID = {p["id"]: p for p in PLANS}
+
+
+def stripe_price_id(plan_id: str) -> str:
+    """Identyfikator ceny ze Stripe dla planu — pusty, dopóki nie ma go w środowisku.
+
+    To jedyny styk z płatnościami: gdy `keys/stripe.env` dostanie
+    `STRIPE_PRICE_MONTHLY` i `STRIPE_PRICE_YEARLY`, checkout rusza sam.
+    """
+    import os
+
+    plan = PLAN_BY_ID.get(plan_id)
+    if not plan:
+        return ""
+    return (os.environ.get(plan.get("price_id_env", "")) or "").strip()
 
 
 def catalog(viewer=None) -> dict:
@@ -431,6 +466,7 @@ def catalog(viewer=None) -> dict:
         "groups": GROUPS,
         "features": items,
         "plans": PLANS,
+        "promo": PROMO,
         # jedno zdanie na górze strony sprzedażowej — łatwo podmienić w testach
         "headline": "Portevo widzi więcej, niż pokazuje",
         "subheadline": (

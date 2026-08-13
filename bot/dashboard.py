@@ -349,7 +349,7 @@ app.add_middleware(
 
 
 import account_api                            # noqa: E402
-from account_api import require_premium        # noqa: E402
+from account_api import require_owner, require_premium   # noqa: E402
 from fastapi import Depends                    # noqa: E402
 from fastapi.staticfiles import StaticFiles    # noqa: E402
 
@@ -701,15 +701,18 @@ def live_session_get(event_id: str, transcript_after: int = 0, analyses_after: i
     return sess.to_dict(transcript_after, analyses_after)
 
 
+# Włącznik nasłuchu jest jeden na cały serwer, więc trzyma go właściciel.
+# Bez `require_owner` dowolne zalogowane konto mogło zgasić bota wszystkim
+# (albo włączyć go i naliczać rachunek za AI komuś innemu).
 @app.post("/api/bot/start")
-def bot_start(body: dict | None = None):
+def bot_start(body: dict | None = None, _v=Depends(require_owner)):
     save_params({"kill_switch": False})
     started = runner.start()
     return {"started": started}
 
 
 @app.post("/api/bot/stop")
-def bot_stop():
+def bot_stop(_v=Depends(require_owner)):
     return {"stopped": runner.stop()}
 
 
@@ -750,6 +753,35 @@ def set_params(updates: dict):
 _WIZYTOWKA = {"ts": 0.0, "dane": None}
 _WIZYTOWKA_TTL = 20.0     # tyle sekund trzyma się odpowiedź; liczniki i tak tykają w apce
 
+#: Klucz w `runner.status()["polls"]` -> przełącznik i rytm w params.json.
+#: Nazwy i kolory źródeł mieszkają w aplikacji (`screens/bot/sources.ts`) — to
+#: warstwa wyglądu. Tutaj są tylko dane, wspólne dla wizytówki i panelu dev.
+_ZRODLA_BOTA = [
+    ("truth", "truth_social_enabled", "truth_social_poll_seconds"),
+    ("squawk", "squawk_enabled", "squawk_poll_seconds"),
+    ("edgar", "sec_edgar_enabled", "sec_poll_seconds"),
+    ("gov", "gov_rss_enabled", "gov_rss_poll_seconds"),
+    ("gpw", "gpw_espi_enabled", "gpw_espi_poll_seconds"),
+    ("knf", "knf_enabled", "knf_poll_seconds"),
+    ("knf_ann", "knf_ann_enabled", "knf_ann_poll_seconds"),
+    ("sitemap", "sitemap_enabled", "sitemap_poll_seconds"),
+]
+
+
+def _stan_zrodel(p: dict) -> list[dict]:
+    """Stan każdego źródła: czy włączone, jak często pytane i kiedy ostatnio."""
+    polls = runner.status().get("polls", {}) or {}
+    out = []
+    for klucz, flaga, rytm in _ZRODLA_BOTA:
+        out.append({
+            "key": klucz,
+            "param": flaga,
+            "enabled": bool(p.get(flaga)),
+            "interval": int(polls.get(klucz, {}).get("interval") or p.get(rytm) or 0),
+            "ts": float(polls.get(klucz, {}).get("ts") or 0),
+        })
+    return out
+
 
 def _statystyka_analiz() -> tuple[int, dict | None]:
     """Ile analiz w ostatniej dobie i kiedy była ostatnia.
@@ -781,29 +813,9 @@ def bot_showcase():
         return {**_WIZYTOWKA["dane"], "server_time": time.time()}
 
     p = load_params()
-    polls = runner.status().get("polls", {}) or {}
-
-    # Klucze źródeł trzymamy w jednym miejscu z rytmem odpytywania — apka dokłada
-    # do nich nazwy i kolory, bo to warstwa wyglądu, a nie danych.
-    ZRODLA = [
-        ("truth", "truth_social_enabled", "truth_social_poll_seconds"),
-        ("squawk", "squawk_enabled", "squawk_poll_seconds"),
-        ("edgar", "sec_edgar_enabled", "sec_poll_seconds"),
-        ("gov", "gov_rss_enabled", "gov_rss_poll_seconds"),
-        ("gpw", "gpw_espi_enabled", "gpw_espi_poll_seconds"),
-        ("knf", "knf_enabled", "knf_poll_seconds"),
-        ("knf_ann", "knf_ann_enabled", "knf_ann_poll_seconds"),
-        ("sitemap", "sitemap_enabled", "sitemap_poll_seconds"),
-    ]
-    zrodla = []
-    sprawdzen_na_dobe = 0
-    for klucz, flaga, rytm in ZRODLA:
-        wlaczone = bool(p.get(flaga))
-        interval = int(polls.get(klucz, {}).get("interval") or p.get(rytm) or 0)
-        zrodla.append({"key": klucz, "enabled": wlaczone, "interval": interval,
-                       "ts": float(polls.get(klucz, {}).get("ts") or 0)})
-        if wlaczone and interval > 0:
-            sprawdzen_na_dobe += round(86400 / interval)
+    zrodla = _stan_zrodel(p)
+    sprawdzen_na_dobe = sum(round(86400 / z["interval"])
+                            for z in zrodla if z["enabled"] and z["interval"] > 0)
 
     cfg = prompts.load_config()
     kategorie = [{"label": k.get("label", ""), "mult": float(k.get("mult", 1) or 1),
@@ -824,7 +836,9 @@ def bot_showcase():
     dane = {
         "bot_alive": runner.is_running(),
         "paused": bool(p.get("kill_switch")),
-        "sources": zrodla,
+        # publicznie oddajemy tylko cztery pola — nazwa przełącznika w params.json
+        # nie ma czego szukać w odpowiedzi dla gościa
+        "sources": [{k: z[k] for k in ("key", "enabled", "interval", "ts")} for z in zrodla],
         "counts": {
             "sources_on": sum(1 for z in zrodla if z["enabled"]),
             "sources_all": len(zrodla),
@@ -855,6 +869,111 @@ def bot_showcase():
     return {**dane, "server_time": time.time()}
 
 
+# ---------------- Panel dewelopera (tylko właściciel) ----------------
+#
+# Po co osobny ekran, skoro zakładka „Sterowanie" ma już START/STOP: tamta jest
+# częścią produktu i mówi językiem użytkownika. Ta odpowiada na jedno pytanie
+# właściciela — „ile mnie to dziś kosztuje i czy warto, żeby chodziło" — więc
+# obok włącznika stoi rachunek, a nie opis funkcji.
+
+# Stawki z cennika sprawdzonego 13.08.2026: `google/gemini-2.5-flash`
+# $0,30/$2,50 za MTok, `anthropic/claude-sonnet-5` $3/$15. Przy ~3000 tokenów
+# wejścia (sam prompt systemowy to 9–13 tys. znaków) i ~250 wyjścia wychodzi
+# tyle za sztukę. Zmieni się cennik — poprawia się te dwie liczby i nic więcej.
+STAWKA_ANALIZA_USD = 0.0015
+STAWKA_WERYFIKACJA_USD = 0.0054
+
+#: Wpisy, które nie są prawdziwym wywołaniem modelu i nie mogą wchodzić do rachunku.
+_NIE_MODEL = {"regex_fast_track", "manual_test", "demo", ""}
+
+
+def _analizy_do_rachunku(limit: int = 4000) -> list[dict]:
+    """Ostatnie analizy sprowadzone do tego, co kosztuje: kiedy, skąd, jakim modelem."""
+    out = []
+    for wpis in state.recent_signals(limit):
+        try:
+            kiedy = time.mktime(time.strptime(str(wpis.get("ts", "")), "%Y-%m-%d %H:%M:%S"))
+        except (ValueError, TypeError):
+            continue
+        sig = wpis.get("signal") or {}
+        model = str(sig.get("_model") or "")
+        if str(sig.get("reason", "")).startswith("[pre-filtr"):
+            rodzaj = "prefiltr"                    # odsiane bez pytania AI — zero kosztu
+        elif ":free" in model:
+            rodzaj = "darmowy"
+        elif model not in _NIE_MODEL:
+            rodzaj = "platny"
+        else:
+            rodzaj = "inny"
+        out.append({"t": kiedy, "src": wpis.get("source") or "?", "rodzaj": rodzaj,
+                    "verify": bool(wpis.get("verify"))})
+    return out
+
+
+def _okno_kosztow(wpisy: list[dict], godziny: float, etykieta: str) -> dict:
+    prog = time.time() - godziny * 3600
+    w = [x for x in wpisy if x["t"] >= prog]
+    platnych = sum(1 for x in w if x["rodzaj"] == "platny")
+    weryfikacji = sum(1 for x in w if x["verify"])
+    return {
+        "label": etykieta,
+        "hours": godziny,
+        "analiz": len(w),
+        "prefiltr": sum(1 for x in w if x["rodzaj"] == "prefiltr"),
+        "darmowych": sum(1 for x in w if x["rodzaj"] == "darmowy"),
+        "platnych": platnych,
+        "weryfikacji": weryfikacji,
+        "usd": round(platnych * STAWKA_ANALIZA_USD + weryfikacji * STAWKA_WERYFIKACJA_USD, 4),
+    }
+
+
+@app.get("/api/dev/status")
+def dev_status(_v=Depends(require_owner)):
+    """Stan serwera i rachunek za AI — jedno miejsce do decyzji „włączać czy nie"."""
+    p = load_params()
+    st = runner.status()
+    wpisy = _analizy_do_rachunku()
+
+    okna = [_okno_kosztow(wpisy, 24, "24 h"), _okno_kosztow(wpisy, 24 * 7, "7 dni")]
+    # Prognozę liczymy z dłuższego okna, o ile w ogóle coś w nim jest — jedna
+    # spokojna doba potrafi zaniżyć rachunek dziesięciokrotnie względem sezonu wyników.
+    baza = okna[1] if okna[1]["analiz"] else okna[0]
+    prognoza = round(baza["usd"] / max(1e-9, baza["hours"]) * 24 * 30, 2) if baza["analiz"] else 0.0
+
+    # Gdzie idą pieniądze: liczba PŁATNYCH wywołań per źródło. To zwykle jedna
+    # pozycja (SEC), więc wyłączenie jednego przełącznika potrafi ściąć rachunek.
+    per_zrodlo: dict[str, int] = {}
+    prog7 = time.time() - 7 * 24 * 3600
+    for x in wpisy:
+        if x["t"] >= prog7 and x["rodzaj"] == "platny":
+            per_zrodlo[x["src"]] = per_zrodlo.get(x["src"], 0) + 1
+
+    return {
+        "server_time": time.time(),
+        "panel": {
+            "api": API_VERSION,
+            "started_at": _STARTED_AT,
+            "uptime_s": max(0.0, time.time() - _STARTED_AT),
+        },
+        "bot": {
+            "alive": runner.is_running(),
+            "paused": bool(p.get("kill_switch")),
+            "cycles": st.get("cycles") or 0,
+            "last_error": st.get("last_error"),
+            "started_at": st.get("started_at"),
+            "uptime_s": max(0.0, time.time() - st["started_at"]) if st.get("started_at") else 0.0,
+            "last_poll": st.get("last_poll"),
+        },
+        "sources": _stan_zrodel(p),
+        "koszty": {
+            "okna": okna,
+            "prognoza_30d_usd": prognoza,
+            "platne_per_zrodlo": per_zrodlo,
+            "stawki": {"analiza": STAWKA_ANALIZA_USD, "weryfikacja": STAWKA_WERYFIKACJA_USD},
+        },
+    }
+
+
 # ---------------- Sitemap Monitor (panel /settings — podgląd watchlisty) ----------------
 
 @app.get("/api/sitemap/status")
@@ -878,7 +997,7 @@ def sitemap_check():
 
 
 @app.post("/api/kill")
-def kill():
+def kill(_v=Depends(require_owner)):
     """Awaryjne zatrzymanie nasłuchu — pętla staje i nic nie jest analizowane."""
     save_params({"kill_switch": True})
     runner.stop()
@@ -886,7 +1005,7 @@ def kill():
 
 
 @app.post("/api/resume")
-def resume():
+def resume(_v=Depends(require_owner)):
     return save_params({"kill_switch": False})
 
 
@@ -1561,14 +1680,14 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 5
+API_VERSION = 7
 
 
 @app.get("/api/version")
 def api_version():
     return {
         "api": API_VERSION,
-        "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal"],
+        "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact"],
         "started_at": _STARTED_AT,
     }
 

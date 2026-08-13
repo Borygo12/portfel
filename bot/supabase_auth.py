@@ -49,6 +49,7 @@ def _load_env_file(path: str) -> None:
 
 _load_env_file(os.path.join(_ROOT, "keys", "supabase.env"))
 _load_env_file(os.path.join(_ROOT, "keys", "stripe.env"))
+_load_env_file(os.path.join(_ROOT, "keys", "email.env"))
 
 URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
 ANON = os.environ.get("SUPABASE_ANON_KEY") or ""
@@ -337,6 +338,10 @@ class Viewer:
     @property
     def user_id(self) -> str:
         return self.user.get("id") or ""
+
+    @property
+    def email(self) -> str:
+        return self.user.get("email") or ""
 
     def to_json(self) -> dict:
         return {
