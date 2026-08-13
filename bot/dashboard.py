@@ -1680,14 +1680,15 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 7
+API_VERSION = 8
 
 
 @app.get("/api/version")
 def api_version():
     return {
         "api": API_VERSION,
-        "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact"],
+        "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact",
+                     "apple_iap"],
         "started_at": _STARTED_AT,
     }
 

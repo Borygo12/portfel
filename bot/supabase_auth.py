@@ -214,6 +214,87 @@ def entitlement(user_id: str, email: str = "") -> dict:
     return out
 
 
+def _service_write(path: str, method: str, payload, params: dict | None = None) -> bool:
+    """Zapis kluczem serwerowym. Uprawnienia nadaje wyłącznie serwer, nigdy klient."""
+    if not (URL and SERVICE):
+        return False
+    try:
+        r = requests.request(
+            method,
+            f"{URL}/rest/v1/{path}",
+            params=params or {},
+            json=payload,
+            headers={
+                "apikey": SERVICE, "Authorization": f"Bearer {SERVICE}",
+                "Content-Type": "application/json", "Prefer": "return=minimal",
+            },
+            timeout=10,
+        )
+        return r.status_code < 300
+    except requests.RequestException:
+        return False
+
+
+def set_entitlement(user_id: str, plan: str, source: str, expires_at: str | None,
+                    provider_ref: str, cancelled_at: str | None = None,
+                    note: str = "") -> bool:
+    """Zapisuje nadanie premium od dostawcy płatności — jeden wiersz na subskrypcję.
+
+    Kluczem tożsamości jest `provider_ref` (u Apple: `originalTransactionId`, stały
+    przez wszystkie odnowienia). Dlatego odnowienie AKTUALIZUJE wiersz zamiast
+    dokładać nowy — inaczej po roku konto miałoby dwanaście nadań i nie dałoby się
+    powiedzieć, które obowiązuje.
+
+    Świadomie bez `on_conflict`: unikalny indeks `entitlements_provider_idx` jest
+    częściowy (`where provider_ref is not null`), a takiego PostgREST nie potrafi
+    wskazać jako arbitra konfliktu. Czytamy więc wprost i wybieramy PATCH albo POST.
+    """
+    if not (user_id and provider_ref):
+        return False
+
+    row = {
+        "user_id": user_id, "product": "premium", "plan": plan, "source": source,
+        "expires_at": expires_at, "cancelled_at": cancelled_at,
+        "provider_ref": provider_ref, "updated_at": _now_iso(),
+    }
+    if note:
+        row["note"] = note
+
+    found = _service_get("entitlements", {
+        "source": f"eq.{source}", "provider_ref": f"eq.{provider_ref}", "select": "id",
+    })
+    if found:
+        ok = _service_write("entitlements", "PATCH", row,
+                            {"id": f"eq.{found[0].get('id')}"})
+    else:
+        ok = _service_write("entitlements", "POST", row)
+
+    if ok:
+        forget(user_id)          # cache uprawnień ma minutę życia — po zakupie za długo
+    return ok
+
+
+def user_for_provider_ref(source: str, provider_ref: str) -> str:
+    """Czyje to nadanie — po identyfikatorze u dostawcy płatności.
+
+    Powiadomienia od Apple nie niosą naszego użytkownika, tylko swoją transakcję.
+    Wiązanie powstaje przy zakupie i to ono pozwala później odnowić albo odebrać
+    premium właściwemu kontu.
+    """
+    if not (source and provider_ref):
+        return ""
+    rows = _service_get("entitlements", {
+        "source": f"eq.{source}", "provider_ref": f"eq.{provider_ref}",
+        "select": "user_id", "limit": "1",
+    })
+    return (rows[0].get("user_id") if rows else "") or ""
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 _owner_uid: list = [0.0, ""]
 
 

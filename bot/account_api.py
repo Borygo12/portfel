@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+import apple_iap
 import premium
 import supabase_auth as sa
 import supabase_sync as sync
@@ -147,6 +148,123 @@ async def premium_checkout(request: Request, v: sa.Viewer = Depends(require_logi
     # TODO(owner): tu wpina się Stripe Checkout — utworzyć sesję dla `price_id`
     # przypisaną do `v.user_id` i zwrócić `{"ready": True, "url": session.url}`.
     return {"ready": False, "message": "Bramka płatności jest w trakcie konfiguracji."}
+
+
+# ------------------------------------------------------- zakupy w App Store
+#
+# Na iPhonie sprzedaje Apple, nie Stripe — wytyczna 3.1.1 nie zostawia wyboru
+# przy treściach cyfrowych. Telefon przeprowadza zakup przez StoreKit i przysyła
+# tu SAM IDENTYFIKATOR transakcji; czym ta transakcja jest, ustala serwer u Apple
+# (`apple_iap`). Ten sam kod obsługuje zakup, przywracanie zakupów i odnowienia.
+
+
+def _apple_apply(user_id: str, transaction_id: str) -> dict:
+    """Pyta Apple o transakcję i zapisuje z niej nadanie premium.
+
+    Wspólny trzon trzech dróg (zakup, przywracanie, powiadomienie serwerowe), bo
+    w każdej z nich mamy dokładnie jedno: identyfikator transakcji.
+    """
+    info = apple_iap.subscription(transaction_id)
+    if not info:
+        return {"ok": False, "message": "Apple nie potwierdził tego zakupu."}
+
+    # Powiadomienie serwerowe nie wie, czyje jest konto. Wie to za to sama
+    # transakcja: przy zakupie wpisujemy w nią identyfikator konta Portevo.
+    if not user_id:
+        user_id = info["app_account_token"]
+    if not user_id:
+        return {"ok": False, "message": "Nie wiadomo, do którego konta przypisać zakup."}
+
+    plan = premium.plan_for_apple_product(info["product_id"])
+    if not plan:
+        return {"ok": False, "message": "Ten zakup nie dotyczy Portevo Premium."}
+
+    # Zwrot pieniędzy i wygaśnięcie zapisujemy tak samo jak zakup — z datą końca
+    # w przeszłości. Wiersz zostaje, więc historia nadań jest kompletna, a
+    # `entitlement()` i tak liczy tylko te z datą w przyszłości.
+    expires = info["expires_at"]
+    if info["revoked"]:
+        expires = sa._now_iso()
+
+    # Jedna subskrypcja = jedno konto. Bez tego dwie osoby dzieliłyby się jednym
+    # zakupem, podając ten sam identyfikator transakcji z dwóch telefonów.
+    ref = info["original_transaction_id"] or transaction_id
+    owner_of_ref = sa.user_for_provider_ref("apple", ref)
+    if owner_of_ref and owner_of_ref != user_id:
+        return {"ok": False, "message": (
+            "Ta subskrypcja jest już przypisana do innego konta Portevo. "
+            "Zaloguj się na nie albo napisz do nas przez zakładkę Kontakt."
+        )}
+
+    sa.set_entitlement(
+        user_id=user_id, plan=plan, source="apple", expires_at=expires,
+        provider_ref=ref,
+        # brak zgody na odnowienie to jeszcze nie koniec dostępu — to znacznik,
+        # dzięki któremu ekran konta może napisać „premium wygaśnie 12 marca"
+        cancelled_at=(None if info["auto_renew"] else sa._now_iso()),
+        note=f"App Store · {info['environment']}",
+    )
+    return {"ok": True, "premium": info["active"], "plan": plan,
+            "expires_at": info["expires_at"], "status": info["status_label"]}
+
+
+@router.post("/api/premium/apple/verify")
+async def premium_apple_verify(request: Request, v: sa.Viewer = Depends(require_login)):
+    """Potwierdzenie zakupu z telefonu. Apka woła to zaraz po udanej płatności.
+
+    Zwraca `ok: false` z komunikatem zamiast błędu HTTP — użytkownik ma wtedy na
+    ekranie zdanie po polsku, a nie „500". Pieniądze i tak są u Apple, więc
+    najgorsze, co się może stać, to przywrócenie zakupu za chwilę.
+    """
+    if not apple_iap.configured():
+        return {"ok": False, "message": "Weryfikacja zakupów nie jest jeszcze skonfigurowana."}
+    if not v.user_id:
+        # właściciel na tokenie panelu — premium ma z urzędu, nie ma czego kupować
+        return {"ok": False, "message": "Zaloguj się kontem Portevo, żeby przypisać zakup."}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    transaction_id = str(body.get("transaction_id") or "").strip()
+    if not transaction_id:
+        raise HTTPException(400, "Brak identyfikatora transakcji")
+    return _apple_apply(v.user_id, transaction_id)
+
+
+@router.post("/api/apple/notifications")
+async def apple_notifications(request: Request):
+    """App Store Server Notifications V2 — odnowienia, rezygnacje, zwroty.
+
+    Bez tego premium wygasłoby dopiero przy następnym uruchomieniu aplikacji, a po
+    zwrocie pieniędzy działałoby do końca opłaconego okresu.
+
+    Ładunku Apple NIE ufamy na słowo i nie sprawdzamy jego podpisu certyfikatami
+    root — wyciągamy z niego wyłącznie identyfikator transakcji i pytamy o niego
+    App Store Server API. Podszycie się pod to żądanie daje więc tyle, co
+    poproszenie nas o odświeżenie cudzego stanu prawdziwymi danymi od Apple.
+
+    Adres do wpisania w App Store Connect (Monetization → App Store Server
+    Notifications, wariant V2): https://www.portevo.pl/api/apple/notifications
+    """
+    if not apple_iap.configured():
+        return {"ok": False}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    payload = apple_iap.peek_notification(str(body.get("signedPayload") or ""))
+    transaction_id = payload.get("transaction_id") or ""
+    original_id = payload.get("original_transaction_id") or ""
+    if not (transaction_id or original_id):
+        return {"ok": False}
+
+    # Kogo dotyczy: wiersz nadania pamięta `originalTransactionId` z zakupu.
+    # Gdy go jeszcze nie ma (powiadomienie wyprzedziło telefon), konto ustali
+    # `_apple_apply` z `appAccountToken` w transakcji potwierdzonej przez Apple.
+    user_id = sa.user_for_provider_ref("apple", original_id or transaction_id)
+    res = _apple_apply(user_id, transaction_id or original_id)
+    return {"ok": bool(res.get("ok"))}
 
 
 @router.post("/api/contact")

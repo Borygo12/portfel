@@ -45,6 +45,9 @@ PLANS = [
             "Rezygnujesz jednym kliknięciem, bez zobowiązań",
         ],
         "price_id_env": "STRIPE_PRICE_MONTHLY",
+        # identyfikator produktu w App Store Connect — na iPhonie sprzedaje Apple,
+        # nie Stripe (wytyczna 3.1.1). Cenę pokazuje wtedy StoreKit, nie ta tabela.
+        "apple_id": "pl.borygo.portevo.premium.monthly",
     },
     {
         "id": "yearly",
@@ -64,6 +67,7 @@ PLANS = [
             "Cena zamrożona na cały rok",
         ],
         "price_id_env": "STRIPE_PRICE_YEARLY",
+        "apple_id": "pl.borygo.portevo.premium.yearly",
     },
 ]
 
@@ -452,6 +456,18 @@ def stripe_price_id(plan_id: str) -> str:
     if not plan:
         return ""
     return (os.environ.get(plan.get("price_id_env", "")) or "").strip()
+
+
+APPLE_PRODUCTS = {p["apple_id"]: p["id"] for p in PLANS if p.get("apple_id")}
+
+
+def plan_for_apple_product(product_id: str) -> str:
+    """Produkt z App Store → nasz plan. Pusty ciąg = nie nasz produkt.
+
+    Dzięki temu paragon za cudzy produkt (albo za produkt, który kiedyś wycofamy)
+    nie nada nikomu premium — a nazwa planu w bazie zostaje nasza, nie Apple'owa.
+    """
+    return APPLE_PRODUCTS.get((product_id or "").strip(), "")
 
 
 def catalog(viewer=None) -> dict:
