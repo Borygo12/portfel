@@ -39,9 +39,20 @@ DAY_OPEN_H = 9          # gdy żaden instrument jeszcze nie handlował — start
 
 
 def _utc_offset() -> int:
-    """Przesunięcie strefy serwera w sekundach (PC w Polsce = czas warszawski)."""
+    """Przesunięcie strefy czasu warszawskiego w sekundach.
+    Zawsze zwraca przesunięcie strefy Europe/Warsaw (czas zimowy UTC+1 / letni UTC+2),
+    dzięki czemu wyceny na wykresie pokazują polską godzinę bez względu na to,
+    czy serwer stoi lokalnie na PC, czy na serwerze Linux/Railway w strefie UTC.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        off = datetime.datetime.now(ZoneInfo("Europe/Warsaw")).utcoffset()
+        if off is not None:
+            return int(off.total_seconds())
+    except Exception:
+        pass
     off = datetime.datetime.now().astimezone().utcoffset()
-    return int(off.total_seconds()) if off else 0
+    return int(off.total_seconds()) if off else 7200
 
 
 def _local_date(ts: int, off: int) -> datetime.date:
