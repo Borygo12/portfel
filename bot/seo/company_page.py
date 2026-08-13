@@ -22,7 +22,7 @@ import datetime as dt
 import logging
 import threading
 
-from . import companies, jsonld, render
+from . import charts, companies, dates, jsonld, logos, render, sectors, upcoming
 
 log = logging.getLogger("seo.company")
 
@@ -38,17 +38,9 @@ _pool = futures.ThreadPoolExecutor(max_workers=3, thread_name_prefix="seo-report
 _w_toku: dict[str, futures.Future] = {}
 _zamek = threading.Lock()
 
-MIESIACE = ("stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
-            "lipca", "sierpnia", "września", "października", "listopada", "grudnia")
-
-
-def data_pl(iso: str) -> str:
-    """„2026-08-12” → „12 sierpnia 2026”. Pusty napis, gdy daty nie ma."""
-    try:
-        d = dt.date.fromisoformat((iso or "")[:10])
-    except (ValueError, TypeError):
-        return ""
-    return f"{d.day} {MIESIACE[d.month - 1]} {d.year}"
+#: Formatowanie dat mieszka w `dates.py` — tutaj zostaje alias, bo nazwa
+#: `data_pl` jest używana w tym pliku kilkanaście razy.
+data_pl = dates.dlugo
 
 
 def _pobierz(symbol: str):
@@ -157,6 +149,20 @@ def _sekcja_termin(spolka: dict, d: dict) -> str:
     return render.sekcja(f"Kiedy {nazwa} publikuje wyniki", *akapity, kotwica="termin")
 
 
+def _naglowek_spolki(spolka: dict) -> str:
+    """Znak firmowy, ticker i giełda tuż nad tytułem strony.
+
+    To pierwsza rzecz, którą widzi ktoś przychodzący z wyszukiwarki — i jedyne
+    miejsce, w którym w ułamku sekundy potwierdza, że trafił do właściwej firmy.
+    """
+    return ('<div class="hero-id">'
+            + logos.znak(spolka, 56)
+            + '<div class="who">'
+            + f'<span class="tick">{render.esc(companies.ticker(spolka))}</span>'
+            + f'<span class="mkt">{render.esc(companies.gielda_pl(spolka))}</span>'
+            + "</div></div>")
+
+
 def _sekcja_historia(spolka: dict, d: dict) -> str:
     historia = [h for h in (d.get("history") or []) if h.get("quarter")]
     if not historia:
@@ -200,8 +206,14 @@ def _sekcja_historia(spolka: dict, d: dict) -> str:
             f"kierunek.{naj} To liczba, która mówi więcej o ryzyku trzymania pozycji "
             "przez raport niż sama prognoza zysku.")
 
+    # Wykres NAD tabelą, nie zamiast niej: obraz odpowiada na pytanie „ile ta
+    # spółka skacze” w sekundę, a tabela zostaje dla tych, którzy chcą liczby —
+    # i dla czytników ekranu, dla których sam wykres byłby ślepym zaułkiem.
+    wykresy = (charts.reakcje_kursu(historia, spolka["name"])
+               + charts.prognoza_i_wynik(historia, spolka["name"], waluta))
+
     return render.sekcja("Jak kurs reagował na poprzednie wyniki", *akapity,
-                         kotwica="historia", html_dodatkowy=tabela)
+                         kotwica="historia", html_dodatkowy=wykresy + tabela)
 
 
 def _sekcja_prognozy(spolka: dict, d: dict) -> str:
@@ -264,7 +276,8 @@ def _sekcja_marze(spolka: dict, d: dict) -> str:
         "kurczącej się marży oznaczają, że wzrost jest kupowany kosztem rentowności — "
         "i to jest zwykle ciekawsza informacja niż sama dynamika sprzedaży.",
         kotwica="marze",
-        html_dodatkowy=render.tabela(
+        html_dodatkowy=charts.przychody_i_marza(kwartaly, spolka["name"], waluta)
+        + render.tabela(
             ["Kwartał", ("Przychody", True), ("Marża brutto", True),
              ("Marża operacyjna", True), ("Marża netto", True)],
             wiersze, podpis=f"Rachunek wyników {spolka['name']} kwartalnie."),
@@ -309,6 +322,45 @@ def _sekcja_o_spolce(spolka: dict, d: dict) -> str:
 
     return render.sekcja(f"O spółce {spolka['name']}", zdanie,
                          lista=lista, kotwica="o-spolce")
+
+
+def _sekcja_kalendarz(spolka: dict, d: dict) -> str:
+    """Mini-kalendarz: kto jeszcze raportuje w najbliższych tygodniach.
+
+    Po co na podstronie jednej spółki: człowiek, który sprawdził datę raportu,
+    dostał odpowiedź i nie ma po co zostawać. Lista najbliższych publikacji —
+    zaczynając od spółek z tej samej branży — jest naturalnym następnym krokiem
+    i pokazuje, czym jest sam produkt, zamiast tylko o nim opowiadać.
+    """
+    pozycje = upcoming.najblizsze(dni=21, pomin_slug=spolka["slug"],
+                                  sektor=spolka.get("sector") or "", limit=7)
+    if len(pozycje) < 3:
+        return ""
+
+    wiersze = []
+    for p in pozycje:
+        eps = (f"prognoza EPS {render.liczba(p['eps'])}"
+               + (f" {p['waluta']}" if p.get("waluta") else "")
+               if p.get("eps") is not None else "")
+        wiersze.append({
+            "logo": logos.znak(p["spolka"], 34),
+            "tytul": f"{p['nazwa']} ({companies.ticker(p['spolka'])})",
+            "podtytul": p["spolka"].get("sector_pl") or p["rynek"],
+            "wartosc": dates.krotko(p["data"]),
+            "nota": "termin szacowany" if p["szacowany"] else eps,
+            "adres": p["adres"],
+        })
+
+    return render.sekcja(
+        "Kto raportuje w najbliższych tygodniach",
+        "Terminy z kalendarza Portevo — najpierw spółki z tej samej branży, "
+        "bo ich wyniki najczęściej ruszają kursem sąsiadów jeszcze przed "
+        "własnym raportem.",
+        kotwica="najblizsze",
+        html_dodatkowy=render.wiersze(
+            wiersze,
+            naglowek=("Najbliższe publikacje wyników", "kolejne 3 tygodnie"),
+            wiecej=("/kalendarz-wynikow-spolek", "Zobacz pełny kalendarz wyników")))
 
 
 def _pytania(spolka: dict, d: dict) -> list:
@@ -402,8 +454,11 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
 
     bloki = []
     kafle = _kafle(spolka, d)
+    st = d.get("stats") or {}
+    tarcza = charts.tarcza_skutecznosci(st.get("beat_rate"), st.get("quarters") or 0,
+                                        nazwa)
     if kafle:
-        bloki.append(f"<section>{kafle}</section>")
+        bloki.append(f"<section>{kafle}{tarcza}</section>")
 
     if not kompletne and not ma_tresc:
         bloki.append(render.sekcja(
@@ -413,7 +468,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
             "dociągają się w tle."))
 
     for buduj in (_sekcja_termin, _sekcja_historia, _sekcja_prognozy,
-                  _sekcja_marze, _sekcja_o_spolce):
+                  _sekcja_marze, _sekcja_kalendarz, _sekcja_o_spolce):
         kawalek = buduj(spolka, d)
         if kawalek:
             bloki.append(kawalek)
@@ -422,7 +477,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
     bloki.append(render.sekcja("Najczęstsze pytania", kotwica="pytania",
                                html_dodatkowy=render.faq(pary)))
 
-    sasiedzi = companies.sasiedzi(spolka, 10)
+    sasiedzi = companies.sasiedzi(spolka, 12)
     if sasiedzi:
         naglowek = (f"Inne spółki z sektora „{spolka['sector_pl']}”"
                     if spolka.get("sector_pl") else "Inne spółki")
@@ -431,8 +486,12 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
             "Wyniki spółki najwięcej mówią w porównaniu z konkurencją z tej samej "
             "branży — to ona pokazuje, czy słaby kwartał był problemem firmy, "
             "czy całego rynku.",
-            html_dodatkowy=render.chipsy(
-                [(companies.adres(s), s["name"]) for s in sasiedzi])))
+            html_dodatkowy=render.kafle([{
+                "logo": logos.znak(s, 34),
+                "tytul": s["name"],
+                "podtytul": f"{companies.ticker(s)} · {companies.gielda_krotka(s)}",
+                "adres": companies.adres(s),
+            } for s in sasiedzi])))
 
     bloki.append(render.sekcja(
         "Powiązane",
@@ -447,12 +506,13 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
 
     bloki.append(render.zacheta(
         f"Śledź {nazwa} w Portevo",
-        "Dodaj spółkę do obserwowanych, a jej raport pojawi się wyróżniony "
-        "w kalendarzu wyników. Wykres, wskaźniki i porównanie z branżą masz "
-        "od razu obok.",
+        "Karta spółki w aplikacji to wykres kursu, wskaźniki i porównanie "
+        "z branżą. Dodaj spółkę do obserwowanych, a jej raport pojawi się "
+        "wyróżniony w kalendarzu wyników — razem z resztą Twojego portfela.",
         adres=f"/?spolka={spolka['symbol']}",
         etykieta=f"Otwórz kartę {nazwa}",
-        drugi=("/kalendarz-wynikow-spolek", "Zobacz kalendarz wyników")))
+        drugi=(f"/?spolka={spolka['symbol']}&obserwuj=1", "Dodaj do obserwowanych"),
+        trzeci=("/kalendarz-wynikow-spolek", "Kalendarz wyników")))
     bloki.append(render.zastrzezenie())
 
     okruchy = [("/wyniki-finansowe", "Wyniki spółek"),
@@ -473,6 +533,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
         h1=f"Wyniki finansowe {nazwa} ({tick})",
         lead=lead,
         nadtytul=("Spółki GPW" if spolka["market"] == "GPW" else "Spółki z USA"),
+        przed_h1=_naglowek_spolki(spolka),
         okruchy=okruchy,
         szeroki_naglowek=True,
         aktualizacja=data_pl(dt.date.today().isoformat()),
@@ -489,6 +550,35 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
 
 
 # --------------------------------------------------------------- spisy spółek
+
+
+def _sekcja_nadchodzace(rynek: str = "") -> str:
+    """Najbliższe raporty na czele spisu spółek.
+
+    Spis A–Z odpowiada na pytanie „gdzie jest spółka X”, ale nie odpowiada na
+    to, z którym ludzie tu przychodzą częściej: „co się dzieje w najbliższych
+    dniach”. Ta sekcja daje odpowiedź od razu, zanim ktokolwiek zacznie
+    przewijać dwieście sześćdziesiąt nazw.
+    """
+    pozycje = upcoming.najblizsze(dni=21, rynek=rynek, limit=8)
+    if len(pozycje) < 3:
+        return ""
+    wiersze = [{
+        "logo": logos.znak(p["spolka"], 34),
+        "tytul": f"{p['nazwa']} ({companies.ticker(p['spolka'])})",
+        "podtytul": p["spolka"].get("sector_pl") or p["rynek"],
+        "wartosc": dates.krotko(p["data"]),
+        "nota": "termin szacowany" if p["szacowany"] else "termin potwierdzony",
+        "adres": p["adres"],
+    } for p in pozycje]
+    return render.sekcja(
+        "Najbliższe publikacje wyników",
+        "Terminy z żywego kalendarza Portevo — zmieniają się razem z komunikatami "
+        "spółek.",
+        kotwica="najblizsze",
+        html_dodatkowy=render.wiersze(
+            wiersze, naglowek=("Kolejne raporty", "najbliższe 3 tygodnie"),
+            wiecej=("/sezon-wynikow", "Zobacz cały sezon wyników")))
 
 
 def _karta(s: dict) -> tuple:
@@ -549,7 +639,27 @@ def spis(rynek: str = "") -> str:
                 ("/wyniki-finansowe/usa", "Spółki z USA",
                  f"{len(companies.rynek('USA'))} największych spółek z Nasdaq i NYSE, "
                  "których raporty ruszają całym rynkiem.", "Świat"),
+                ("/sezon-wynikow", "Kto raportuje teraz",
+                 "Żywy kalendarz najbliższych publikacji — dzień po dniu, "
+                 "z prognozami analityków.", "Na żywo"),
             ])))
+
+    nadchodzace = _sekcja_nadchodzace(rynek)
+    if nadchodzace:
+        bloki.append(nadchodzace)
+
+    # Branże są tu warstwą pośrednią między spisem a pojedynczą spółką: skracają
+    # drogę czytelnika (i robota) do konkretnej firmy, a jednocześnie same
+    # odpowiadają na zapytania typu „wyniki spółek technologicznych”.
+    branze = sectors.spis()
+    if branze and not rynek:
+        bloki.append(render.sekcja(
+            "Przeglądaj według branży",
+            "Raport spółki najwięcej mówi w zestawieniu z konkurencją — a każda "
+            "branża czyta się inaczej. Pod każdym adresem opisujemy, na co patrzeć "
+            "w raportach tego sektora.",
+            html_dodatkowy=render.chipsy(
+                [(a, f"{n.capitalize()} ({ile})") for a, n, ile in branze])))
 
     grupy = {}
     for s in lista:
@@ -559,9 +669,12 @@ def spis(rynek: str = "") -> str:
         spolki = sorted(spolki, key=lambda x: x["name"].lower())
         bloki.append(render.sekcja(
             sektor.capitalize(),
-            html_dodatkowy=render.chipsy(
-                [(companies.adres(s), f"{s['name']} ({companies.ticker(s)})")
-                 for s in spolki])))
+            html_dodatkowy=render.kafle([{
+                "logo": logos.znak(s, 34),
+                "tytul": s["name"],
+                "podtytul": f"{companies.ticker(s)} · {companies.gielda_krotka(s)}",
+                "adres": companies.adres(s),
+            } for s in spolki])))
 
     bloki.append(render.zacheta(
         "Kalendarz wyników na najbliższe dni",

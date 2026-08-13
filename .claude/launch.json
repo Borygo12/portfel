@@ -2,6 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "portevo-serwer",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["dashboard.py"],
+      "cwd": "C:\\Users\\Borys\\Desktop\\news-trader\\bot",
+      "port": 8500,
+      "autoPort": true
+    },
+    {
       "name": "portevo-web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["expo", "start", "--web", "--port", "8081"],

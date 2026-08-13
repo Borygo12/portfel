@@ -208,6 +208,46 @@ summary::after{content:"+";color:var(--green);font-size:19px;font-weight:400;fle
 details[open] summary::after{content:"−"}
 details p{padding:0 18px 16px;margin-top:0}
 
+/* ---------- nagłówek ze znakiem spółki ---------- */
+.hero-id{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+.hero-id .who{display:flex;flex-direction:column;gap:4px}
+.hero-id .tick{font-size:12.5px;font-weight:800;letter-spacing:1px;color:var(--dim);
+  text-transform:uppercase}
+.hero-id .mkt{font-size:13.5px;color:var(--muted)}
+
+/* ---------- lista pozycji z logo ---------- */
+.rows{margin-top:20px;border:1px solid var(--border);border-radius:var(--r);
+  background:var(--card);overflow:hidden}
+.rows .row{display:flex;align-items:center;gap:14px;padding:13px 16px;
+  border-bottom:1px solid var(--border);color:inherit}
+.rows .row:last-child{border-bottom:0}
+a.row:hover{background:var(--card-hi);text-decoration:none}
+.rows .row .main{flex:1;min-width:0}
+.rows .row .nm{font-weight:650;font-size:15px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rows .row .sub{font-size:12.5px;color:var(--dim);margin-top:2px}
+.rows .row .side{text-align:right;flex:0 0 auto;font-size:13.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.rows .row .side b{display:block;color:var(--text);font-size:14.5px;font-weight:750}
+.rows .head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:12px 16px;background:var(--elev);border-bottom:1px solid var(--border)}
+.rows .head b{font-size:13.5px;font-weight:800;letter-spacing:.3px}
+.rows .head span{font-size:12.5px;color:var(--dim)}
+.rows .more{display:block;padding:13px 16px;font-size:13.5px;font-weight:650}
+
+/* ---------- kafle spółek z logo ---------- */
+.tiles{display:grid;gap:12px;margin-top:20px;
+  grid-template-columns:repeat(auto-fill,minmax(228px,1fr))}
+.tile{display:flex;align-items:center;gap:12px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:inherit;
+  transition:border-color .16s ease,background .16s ease,transform .16s ease}
+a.tile:hover{border-color:var(--green);background:var(--card-hi);
+  text-decoration:none;transform:translateY(-2px)}
+.tile .nm{font-weight:650;font-size:14.5px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .sub{font-size:12px;color:var(--dim);margin-top:2px}
+.tile .txt{min-width:0}
+
 /* ---------- pasek zachęty ---------- */
 .cta{
   margin-top:44px;background:linear-gradient(135deg,rgba(47,212,138,.10),rgba(79,155,255,.07));
@@ -260,7 +300,7 @@ NAV = (
     ("/kalendarz-wynikow-spolek", "Kalendarz wyników"),
     ("/wyniki-finansowe", "Wyniki spółek"),
     ("/portfel-inwestycyjny", "Portfel"),
-    ("/skaner-etf", "ETF"),
+    ("/etf", "ETF"),
     ("/poradniki", "Poradniki"),
     ("/slownik", "Słownik"),
 )
@@ -276,9 +316,19 @@ FOOTER = (
         ("/analiza-newsow-ai", "Analiza newsów AI"),
     )),
     ("Wyniki spółek", (
+        ("/sezon-wynikow", "Sezon wyników — kto raportuje teraz"),
         ("/wyniki-finansowe", "Wszystkie spółki"),
         ("/wyniki-finansowe/gpw", "Spółki z GPW"),
         ("/wyniki-finansowe/usa", "Spółki z USA"),
+        ("/wyniki-finansowe/sektor/technologia", "Spółki technologiczne"),
+        ("/wyniki-finansowe/sektor/finanse", "Banki i finanse"),
+    )),
+    ("Fundusze ETF", (
+        ("/etf", "Lista funduszy ETF"),
+        ("/etf/swiatowe", "ETF na cały świat"),
+        ("/etf/dywidendowe", "ETF dywidendowe"),
+        ("/etf/obligacje", "ETF na obligacje"),
+        ("/etf/zloto-i-surowce", "ETF na złoto i surowce"),
     )),
     ("Wiedza", (
         ("/poradniki", "Poradniki"),
@@ -397,15 +447,73 @@ def chipsy(linki) -> str:
     return '<div class="chips">' + "".join(out) + "</div>"
 
 
+def wiersze(pozycje, naglowek=None, wiecej=None) -> str:
+    """Lista pozycji: znak firmowy, nazwa z podtytułem i liczba po prawej.
+
+    Pozycja to słownik: `logo` (gotowy HTML albo pusty napis), `tytul`, `podtytul`,
+    `wartosc`, `nota`, `adres`. Używają tego mini-kalendarz na podstronie spółki
+    i strony zbiorcze — jeden wygląd zamiast trzech podobnych.
+    """
+    if not pozycje:
+        return ""
+    czesci = []
+    if naglowek:
+        tytul, prawa = (naglowek, "") if isinstance(naglowek, str) else naglowek
+        czesci.append(f'<div class="head"><b>{esc(tytul)}</b>'
+                      + (f"<span>{esc(prawa)}</span>" if prawa else "") + "</div>")
+    for p in pozycje:
+        adres = p.get("adres") or ""
+        znacznik, atr = ("a", f' href="{esc(adres)}"') if adres else ("div", "")
+        bok = ""
+        if p.get("wartosc") or p.get("nota"):
+            bok = ('<div class="side">'
+                   + (f"<b>{esc(p.get('wartosc'))}</b>" if p.get("wartosc") else "")
+                   + (esc(p.get("nota")) if p.get("nota") else "") + "</div>")
+        czesci.append(
+            f'<{znacznik} class="row"{atr}>{p.get("logo") or ""}'
+            f'<div class="main"><div class="nm">{esc(p.get("tytul"))}</div>'
+            + (f'<div class="sub">{esc(p.get("podtytul"))}</div>'
+               if p.get("podtytul") else "")
+            + f"</div>{bok}</{znacznik}>")
+    if wiecej:
+        czesci.append(f'<a class="more" href="{esc(wiecej[0])}">{esc(wiecej[1])} →</a>')
+    return '<div class="rows">' + "".join(czesci) + "</div>"
+
+
+def kafle(pozycje) -> str:
+    """Siatka kafli ze znakiem firmowym — spis spółek, który da się przeglądać wzrokiem.
+
+    Pozycja: `logo`, `tytul`, `podtytul`, `adres`.
+    """
+    if not pozycje:
+        return ""
+    out = []
+    for p in pozycje:
+        adres = p.get("adres") or ""
+        znacznik, atr = ("a", f' href="{esc(adres)}"') if adres else ("div", "")
+        out.append(
+            f'<{znacznik} class="tile"{atr}>{p.get("logo") or ""}'
+            f'<div class="txt"><div class="nm">{esc(p.get("tytul"))}</div>'
+            + (f'<div class="sub">{esc(p.get("podtytul"))}</div>'
+               if p.get("podtytul") else "")
+            + f"</div></{znacznik}>")
+    return '<div class="tiles">' + "".join(out) + "</div>"
+
+
 def zacheta(tytul: str, tekst: str, adres: str = "/",
-            etykieta: str = "Otwórz Portevo", drugi=None) -> str:
-    """Pasek zachęty na końcu strony — jedyne miejsce, gdzie prosimy o kliknięcie."""
-    drugi_html = ""
-    if drugi:
-        drugi_html = f'<a class="btn ghost" href="{esc(drugi[0])}">{esc(drugi[1])}</a>'
+            etykieta: str = "Otwórz Portevo", drugi=None, trzeci=None) -> str:
+    """Pasek zachęty na końcu strony — jedyne miejsce, gdzie prosimy o kliknięcie.
+
+    Trzy przyciski to maksimum i tylko wtedy, gdy prowadzą do RÓŻNYCH rzeczy
+    (karta spółki, obserwowane, kalendarz). Cztery równorzędne wezwania to już
+    nie wybór, tylko wahanie przeniesione na czytelnika.
+    """
+    poboczne = "".join(
+        f'<a class="btn ghost" href="{esc(p[0])}">{esc(p[1])}</a>'
+        for p in (drugi, trzeci) if p)
     return (f'<div class="cta"><h2>{esc(tytul)}</h2><p>{esc(tekst)}</p>'
             f'<div class="actions"><a class="btn big" href="{esc(adres)}">{esc(etykieta)}</a>'
-            f"{drugi_html}</div></div>")
+            f"{poboczne}</div></div>")
 
 
 def zastrzezenie() -> str:
@@ -413,6 +521,24 @@ def zastrzezenie() -> str:
 
 
 # --------------------------------------------------------------- cała strona
+
+
+_arkusz_cache = ""
+
+
+def arkusz() -> str:
+    """Cały styl serwisu: szkielet plus style wykresów i znaków firmowych.
+
+    Import jest w środku funkcji świadomie — `charts` i `logos` korzystają
+    z funkcji tego modułu, więc import na górze pliku zrobiłby cykl. Wynik
+    składamy raz i trzymamy, bo doklejanie napisów przy każdym żądaniu byłoby
+    pracą wykonywaną setki razy dla identycznego rezultatu.
+    """
+    global _arkusz_cache
+    if not _arkusz_cache:
+        from . import charts, logos
+        _arkusz_cache = CSS + charts.CSS + logos.CSS
+    return _arkusz_cache
 
 
 def _okruchy(pozycje) -> str:
@@ -457,7 +583,7 @@ def _stopka() -> str:
 def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
            bloki, nadtytul: str = "", okruchy=None, jsonld=None,
            akcje=None, aktualizacja: str = "", szeroki_naglowek: bool = False,
-           noindex: bool = False) -> str:
+           noindex: bool = False, przed_h1: str = "") -> str:
     """Gotowy dokument HTML jednej podstrony.
 
     `tytul` to `<title>` i og:title — do 60 znaków, bo dłuższe Google ucina.
@@ -508,11 +634,13 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
 <meta name="twitter:description" content="{esc(opis)}">
 <meta name="twitter:image" content="{esc(obrazek)}">
 <meta name="theme-color" content="#080b11">
+<link rel="icon" type="image/png" href="/static/seo/icon-96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/static/seo/icon-48.png" sizes="48x48">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/seo/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="/static/seo/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
-<style>{CSS}</style>
+<style>{arkusz()}</style>
 {dane}</head>
 <body>
 <a class="skip" href="#tresc">Przejdź do treści</a>
@@ -522,6 +650,7 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
 {_okruchy(okruchy)}
 <div class="hero{' wide' if szeroki_naglowek else ''}">
 {f'<span class="eyebrow">{esc(nadtytul)}</span>' if nadtytul else ''}
+{przed_h1}
 <h1>{esc(h1)}</h1>
 <p class="lead">{lead}</p>
 {f'<p class="meta">Aktualizacja: {esc(aktualizacja)}</p>' if aktualizacja else ''}

@@ -26,7 +26,8 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from . import companies, company_page, features, glossary, guides, site
+from . import (companies, company_page, etfs, features, glossary, guides, season,
+               sectors, site)
 
 router = APIRouter()
 
@@ -38,12 +39,13 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 #: Adresy, które muszą działać bez logowania. Czyta to `dashboard.py`.
 PUBLICZNE_SCIEZKI = {
     "/funkcje", "/wyniki-finansowe", "/poradniki", "/slownik",
+    season.SCIEZKA,
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
     "/api/seo/strony",
-} | set(features.STRONY)
+} | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy())
 
-PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/")
+PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/", "/etf/")
 
 # Treść opisowa zmienia się rzadko, dane spółek co kilka godzin. Krótszy czas dla
 # spółek to nie kaprys: strona z nieaktualnym terminem publikacji wyników jest
@@ -108,6 +110,37 @@ def spis_usa(request: Request):
     return _odpowiedz(company_page.spis("USA"), request)
 
 
+@router.get("/wyniki-finansowe/sektor/{slug}", include_in_schema=False)
+def strona_sektora(slug: str, request: Request):
+    html = sectors.zbuduj(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiej branży")
+    return _odpowiedz(html, request, CACHE_SPOLKA)
+
+
+@router.get("/etf", include_in_schema=False)
+def spis_etf(request: Request):
+    html = etfs.zbuduj("")
+    if html is None:
+        raise HTTPException(404, "Katalog funduszy niedostępny")
+    return _odpowiedz(html, request)
+
+
+@router.get("/etf/{slug}", include_in_schema=False)
+def strona_etf(slug: str, request: Request):
+    html = etfs.zbuduj(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiej listy funduszy")
+    return _odpowiedz(html, request)
+
+
+@router.get("/sezon-wynikow", include_in_schema=False)
+def strona_sezonu(request: Request):
+    # Krótszy cache niż reszta treści: to lista dat, a nie opis. Strona
+    # z wczorajszym „kto raportuje dziś” jest gorsza niż jej brak.
+    return _odpowiedz(season.zbuduj(), request, CACHE_SPOLKA)
+
+
 @router.get("/wyniki-finansowe/{slug}", include_in_schema=False)
 def strona_spolki(slug: str, request: Request):
     wynik = company_page.zbuduj(slug)
@@ -164,6 +197,7 @@ def _wpisy() -> list[tuple[str, str, str]]:
     poz: list[tuple[str, str, str]] = [
         ("/", "daily", "1.0"),
         ("/kalendarz-wynikow-spolek", "daily", "0.9"),
+        (season.SCIEZKA, "daily", "0.9"),
         ("/wyniki-finansowe", "daily", "0.9"),
         ("/wyniki-finansowe/gpw", "daily", "0.8"),
         ("/wyniki-finansowe/usa", "daily", "0.8"),
@@ -173,6 +207,8 @@ def _wpisy() -> list[tuple[str, str, str]]:
     ]
     poz += [(s, "monthly", "0.8") for s in features.STRONY
             if s != "/kalendarz-wynikow-spolek"]
+    poz += [(a, "weekly", "0.8") for a in sectors.adresy()]
+    poz += [(a, "monthly", "0.7") for a in etfs.adresy()]
     poz += [(a, "daily", "0.7") for a in companies.adresy()]
     poz += [(f"/poradniki/{s}", "monthly", "0.6") for s in guides.KOLEJNOSC]
     poz += [(f"/slownik/{h[0]}", "yearly", "0.5") for h in glossary.HASLA]
@@ -212,6 +248,13 @@ def _grupy_stron() -> list[dict]:
         "opis": features.STRONY[s]["opis"],
         "tag": features.STRONY[s].get("nadtytul", ""),
     } for s in features.STRONY]
+    funkcje.insert(1, {
+        "adres": season.SCIEZKA,
+        "tytul": "Sezon wyników",
+        "opis": "Kto raportuje w najbliższych dniach — żywy kalendarz publikacji "
+                "z giełd amerykańskich i GPW.",
+        "tag": "Na żywo",
+    })
 
     poradniki = [{
         "adres": f"/poradniki/{slug}",
@@ -226,6 +269,20 @@ def _grupy_stron() -> list[dict]:
         "opis": h[2],
         "tag": "",
     } for h in glossary.HASLA]
+
+    fundusze = [{
+        "adres": cfg["sciezka"],
+        "tytul": cfg["h1"].split(" — ")[0],
+        "opis": cfg["opis"],
+        "tag": "ETF",
+    } for cfg in etfs.STRONY.values()]
+
+    branze = [{
+        "adres": adres,
+        "tytul": nazwa.capitalize(),
+        "opis": f"Wyniki i terminy raportów spółek z branży: {nazwa}",
+        "tag": f"{ile} spółek",
+    } for adres, nazwa, ile in sectors.spis()]
 
     spolki = [{
         "adres": companies.adres(s),
@@ -242,6 +299,10 @@ def _grupy_stron() -> list[dict]:
          "strony": poradniki, "spis": "/poradniki"},
         {"id": "slownik", "tytul": "Słownik giełdowy", "opis": "Pojęcia z definicją i przykładem liczbowym",
          "strony": slownik, "spis": "/slownik"},
+        {"id": "branze", "tytul": "Branże", "opis": "Wyniki spółek zebrane w sektory",
+         "strony": branze, "spis": "/wyniki-finansowe"},
+        {"id": "etf", "tytul": "Fundusze ETF", "opis": "Listy funduszy z opisem, co robi każdy z nich",
+         "strony": fundusze, "spis": "/etf"},
         {"id": "spolki", "tytul": "Wyniki spółek", "opis": "Karta wyników każdej spółki z katalogu",
          "strony": spolki, "spis": "/wyniki-finansowe"},
     ]

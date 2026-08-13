@@ -13,7 +13,11 @@ Co dokładamy:
   i bez Open Graph. Efekt: strona po polsku deklarowała angielski, a link
   wklejony na Facebooka czy Discorda pokazywał gołe „Portevo” bez obrazka.
 * **Ikony i manifest.** Bez nich karta w przeglądarce jest bez znaku firmowego,
-  a „dodaj do ekranu głównego” nie działa jak aplikacja.
+  a „dodaj do ekranu głównego” nie działa jak aplikacja. Kolejność wpisów nie
+  jest przypadkowa: pierwsze idą PNG 96 i 48 px, bo robot faworytów Google
+  przyjmuje ikony o boku będącym wielokrotnością 48 px i sięga po nie przed
+  plikiem `.ico` — a przy jego odrzuceniu w wynikach wyszukiwania widnieje
+  szara kula zamiast znaku firmowego.
 * **Treść dla przeglądarek bez JavaScriptu** w `<noscript>`. To jedyne uczciwe
   miejsce na treść, której nie widzi użytkownik z włączonym skryptem: element
   `<noscript>` z definicji pokazuje się TYLKO wtedy, gdy skryptów nie ma, więc
@@ -165,6 +169,8 @@ def _meta(tytul: str = TYTUL_GLOWNY) -> str:
 <meta name="twitter:title" content="{_esc(tytul)}">
 <meta name="twitter:description" content="{_esc(opis)}">
 <meta name="twitter:image" content="{_esc(obrazek)}">
+<link rel="icon" type="image/png" href="/static/seo/icon-96.png" sizes="96x96">
+<link rel="icon" type="image/png" href="/static/seo/icon-48.png" sizes="48x48">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/seo/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">

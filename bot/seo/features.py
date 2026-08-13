@@ -632,6 +632,29 @@ def adresy() -> list[str]:
     return ["/funkcje"] + _kolejnosc()
 
 
+def _zywe(sciezka: str) -> str:
+    """Blok z prawdziwymi danymi na wybranych podstronach funkcji.
+
+    Strona opisująca kalendarz wyników, na której nie ma ani jednej daty, jest
+    ulotką. Jeden blok z żywymi terminami zamienia ją w narzędzie — i to jest
+    różnica między „przeczytałem o funkcji” a „zobaczyłem, jak działa”.
+
+    Import jest lokalny, bo `season` sięga po dane spółek i kalendarza; import
+    na górze pliku wciągałby ten łańcuch przy każdym starcie serwera, także dla
+    stron, które go nie potrzebują.
+    """
+    if sciezka != "/kalendarz-wynikow-spolek":
+        return ""
+    try:
+        from . import season
+        return season.blok_kalendarza()
+    except Exception as e:  # noqa: BLE001
+        # Dane na żywo są dodatkiem — ich awaria nie może zabrać całej podstrony.
+        import logging
+        logging.getLogger("seo.features").warning("Blok kalendarza: %s", e)
+        return ""
+
+
 def zbuduj(sciezka: str) -> str | None:
     """Gotowy HTML jednej podstrony funkcji."""
     d = STRONY.get(sciezka)
@@ -639,6 +662,9 @@ def zbuduj(sciezka: str) -> str | None:
         return None
 
     bloki = []
+    zywe = _zywe(sciezka)
+    if zywe:
+        bloki.append(zywe)
     for s in d["sekcje"]:
         bloki.append(render.sekcja(
             s["h2"], *s.get("p", []), lista=s.get("lista"),

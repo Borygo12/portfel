@@ -134,6 +134,21 @@ def gielda_pl(spolka: dict) -> str:
                       ("GPW" if spolka["market"] == "GPW" else "giełda w USA"))
 
 
+#: Skróty giełd do miejsc, w których nie ma miejsca na pełną nazwę — kafelek
+#: spółki, wiersz listy. „Giełda Papierów Wartościowych w Warszawie” w kafelku
+#: szerokim na 230 px i tak zostałaby przycięta wielokropkiem.
+_SKROTY_GIELD = {
+    "Warsaw": "GPW", "NasdaqGS": "Nasdaq", "NasdaqGM": "Nasdaq",
+    "NasdaqCM": "Nasdaq", "NYSE": "NYSE", "NYSEArca": "NYSE Arca",
+    "BATS": "Cboe",
+}
+
+
+def gielda_krotka(spolka: dict) -> str:
+    return _SKROTY_GIELD.get(spolka.get("exchange") or "",
+                             "GPW" if spolka["market"] == "GPW" else "USA")
+
+
 def kraj_pl(spolka: dict) -> str:
     return KRAJE.get(spolka.get("country") or "", spolka.get("country") or "")
 

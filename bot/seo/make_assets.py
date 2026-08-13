@@ -119,6 +119,13 @@ def main() -> None:
         print(f"  {nazwa:32} {im.size[0]}x{im.size[1]}")
 
     print("Ikony:")
+    # 48 i 96 px to nie kaprys: robot faworytów Google przyjmuje wyłącznie ikony
+    # kwadratowe o boku będącym WIELOKROTNOŚCIĄ 48 px i sięga po nie zanim
+    # zajrzy do `.ico`. Sam plik `.ico` (16/32/48) bywa przez niego odrzucany
+    # jako zbyt mały — a wtedy przy wyniku wyszukiwania widnieje szara kula
+    # zamiast znaku firmowego, co widać po klikalności.
+    zapisz(_kafel(48, wykres), "icon-48.png")
+    zapisz(_kafel(96, wykres), "icon-96.png")
     zapisz(_kafel(192, wykres), "icon-192.png")
     zapisz(_kafel(512, wykres), "icon-512.png")
     # maskowalna: system może przyciąć do koła, więc motyw musi zmieścić się
