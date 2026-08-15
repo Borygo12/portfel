@@ -57,13 +57,10 @@ KEY_FILE = (os.environ.get("APPLE_IAP_KEY_FILE") or "keys/apple_iap.p8").strip()
 KEY_PEM = (os.environ.get("APPLE_IAP_KEY_PEM") or "").strip().replace("\\n", "\n")
 
 # Produkcja i piaskownica to OSOBNE serwery z osobnymi transakcjami. Apple każe
-# pytać najpierw produkcję, a dopiero po odpowiedzi „nie znam takiej" — piaskownicę.
+# pytać najpierw produkcję, a gdy ta transakcji nie potwierdzi — piaskownicę.
 # Dzięki temu ta sama wersja aplikacji działa u recenzenta (sandbox) i u klienta.
 API_PROD = "https://api.storekit.itunes.apple.com"
 API_SANDBOX = "https://api.storekit-sandbox.itunes.apple.com"
-
-# kod błędu App Store Server API: „nie ma takiej transakcji w tym środowisku"
-ERR_NOT_FOUND = 4040010
 
 # Stany subskrypcji z odpowiedzi Apple. 3 (ponawianie płatności) i 4 (okres
 # łaski) zostawiają dostęp — karta mogła po prostu wygasnąć, a wyłączanie
@@ -153,6 +150,12 @@ def _get(path: str) -> tuple[dict, str]:
     """Pyta produkcję, a gdy transakcji tam nie ma — piaskownicę.
 
     Zwraca (odpowiedź, środowisko). Pusty słownik = nie znaleziono nigdzie.
+
+    Piaskownicę pytamy również po **401 z produkcji**. Sprawdzone na żywo 15 sierpnia
+    2026: dopóki aplikacji nie ma w sklepie, serwer produkcyjny odrzuca poprawny
+    klucz kodem 401, a piaskownica odpowiada normalnie. Wcześniejsza wersja na 401
+    przerywała pętlę — a to właśnie w piaskownicy kupuje recenzent Apple, więc jego
+    zakup nigdy by się nie potwierdził i wydanie poleciałoby z 2.1(b) po raz drugi.
     """
     headers = {"Authorization": f"Bearer {_bearer()}"}
     for base, env in ((API_PROD, "Production"), (API_SANDBOX, "Sandbox")):
@@ -165,14 +168,9 @@ def _get(path: str) -> tuple[dict, str]:
                 return r.json() or {}, env
             except ValueError:
                 return {}, env
-        if r.status_code == 404:
-            try:
-                if (r.json() or {}).get("errorCode") == ERR_NOT_FOUND:
-                    continue          # spróbuj w drugim środowisku
-            except ValueError:
-                pass
-        # 401 (zły klucz) albo 5xx — dalsze pytanie o to samo nic nie da
-        break
+        # każda inna odpowiedź (404 „nie znam transakcji", 401 z niewydanej jeszcze
+        # aplikacji, 5xx) znaczy tyle samo: tutaj tej transakcji nie potwierdzimy,
+        # więc pytamy drugie środowisko zamiast się poddawać
     return {}, ""
 
 
