@@ -21,6 +21,9 @@ Konfiguracja w `keys/apple.env` (plik nie idzie do repozytorium):
     APPLE_IAP_KEY_FILE=keys/apple_iap.p8 # pobrany raz, nie do odzyskania
     APPLE_BUNDLE_ID=pl.borygo.portevo
 
+Na hostingu, gdzie katalogu `keys/` nie ma, zamiast pliku wystarczy zmienna
+`APPLE_IAP_KEY_PEM` z całą treścią `.p8` (razem z liniami BEGIN/END).
+
 Dopóki tych wartości nie ma, `configured()` zwraca False, a endpoint zakupu mówi
 o tym wprost zamiast udawać, że coś sprawdził.
 """
@@ -47,6 +50,11 @@ KEY_ID = (os.environ.get("APPLE_IAP_KEY_ID") or "").strip()
 ISSUER_ID = (os.environ.get("APPLE_IAP_ISSUER_ID") or "").strip()
 BUNDLE_ID = (os.environ.get("APPLE_BUNDLE_ID") or "pl.borygo.portevo").strip()
 KEY_FILE = (os.environ.get("APPLE_IAP_KEY_FILE") or "keys/apple_iap.p8").strip()
+# Na hostingu nie ma katalogu `keys/` (nie idzie do repozytorium), a plików się tam
+# nie wgrywa — jest tylko tablica zmiennych. Dlatego treść `.p8` wolno podać wprost
+# w `APPLE_IAP_KEY_PEM`. Railway zjada wieloliniowe wartości, ale gdyby ktoś wkleił
+# klucz z „\n" zamiast złamań wiersza, i tak go rozwiniemy.
+KEY_PEM = (os.environ.get("APPLE_IAP_KEY_PEM") or "").strip().replace("\\n", "\n")
 
 # Produkcja i piaskownica to OSOBNE serwery z osobnymi transakcjami. Apple każe
 # pytać najpierw produkcję, a dopiero po odpowiedzi „nie znam takiej" — piaskownicę.
@@ -69,12 +77,20 @@ STATUS_NAMES = {
 
 def configured() -> bool:
     """Czy da się w ogóle zapytać Apple. Bez klucza nie udajemy weryfikacji."""
-    return bool(KEY_ID and ISSUER_ID and _key_path())
+    return bool(KEY_ID and ISSUER_ID and (KEY_PEM or _key_path()))
 
 
 def _key_path() -> str:
     p = KEY_FILE if os.path.isabs(KEY_FILE) else os.path.join(_ROOT, KEY_FILE)
     return p if os.path.exists(p) else ""
+
+
+def _private_key() -> str:
+    """Klucz ES256: z pliku na komputerze, ze zmiennej na hostingu."""
+    if KEY_PEM:
+        return KEY_PEM
+    with open(_key_path(), encoding="utf-8") as f:
+        return f.read()
 
 
 # --------------------------------------------------------------- token dostępu
@@ -96,8 +112,7 @@ def _bearer() -> str:
 
     import jwt                                    # PyJWT[crypto] — tylko tutaj
 
-    with open(_key_path(), encoding="utf-8") as f:
-        private_key = f.read()
+    private_key = _private_key()
 
     token = jwt.encode(
         {
