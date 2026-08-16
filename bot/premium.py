@@ -110,6 +110,33 @@ FEATURES: list[dict] = [
         "free_hint": "Bez premium widzisz listę funduszy i filtry — bez wnętrza i porównań.",
     },
 
+    {
+        "id": "tools.dividends",
+        "group": "tools",
+        "screen": "tools",
+        "status": "live",
+        "icon": "💰",
+        "title": "Inwestowanie dywidendowe",
+        "tagline": "Policz, ile realnie wpłynie na konto — i czy ta wypłata przetrwa",
+        "pitch": (
+            "Stopa dywidendy to najbardziej mylące pojęcie na giełdzie: rośnie, gdy kurs "
+            "spada, więc najwyższe wartości mają najczęściej spółki w kłopotach. Tu liczymy "
+            "z dziesięciu lat historii wypłat to, czego z jednej liczby nie widać — ile lat "
+            "z rzędu spółka podnosi dywidendę, czy kiedykolwiek ją obcięła i jaką część "
+            "zysku oddaje. Do tego kalkulator, który pokazuje kwotę po podatku Belki "
+            "i po potrąceniu u źródła, bo to ona ląduje na rachunku."
+        ),
+        "bullets": [
+            "Ocena bezpieczeństwa dywidendy z historii wypłat, serii podwyżek i wskaźnika wypłaty",
+            "Projekcja dochodu na lata naprzód z reinwestycją, dopłatami i podatkiem",
+            "Yield on cost — ile procent dostajesz względem WŁASNEJ ceny zakupu",
+            "Porównywarka czterech aktywów naraz, także spółka kontra fundusz ETF",
+            "Dopasowanie do portfela: korelacja, koncentracja i największe obsunięcia",
+            "Twoje realne dywidendy z wgranego raportu maklerskiego",
+        ],
+        "free_hint": "Bez premium masz skaner z filtrami, kalendarz wypłat i kalkulator dochodu.",
+    },
+
     # ------------------------------------------------------------ bot newsowy
     {
         "id": "bot.signals",

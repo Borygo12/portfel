@@ -360,6 +360,11 @@ app.include_router(account_api.router)
 # sitemap.xml, robots.txt, llms.txt i manifest aplikacji webowej.
 app.include_router(seo_routes.router)
 
+# Narzędzie „Inwestowanie dywidendowe" — skaner, kalendarz, kalkulator i analiza
+# portfela pod kątem wypłat. Całość za bramką logowania (patrz `dividends_api`).
+import dividends_api                             # noqa: E402
+app.include_router(dividends_api.router)
+
 
 @app.on_event("startup")
 def _rozgrzej_seo():
@@ -389,6 +394,7 @@ def _rozgrzej_seo():
         # dywidendowe stały puste przez pierwsze pół godziny po każdym wdrożeniu,
         # choć ich dane były do wzięcia od razu — sprawdzone na produkcji.
         seo_pamiec.rozgrzej(seo_dividends.rozgrzej_zadania()
+                            + dividends_api.rozgrzej_zadania()
                             + seo_reactions.rozgrzej_zadania())
     except Exception:  # noqa: BLE001 — rozgrzewka nie może zatrzymać startu
         log.exception("Nie udało się uruchomić rozgrzewania warstwy SEO")

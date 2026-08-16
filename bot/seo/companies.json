@@ -56,6 +56,20 @@
   "website": "https://www.allegro.eu"
  },
  {
+  "symbol": "AMB.WA",
+  "slug": "ambra",
+  "name": "Ambra",
+  "legal": "Ambra S.A.",
+  "market": "GPW",
+  "exchange": "Warsaw",
+  "currency": "PLN",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Beverages - Wineries & Distilleries",
+  "country": "Poland",
+  "website": "https://www.ambra.com.pl"
+ },
+ {
   "symbol": "AMC.WA",
   "slug": "amica",
   "name": "Amica",
@@ -530,6 +544,20 @@
   "industry": "Real Estate - Diversified",
   "country": "Poland",
   "website": "https://www.echo.com.pl"
+ },
+ {
+  "symbol": "ELT.WA",
+  "slug": "elektrotim",
+  "name": "Elektrotim",
+  "legal": "Elektrotim S.A.",
+  "market": "GPW",
+  "exchange": "Warsaw",
+  "currency": "PLN",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Electrical Equipment & Parts",
+  "country": "Poland",
+  "website": "https://www.elektrotim.pl"
  },
  {
   "symbol": "ENA.WA",
@@ -1708,6 +1736,20 @@
   "website": "https://sniezkagroup.com"
  },
  {
+  "symbol": "MMM",
+  "slug": "3m",
+  "name": "3M",
+  "legal": "3M Company",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Conglomerates",
+  "country": "United States",
+  "website": "https://www.3m.com"
+ },
+ {
   "symbol": "ABT",
   "slug": "abbott-laboratories",
   "name": "Abbott Laboratories",
@@ -1776,6 +1818,34 @@
   "industry": "Semiconductors",
   "country": "United States",
   "website": "https://www.amd.com"
+ },
+ {
+  "symbol": "AFL",
+  "slug": "aflac",
+  "name": "AFLAC",
+  "legal": "AFLAC Incorporated",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Financial Services",
+  "sector_pl": "finanse",
+  "industry": "Insurance - Life",
+  "country": "United States",
+  "website": "https://www.aflac.com"
+ },
+ {
+  "symbol": "ADC",
+  "slug": "agree-realty",
+  "name": "Agree Realty",
+  "legal": "Agree Realty Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Retail",
+  "country": "United States",
+  "website": "https://www.agreerealty.com"
  },
  {
   "symbol": "ABNB",
@@ -1848,6 +1918,20 @@
   "website": "https://www.amazon.com"
  },
  {
+  "symbol": "AMCR",
+  "slug": "amcor",
+  "name": "Amcor",
+  "legal": "Amcor plc",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Cyclical",
+  "sector_pl": "handel i dobra konsumpcyjne",
+  "industry": "Packaging & Containers",
+  "country": "Switzerland",
+  "website": "https://www.amcor.com"
+ },
+ {
   "symbol": "AAL",
   "slug": "american-airlines",
   "name": "American Airlines",
@@ -1860,6 +1944,20 @@
   "industry": "Airlines",
   "country": "United States",
   "website": "https://www.aa.com"
+ },
+ {
+  "symbol": "AEP",
+  "slug": "american-electric-power",
+  "name": "American Electric Power",
+  "legal": "American Electric Power Company, Inc.",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.aep.com"
  },
  {
   "symbol": "AMGN",
@@ -1916,6 +2014,20 @@
   "industry": "Semiconductor Equipment & Materials",
   "country": "United States",
   "website": "https://www.appliedmaterials.com"
+ },
+ {
+  "symbol": "ADM",
+  "slug": "archer-daniels-midland",
+  "name": "Archer-Daniels-Midland",
+  "legal": "Archer-Daniels-Midland Company",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Farm Products",
+  "country": "United States",
+  "website": "https://www.adm.com"
  },
  {
   "symbol": "ARM",
@@ -2170,6 +2282,20 @@
   "website": "https://www.thecignagroup.com"
  },
  {
+  "symbol": "CINF",
+  "slug": "cincinnati-financial",
+  "name": "Cincinnati Financial",
+  "legal": "Cincinnati Financial Corporation",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Financial Services",
+  "sector_pl": "finanse",
+  "industry": "Insurance - Property & Casualty",
+  "country": "United States",
+  "website": "https://www.cinfin.com"
+ },
+ {
   "symbol": "CSCO",
   "slug": "cisco-systems",
   "name": "Cisco Systems",
@@ -2238,6 +2364,34 @@
   "industry": "Financial Data & Stock Exchanges",
   "country": "United States",
   "website": "https://www.coinbase.com"
+ },
+ {
+  "symbol": "CL",
+  "slug": "colgate-palmolive",
+  "name": "Colgate-Palmolive",
+  "legal": "Colgate-Palmolive Company",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Household & Personal Products",
+  "country": "United States",
+  "website": "https://www.colgatepalmolive.com"
+ },
+ {
+  "symbol": "ED",
+  "slug": "consolidated-edison",
+  "name": "Consolidated Edison",
+  "legal": "Consolidated Edison, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.conedison.com"
  },
  {
   "symbol": "COST",
@@ -2352,6 +2506,20 @@
   "website": "https://www.docusign.com"
  },
  {
+  "symbol": "D",
+  "slug": "dominion-energy",
+  "name": "Dominion Energy",
+  "legal": "Dominion Energy, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.dominionenergy.com"
+ },
+ {
   "symbol": "DASH",
   "slug": "doordash",
   "name": "DoorDash",
@@ -2364,6 +2532,20 @@
   "industry": "Internet Retail",
   "country": "United States",
   "website": "https://www.doordash.com"
+ },
+ {
+  "symbol": "DOV",
+  "slug": "dover",
+  "name": "Dover",
+  "legal": "Dover Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Specialty Industrial Machinery",
+  "country": "United States",
+  "website": "https://www.dovercorporation.com"
  },
  {
   "symbol": "DKNG",
@@ -2436,6 +2618,34 @@
   "website": "https://www.lilly.com"
  },
  {
+  "symbol": "EMR",
+  "slug": "emerson-electric",
+  "name": "Emerson Electric",
+  "legal": "Emerson Electric Co.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Specialty Industrial Machinery",
+  "country": "United States",
+  "website": "https://www.emerson.com"
+ },
+ {
+  "symbol": "EPRT",
+  "slug": "essential-properties-realty-trust",
+  "name": "Essential Properties Realty Trust",
+  "legal": "Essential Properties Realty Trust, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Retail",
+  "country": "United States",
+  "website": "https://essentialproperties.com"
+ },
+ {
   "symbol": "ETSY",
   "slug": "etsy",
   "name": "Etsy",
@@ -2448,6 +2658,20 @@
   "industry": "Internet Retail",
   "country": "United States",
   "website": "https://www.etsy.com"
+ },
+ {
+  "symbol": "ES",
+  "slug": "eversource-energy",
+  "name": "Eversource Energy",
+  "legal": "Eversource Energy",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.eversource.com"
  },
  {
   "symbol": "XOM",
@@ -2478,6 +2702,20 @@
   "website": "https://www.ford.com"
  },
  {
+  "symbol": "BEN",
+  "slug": "franklin-resources",
+  "name": "Franklin Resources",
+  "legal": "Franklin Resources, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Financial Services",
+  "sector_pl": "finanse",
+  "industry": "Asset Management",
+  "country": "United States",
+  "website": "https://www.franklinresources.com"
+ },
+ {
   "symbol": "GME",
   "slug": "gamestop",
   "name": "GameStop",
@@ -2504,6 +2742,20 @@
   "industry": "Aerospace & Defense",
   "country": "United States",
   "website": "https://www.geaerospace.com"
+ },
+ {
+  "symbol": "GIS",
+  "slug": "general-mills",
+  "name": "General Mills",
+  "legal": "General Mills, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Packaged Foods",
+  "country": "United States",
+  "website": "https://www.generalmills.com"
  },
  {
   "symbol": "GM",
@@ -2548,6 +2800,20 @@
   "website": "https://www.goldmansachs.com"
  },
  {
+  "symbol": "HSY",
+  "slug": "hershey",
+  "name": "Hershey",
+  "legal": "The Hershey Company",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Confectioners",
+  "country": "United States",
+  "website": "https://www.thehersheycompany.com"
+ },
+ {
   "symbol": "HD",
   "slug": "home-depot",
   "name": "Home Depot",
@@ -2590,6 +2856,20 @@
   "website": "https://www.ibm.com"
  },
  {
+  "symbol": "ITW",
+  "slug": "illinois-tool-works",
+  "name": "Illinois Tool Works",
+  "legal": "Illinois Tool Works Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Specialty Industrial Machinery",
+  "country": "United States",
+  "website": "https://www.itw.com"
+ },
+ {
   "symbol": "INTC",
   "slug": "intel",
   "name": "Intel",
@@ -2602,6 +2882,20 @@
   "industry": "Semiconductors",
   "country": "United States",
   "website": "https://www.intel.com"
+ },
+ {
+  "symbol": "IP",
+  "slug": "international-paper",
+  "name": "International Paper",
+  "legal": "International Paper Company",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Cyclical",
+  "sector_pl": "handel i dobra konsumpcyjne",
+  "industry": "Packaging & Containers",
+  "country": "United States",
+  "website": "https://www.internationalpaper.com"
  },
  {
   "symbol": "INTU",
@@ -2672,6 +2966,20 @@
   "industry": "Banks - Diversified",
   "country": "United States",
   "website": "https://www.jpmorganchase.com"
+ },
+ {
+  "symbol": "KMB",
+  "slug": "kimberly-clark",
+  "name": "Kimberly-Clark",
+  "legal": "Kimberly-Clark Corporation",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Household & Personal Products",
+  "country": "United States",
+  "website": "https://www.kimberly-clark.com"
  },
  {
   "symbol": "KLAC",
@@ -2770,6 +3078,20 @@
   "industry": "Software - Application",
   "country": "United States",
   "website": "https://www.lyft.com"
+ },
+ {
+  "symbol": "MAIN",
+  "slug": "main-street-capital",
+  "name": "Main Street Capital",
+  "legal": "Main Street Capital Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Financial Services",
+  "sector_pl": "finanse",
+  "industry": "Asset Management",
+  "country": "United States",
+  "website": "https://www.mainstcapital.com"
  },
  {
   "symbol": "MA",
@@ -2926,6 +3248,20 @@
   "website": "https://www.netflix.com"
  },
  {
+  "symbol": "NEE",
+  "slug": "nextera-energy",
+  "name": "NextEra Energy",
+  "legal": "NextEra Energy, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.nexteraenergy.com"
+ },
+ {
   "symbol": "NKE",
   "slug": "nike",
   "name": "Nike",
@@ -2952,6 +3288,48 @@
   "industry": "Auto Manufacturers",
   "country": "China",
   "website": "https://www.nio.com"
+ },
+ {
+  "symbol": "NNN",
+  "slug": "nnn-reit",
+  "name": "NNN REIT",
+  "legal": "NNN REIT, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Retail",
+  "country": "United States",
+  "website": "https://www.nnnreit.com"
+ },
+ {
+  "symbol": "NDSN",
+  "slug": "nordson",
+  "name": "Nordson",
+  "legal": "Nordson Corporation",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Specialty Industrial Machinery",
+  "country": "United States",
+  "website": "https://www.nordson.com"
+ },
+ {
+  "symbol": "NUE",
+  "slug": "nucor",
+  "name": "Nucor",
+  "legal": "Nucor Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Basic Materials",
+  "sector_pl": "surowce i materiały",
+  "industry": "Steel",
+  "country": "United States",
+  "website": "https://nucor.com"
  },
  {
   "symbol": "NVDA",
@@ -2996,6 +3374,20 @@
   "website": "https://www.oracle.com"
  },
  {
+  "symbol": "PKG",
+  "slug": "packaging-corporation-of-america",
+  "name": "Packaging Corporation of America",
+  "legal": "Packaging Corporation of America",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Cyclical",
+  "sector_pl": "handel i dobra konsumpcyjne",
+  "industry": "Packaging & Containers",
+  "country": "United States",
+  "website": "https://www.packagingcorp.com"
+ },
+ {
   "symbol": "PLTR",
   "slug": "palantir",
   "name": "Palantir",
@@ -3022,6 +3414,20 @@
   "industry": "Software - Infrastructure",
   "country": "United States",
   "website": "https://www.paloaltonetworks.com"
+ },
+ {
+  "symbol": "PAYX",
+  "slug": "paychex",
+  "name": "Paychex",
+  "legal": "Paychex, Inc.",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Technology",
+  "sector_pl": "technologia",
+  "industry": "Software - Application",
+  "country": "United States",
+  "website": "https://www.paychex.com"
  },
  {
   "symbol": "PYPL",
@@ -3150,6 +3556,20 @@
   "website": "https://www.qualcomm.com"
  },
  {
+  "symbol": "O",
+  "slug": "realty-income",
+  "name": "Realty Income",
+  "legal": "Realty Income Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Retail",
+  "country": "United States",
+  "website": "https://www.realtyincome.com"
+ },
+ {
   "symbol": "REGN",
   "slug": "regeneron",
   "name": "Regeneron",
@@ -3162,6 +3582,20 @@
   "industry": "Biotechnology",
   "country": "United States",
   "website": "https://www.regeneron.com"
+ },
+ {
+  "symbol": "RSG",
+  "slug": "republic-services",
+  "name": "Republic Services",
+  "legal": "Republic Services, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Waste Management",
+  "country": "United States",
+  "website": "https://www.republicservices.com"
  },
  {
   "symbol": "RIVN",
@@ -3374,6 +3808,34 @@
   "website": "https://www.spotify.com"
  },
  {
+  "symbol": "STAG",
+  "slug": "stag-industrial",
+  "name": "STAG Industrial",
+  "legal": "STAG Industrial, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Industrial",
+  "country": "United States",
+  "website": "https://www.stagindustrial.com"
+ },
+ {
+  "symbol": "SWK",
+  "slug": "stanley-black-decker",
+  "name": "Stanley Black & Decker",
+  "legal": "Stanley Black & Decker, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Tools & Accessories",
+  "country": "United States",
+  "website": "https://www.stanleyblackanddecker.com"
+ },
+ {
   "symbol": "SBUX",
   "slug": "starbucks",
   "name": "Starbucks",
@@ -3444,6 +3906,34 @@
   "website": "https://www.synopsys.com"
  },
  {
+  "symbol": "SYY",
+  "slug": "sysco",
+  "name": "Sysco",
+  "legal": "Sysco Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Food Distribution",
+  "country": "United States",
+  "website": "https://www.sysco.com"
+ },
+ {
+  "symbol": "TROW",
+  "slug": "t-rowe-price",
+  "name": "T. Rowe Price",
+  "legal": "T. Rowe Price Group, Inc.",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Financial Services",
+  "sector_pl": "finanse",
+  "industry": "Asset Management",
+  "country": "United States",
+  "website": "https://www.troweprice.com"
+ },
+ {
   "symbol": "TTWO",
   "slug": "take-two-interactive",
   "name": "Take-Two Interactive",
@@ -3456,6 +3946,20 @@
   "industry": "Electronic Gaming & Multimedia",
   "country": "United States",
   "website": "https://www.take2games.com"
+ },
+ {
+  "symbol": "TGT",
+  "slug": "target",
+  "name": "Target",
+  "legal": "Target Corporation",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Consumer Defensive",
+  "sector_pl": "dobra podstawowe",
+  "industry": "Discount Stores",
+  "country": "United States",
+  "website": "https://corporate.target.com"
  },
  {
   "symbol": "TSLA",
@@ -3626,6 +4130,20 @@
   "website": "https://www.vrtx.com"
  },
  {
+  "symbol": "VICI",
+  "slug": "vici-properties",
+  "name": "VICI Properties",
+  "legal": "VICI Properties Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Diversified",
+  "country": "United States",
+  "website": "https://www.viciproperties.com"
+ },
+ {
   "symbol": "V",
   "slug": "visa",
   "name": "Visa",
@@ -3638,6 +4156,20 @@
   "industry": "Credit Services",
   "country": "United States",
   "website": "https://www.visa.com"
+ },
+ {
+  "symbol": "WPC",
+  "slug": "w-p-carey",
+  "name": "W. P. Carey",
+  "legal": "W. P. Carey Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Real Estate",
+  "sector_pl": "nieruchomości",
+  "industry": "REIT - Diversified",
+  "country": "United States",
+  "website": "https://www.wpcarey.com"
  },
  {
   "symbol": "WMT",
@@ -3668,6 +4200,20 @@
   "website": "https://thewaltdisneycompany.com"
  },
  {
+  "symbol": "WM",
+  "slug": "waste-management",
+  "name": "Waste Management",
+  "legal": "Waste Management, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Industrials",
+  "sector_pl": "przemysł",
+  "industry": "Waste Management",
+  "country": "United States",
+  "website": "https://www.wm.com"
+ },
+ {
   "symbol": "W",
   "slug": "wayfair",
   "name": "Wayfair",
@@ -3682,6 +4228,20 @@
   "website": "https://www.wayfair.com"
  },
  {
+  "symbol": "WEC",
+  "slug": "wec-energy",
+  "name": "WEC Energy",
+  "legal": "WEC Energy Group, Inc.",
+  "market": "USA",
+  "exchange": "NYSE",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.wecenergygroup.com"
+ },
+ {
   "symbol": "WFC",
   "slug": "wells-fargo",
   "name": "Wells Fargo",
@@ -3694,6 +4254,20 @@
   "industry": "Banks - Diversified",
   "country": "United States",
   "website": "https://www.wellsfargo.com"
+ },
+ {
+  "symbol": "XEL",
+  "slug": "xcel-energy",
+  "name": "Xcel Energy",
+  "legal": "Xcel Energy Inc.",
+  "market": "USA",
+  "exchange": "NasdaqGS",
+  "currency": "USD",
+  "sector": "Utilities",
+  "sector_pl": "energetyka i media komunalne",
+  "industry": "Utilities - Regulated Electric",
+  "country": "United States",
+  "website": "https://www.my.xcelenergy.com/s"
  },
  {
   "symbol": "ZTS",
