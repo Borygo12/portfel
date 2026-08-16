@@ -72,7 +72,28 @@ def _esc(t: str) -> str:
     return _html.escape(t or "", quote=True)
 
 
-TYTUL_GLOWNY = "Portevo — kalendarz wyników spółek i portfel inwestycyjny"
+#: Tytuł i opis adresu głównego.
+#:
+#: **Muszą opisywać to, co pod „/" naprawdę widać po uruchomieniu aplikacji** —
+#: a widać Przegląd z portfelem pokazowym. Wcześniej stał tu tytuł obiecujący
+#: „kalendarz wyników spółek", czyli treść, której na tym ekranie nie ma:
+#: robot renderujący JavaScript zastawał listę pozycji z kwotami i szukał
+#: w niej kalendarza. Taki rozjazd między obietnicą a zawartością jest jedną
+#: z niewielu rzeczy, które wyszukiwarka mierzy wprost, i nigdzie nie boli tak
+#: jak na najmocniejszym adresie w domenie.
+#:
+#: Frazy „kalendarz wyników spółek" broni dziś `/kalendarz-wynikow-spolek` —
+#: strona, która faktycznie o tym jest, ma prawie tysiąc słów i dane
+#: strukturalne FAQ. Adres główny gra o markę i o to, czym jest sama aplikacja.
+#: Zmieniając tutaj cokolwiek, sprawdź najpierw, co widać na pierwszym ekranie.
+TYTUL_GLOWNY = "Portevo — aplikacja do śledzenia portfela inwestycyjnego"
+
+#: Długość trzymamy poniżej ~155 znaków — dłuższy opis Google i tak utnie
+#: wielokropkiem, zwykle w połowie zdania, i w wynikach zostaje ogon bez sensu.
+OPIS_GLOWNY = (
+    "Otwiera się od razu w przeglądarce, bez konta i bez instalacji. Wgraj raport "
+    "maklerski i zobacz wartość pozycji, stopę zwrotu i koszty portfela."
+)
 
 #: Tytuł karty przeglądarki per adres zakładki.
 #:
@@ -103,7 +124,10 @@ def tytul_dla(adres: str) -> str:
 
 
 def _meta(tytul: str = TYTUL_GLOWNY) -> str:
-    opis = site.DESCRIPTION
+    # Opis strony ma pasować do jej pierwszego ekranu (patrz `OPIS_GLOWNY`),
+    # a `site.DESCRIPTION` opisuje CAŁY serwis i zostaje tam, gdzie faktycznie
+    # chodzi o serwis: w danych `Organization` i `WebSite` niżej oraz w llms.txt.
+    opis = OPIS_GLOWNY
     kanoniczny = site.absolute("/")
     obrazek = site.absolute(site.OG_IMAGE)
 
@@ -116,7 +140,7 @@ def _meta(tytul: str = TYTUL_GLOWNY) -> str:
             "url": site.URL,
             "logo": site.absolute("/static/seo/logo-portevo.png"),
             "email": site.EMAIL,
-            "description": opis,
+            "description": site.DESCRIPTION,
             "areaServed": {"@type": "Country", "name": "Polska"},
         },
         {
@@ -126,7 +150,7 @@ def _meta(tytul: str = TYTUL_GLOWNY) -> str:
             "name": site.NAME,
             "url": site.URL,
             "inLanguage": "pl-PL",
-            "description": opis,
+            "description": site.DESCRIPTION,
             "publisher": {"@id": site.absolute("/#organizacja")},
         },
         {
@@ -137,7 +161,7 @@ def _meta(tytul: str = TYTUL_GLOWNY) -> str:
             "applicationCategory": "FinanceApplication",
             "operatingSystem": "Web, iOS, Android",
             "inLanguage": "pl-PL",
-            "description": opis,
+            "description": site.DESCRIPTION,
             "offers": {"@type": "Offer", "price": "0", "priceCurrency": "PLN"},
         },
     ]
@@ -195,7 +219,7 @@ def _bez_skryptu() -> str:
 
     return f"""<noscript>
 <div class="bez-js">
-<h1>Portevo — kalendarz wyników spółek i portfel inwestycyjny</h1>
+<h1>{_esc(TYTUL_GLOWNY)}</h1>
 <p>{_esc(site.DESCRIPTION)}</p>
 <p>Sama aplikacja wymaga włączonego JavaScriptu. Poniższe strony działają bez
 niego — znajdziesz na nich terminy publikacji raportów, prognozy analityków

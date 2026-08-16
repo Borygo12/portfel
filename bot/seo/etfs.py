@@ -29,6 +29,10 @@ except Exception:  # noqa: BLE001 — brak modułu nie może zdjąć całej wars
 
 BAZA = "/etf"
 
+#: Dzień ostatniej zmiany w listach funduszy — `lastmod` w sitemapie. Podnieś
+#: przy poprawce treści lub doborze funduszy (patrz `guides.ZMIENIONO`).
+ZMIENIONO = "2026-08-14"
+
 #: slug → (tytuł strony, warunek doboru funduszy, teksty)
 STRONY = {
 

@@ -12,6 +12,7 @@ Bot (main.py) i serwer to osobne procesy; komunikują się przez params.json,
 signals.jsonl i heartbeat.json, więc serwer działa nawet gdy bot leży.
 """
 
+import mimetypes
 import os
 
 import requests
@@ -359,6 +360,33 @@ app.include_router(account_api.router)
 # sitemap.xml, robots.txt, llms.txt i manifest aplikacji webowej.
 app.include_router(seo_routes.router)
 
+
+@app.on_event("startup")
+def _rozgrzej_seo():
+    """Składa dane kalendarza zanim poprosi o nie pierwszy odwiedzający.
+
+    Po restarcie pamięć procesu jest pusta i pierwsze wejście na `/sezon-wynikow`
+    albo stronę branży płaci pełny koszt złożenia listy (zapytanie do Nasdaqa
+    plus kilkaset plików cache): mierzone 9 sekund. Wdrożenie idzie w środku
+    dnia, więc tym pierwszym wejściem bywa robot wyszukiwarki — a dla niego
+    wolna odpowiedź to powód, żeby przy następnym obchodzie zajrzeć na mniej
+    podstron. Rozgrzewka chodzi w wątku pobocznym, więc serwer startuje
+    normalnie i zdąży odpowiedzieć na healthcheck.
+    """
+    from seo import upcoming as seo_upcoming
+    try:
+        seo_upcoming.rozgrzej()
+    except Exception:  # noqa: BLE001 — rozgrzewka nie może zatrzymać startu
+        log.exception("Nie udało się uruchomić rozgrzewania warstwy SEO")
+
+# Typy MIME obrazków wpisane na sztywno, bo na Windowsie `mimetypes` czyta je
+# z rejestru — a tam potrafi ich po prostu nie być. Starlette bez trafienia
+# podaje plik jako `text/plain` i przeglądarka pokazuje krzaki zamiast obrazka.
+# Na Linuksie (produkcja) to nic nie zmienia, lokalnie ratuje podgląd.
+for _rozsz, _typ in ((".png", "image/png"), (".webp", "image/webp"),
+                     (".jpg", "image/jpeg"), (".svg", "image/svg+xml")):
+    mimetypes.add_type(_typ, _rozsz)
+
 # Skrypty i style stron logowania oraz strony sprzedażowej.
 app.mount("/static", StaticFiles(directory=os.path.join(_DIR, "static")), name="static")
 
@@ -386,7 +414,19 @@ if _WEB_READY:
         app.mount("/assets", StaticFiles(directory=_assets), name="assets")
 
 
-@app.get("/favicon.ico")
+def _strona_publiczna(sciezka: str):
+    """Rejestruje publiczny adres na GET **i HEAD** — patrz `seo.routes.strona`.
+
+    `APIRouter` z FastAPI, w odróżnieniu od czystego Starlette, nie dokłada HEAD
+    do tras zadeklarowanych jako GET. Adresy warstwy SEO mają to załatwione
+    u siebie, ale strona główna, `/premium` i dokumenty prawne są rejestrowane
+    tutaj — i one też siedzą w sitemapie, więc też muszą umieć odpowiedzieć na
+    najtańsze pytanie, jakie zadaje robot i każdy sprawdzacz linków.
+    """
+    return app.api_route(sciezka, methods=["GET", "HEAD"], include_in_schema=False)
+
+
+@_strona_publiczna("/favicon.ico")
 def favicon():
     """Ikonka karty w przeglądarce.
 
@@ -441,7 +481,7 @@ def _aplikacja(adres: str = "/", noindex: bool = False):
         return FileResponse(_WEB_INDEX, headers=naglowki)
 
 
-@app.get("/")
+@_strona_publiczna("/")
 def index():
     """Adres główny = aplikacja. Nic pośredniego, żadnej strony o serwerze."""
     return _aplikacja()
@@ -457,17 +497,17 @@ def index():
 # Domknięcie po `_sciezka` przez argument domyślny — bez tego wszystkie trasy
 # podawałyby tytuł ostatniej zakładki z pętli.
 for _sciezka in seo_shell.SCIEZKI_APLIKACJI:
-    app.get(_sciezka, include_in_schema=False)(
+    _strona_publiczna(_sciezka)(
         lambda _s=_sciezka: _aplikacja(_s, noindex=True))
 
 
-@app.get("/premium")
+@_strona_publiczna("/premium")
 def premium_page():
     """Strona sprzedażowa — tu ląduje każde kliknięcie w kłódkę."""
     return _page("premium.html")
 
 
-@app.get("/account")
+@_strona_publiczna("/account")
 def account_page():
     """Logowanie, stan subskrypcji i powrót z OAuth Google."""
     return _page("account.html")
@@ -494,7 +534,7 @@ def _legal_page(slug: str) -> HTMLResponse:
 for _path, _slug in legal.ROUTES.items():
     # domknięcie po `_slug` przez argument domyślny — bez tego wszystkie ścieżki
     # pokazywałyby ostatni dokument z pętli
-    app.get(_path, include_in_schema=False)(
+    _strona_publiczna(_path)(
         (lambda slug=_slug: (lambda: _legal_page(slug)))()
     )
 

@@ -116,7 +116,20 @@ NAZWY = {
 SLUGI = {
     "T": "att", "JNJ": "johnson-johnson", "PG": "procter-gamble",
     "SPGI": "sp-global",
+    # Sama giełda też jest spółką notowaną, a „gpw" pod `/wyniki-finansowe/`
+    # zajmuje spis spółek z warszawskiego parkietu — patrz ZAJETE_SLUGI.
+    "GPW.WA": "gpw-sa",
 }
+
+#: Slugi, których spółce przydzielić NIE WOLNO, bo pod `/wyniki-finansowe/<slug>`
+#: stoją już własne strony serwisu.
+#:
+#: Skąd to się wzięło: GPW S.A. dostała slug „gpw", czyli dokładnie adres spisu
+#: spółek z warszawskiej giełdy. Trasa spisu jest zarejestrowana wcześniej niż
+#: `/{slug}`, więc karta tej spółki po prostu nie istniała — jej adres podawał
+#: listę. Sitemapa wymieniała ten adres dwa razy, z dwoma różnymi priorytetami,
+#: a link z listy spółek prowadził z powrotem na tę samą listę.
+ZAJETE_SLUGI = {"gpw", "usa", "sektor"}
 
 SEKTORY_PL = {
     "Technology": "technologia",
@@ -224,7 +237,8 @@ def main() -> None:
         slug = SLUGI.get(sym) or slugify(nazwa)
         if not slug:
             continue
-        if slug in uzyte:                          # kolizja nazw — doklej ticker
+        # Kolizja z inną spółką ALBO z własną stroną serwisu — doklej ticker.
+        if slug in uzyte or slug in ZAJETE_SLUGI:
             slug = f"{slug}-{slugify(sym.split('.')[0])}"
         uzyte.add(slug)
         gpw = sym.endswith(".WA")

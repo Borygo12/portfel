@@ -20,6 +20,10 @@ from __future__ import annotations
 
 from . import jsonld, keywords, render
 
+#: Dzień ostatniej zmiany w opisach funkcji — `lastmod` w sitemapie. Podnieś
+#: przy poprawce treści, nie przy każdym wdrożeniu (patrz `guides.ZMIENIONO`).
+ZMIENIONO = "2026-08-14"
+
 # Ceny bierzemy z jednego miejsca w kodzie — inaczej cennik na stronie i cennik
 # pod kłódką rozjadą się przy pierwszej zmianie.
 try:

@@ -23,6 +23,12 @@ from . import jsonld, render
 
 DATA = "2026-08-11"
 
+#: Dzień ostatniej merytorycznej poprawki w poradnikach — `lastmod` w sitemapie.
+#: Podnieś, gdy zmieniasz TREŚĆ. Przestawianie tej daty przy nietkniętym tekście
+#: to udawana świeżość: robot porównuje ją z tym, co zastaje na stronie, i po
+#: kilku takich rozjazdach przestaje ufać polu `lastmod` w całym serwisie.
+ZMIENIONO = DATA
+
 #: slug -> treść poradnika
 PORADNIKI = {
 

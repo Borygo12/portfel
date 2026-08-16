@@ -71,6 +71,10 @@ EMAIL = os.environ.get("LEGAL_EMAIL") or os.environ.get("OWNER_EMAIL") or "konta
 #: Data uruchomienia serwisu — wchodzi do danych strukturalnych Organization.
 FOUNDED = "2026"
 
+#: Dzień ostatniej zmiany w stronach formalnych (regulamin, prywatność, kontakt) —
+#: `lastmod` w sitemapie. Podnieś przy zmianie treści (patrz `guides.ZMIENIONO`).
+ZMIENIONO = "2026-08-11"
+
 #: Domyślny obrazek podglądu (Facebook, X, Slack, Discord, LinkedIn).
 OG_IMAGE = "/static/seo/og-portevo.png"
 OG_IMAGE_W, OG_IMAGE_H = 1200, 630

@@ -54,6 +54,20 @@ CACHE_TRESC = "public, max-age=3600, stale-while-revalidate=86400"
 CACHE_SPOLKA = "public, max-age=900, stale-while-revalidate=7200"
 
 
+def strona(sciezka: str):
+    """Rejestruje adres na GET **i HEAD** — dekorator zamiast `@router.get`.
+
+    Czyste Starlette dokłada HEAD do każdej trasy z GET samo, ale `APIRouter`
+    z FastAPI już nie: bierze podaną listę metod dosłownie. Efekt był taki, że
+    `HEAD /funkcje` odpowiadał czterysta piątką, choć `GET /funkcje` podawał
+    stronę. HEAD to dla robota i dla każdego sprawdzacza linków najtańszy
+    sposób zapytania „czy ten adres jeszcze żyje" — a u nas odpowiedź brzmiała
+    „ta metoda jest zabroniona", co dla narzędzia wygląda jak strona zepsuta.
+    """
+    return router.api_route(sciezka, methods=["GET", "HEAD"],
+                            include_in_schema=False)
+
+
 def _odpowiedz(html: str, request: Request, cache: str = CACHE_TRESC,
                indeksowalna: bool = True) -> HTMLResponse:
     naglowki = {"Cache-Control": cache}
@@ -69,7 +83,7 @@ def _odpowiedz(html: str, request: Request, cache: str = CACHE_TRESC,
 # --------------------------------------------------------------- funkcje
 
 
-@router.get("/funkcje", include_in_schema=False)
+@strona("/funkcje")
 def strona_funkcje(request: Request):
     return _odpowiedz(features.zbuduj_spis(), request)
 
@@ -86,7 +100,7 @@ def _zarejestruj_funkcje():
             if html is None:
                 raise HTTPException(404, "Nie ma takiej strony")
             return _odpowiedz(html, request)
-        router.get(sciezka, include_in_schema=False)(widok)
+        strona(sciezka)(widok)
 
 
 _zarejestruj_funkcje()
@@ -95,22 +109,22 @@ _zarejestruj_funkcje()
 # --------------------------------------------------------------- spółki
 
 
-@router.get("/wyniki-finansowe", include_in_schema=False)
+@strona("/wyniki-finansowe")
 def spis_spolek(request: Request):
     return _odpowiedz(company_page.spis(), request)
 
 
-@router.get("/wyniki-finansowe/gpw", include_in_schema=False)
+@strona("/wyniki-finansowe/gpw")
 def spis_gpw(request: Request):
     return _odpowiedz(company_page.spis("GPW"), request)
 
 
-@router.get("/wyniki-finansowe/usa", include_in_schema=False)
+@strona("/wyniki-finansowe/usa")
 def spis_usa(request: Request):
     return _odpowiedz(company_page.spis("USA"), request)
 
 
-@router.get("/wyniki-finansowe/sektor/{slug}", include_in_schema=False)
+@strona("/wyniki-finansowe/sektor/{slug}")
 def strona_sektora(slug: str, request: Request):
     html = sectors.zbuduj(slug)
     if html is None:
@@ -118,7 +132,7 @@ def strona_sektora(slug: str, request: Request):
     return _odpowiedz(html, request, CACHE_SPOLKA)
 
 
-@router.get("/etf", include_in_schema=False)
+@strona("/etf")
 def spis_etf(request: Request):
     html = etfs.zbuduj("")
     if html is None:
@@ -126,7 +140,7 @@ def spis_etf(request: Request):
     return _odpowiedz(html, request)
 
 
-@router.get("/etf/{slug}", include_in_schema=False)
+@strona("/etf/{slug}")
 def strona_etf(slug: str, request: Request):
     html = etfs.zbuduj(slug)
     if html is None:
@@ -134,14 +148,14 @@ def strona_etf(slug: str, request: Request):
     return _odpowiedz(html, request)
 
 
-@router.get("/sezon-wynikow", include_in_schema=False)
+@strona("/sezon-wynikow")
 def strona_sezonu(request: Request):
     # Krótszy cache niż reszta treści: to lista dat, a nie opis. Strona
     # z wczorajszym „kto raportuje dziś” jest gorsza niż jej brak.
     return _odpowiedz(season.zbuduj(), request, CACHE_SPOLKA)
 
 
-@router.get("/wyniki-finansowe/{slug}", include_in_schema=False)
+@strona("/wyniki-finansowe/{slug}")
 def strona_spolki(slug: str, request: Request):
     wynik = company_page.zbuduj(slug)
     if wynik is None:
@@ -159,12 +173,12 @@ def strona_spolki(slug: str, request: Request):
 # --------------------------------------------------------------- poradniki i słownik
 
 
-@router.get("/poradniki", include_in_schema=False)
+@strona("/poradniki")
 def spis_poradnikow(request: Request):
     return _odpowiedz(guides.zbuduj_spis(), request)
 
 
-@router.get("/poradniki/{slug}", include_in_schema=False)
+@strona("/poradniki/{slug}")
 def poradnik(slug: str, request: Request):
     html = guides.zbuduj(slug)
     if html is None:
@@ -172,12 +186,12 @@ def poradnik(slug: str, request: Request):
     return _odpowiedz(html, request)
 
 
-@router.get("/slownik", include_in_schema=False)
+@strona("/slownik")
 def spis_hasel(request: Request):
     return _odpowiedz(glossary.zbuduj_spis(), request)
 
 
-@router.get("/slownik/{slug}", include_in_schema=False)
+@strona("/slownik/{slug}")
 def haslo(slug: str, request: Request):
     html = glossary.zbuduj_haslo(slug)
     if html is None:
@@ -188,44 +202,86 @@ def haslo(slug: str, request: Request):
 # --------------------------------------------------------------- sitemap
 
 
-def _wpisy() -> list[tuple[str, str, str]]:
-    """(adres, jak często się zmienia, priorytet) — kompletna mapa serwisu.
+def _wpisy() -> list[tuple[str, str, str, str]]:
+    """(adres, jak często się zmienia, priorytet, data zmiany) — mapa serwisu.
 
     Priorytet jest wskazówką WZGLĘDNĄ wewnątrz serwisu, nie oceną jakości.
     Nie ma sensu dawać wszystkiemu 1.0 — wtedy nie niesie żadnej informacji.
+
+    **`lastmod` musi być prawdą, inaczej szkodzi.** Wcześniej wszystkie 351
+    adresów dostawało dzisiejszą datę przy każdym żądaniu sitemapy — łącznie
+    z hasłami słownika, które od publikacji nie drgnęły. Robot porównuje
+    deklarowaną datę z tym, co zastaje na stronie; gdy się rozjeżdżają, po
+    prostu przestaje ufać całemu polu i chodzi po serwisie własnym rytmem.
+    Dlatego dziś data bierze się z tego, co stronę faktycznie napędza:
+
+    * strony z żywymi danymi (spółki, branże, sezon, spisy z terminami) —
+      dzisiejsza, bo kurs i najbliższy termin raportu naprawdę zmieniają się
+      codziennie;
+    * tekst pisany ręcznie (funkcje, poradniki, słownik, listy ETF, strony
+      formalne) — stała `ZMIENIONO` z modułu, w którym ten tekst leży.
+      Poprawiasz treść → podnosisz stałą obok niej, w jednym pliku.
     """
-    poz: list[tuple[str, str, str]] = [
-        ("/", "daily", "1.0"),
-        ("/kalendarz-wynikow-spolek", "daily", "0.9"),
-        (season.SCIEZKA, "daily", "0.9"),
-        ("/wyniki-finansowe", "daily", "0.9"),
-        ("/wyniki-finansowe/gpw", "daily", "0.8"),
-        ("/wyniki-finansowe/usa", "daily", "0.8"),
-        ("/funkcje", "monthly", "0.7"),
-        ("/poradniki", "weekly", "0.7"),
-        ("/slownik", "monthly", "0.7"),
+    zywe = dt.date.today().isoformat()
+
+    # Priorytet 1.0 dostaje `/kalendarz-wynikow-spolek`, a nie adres główny.
+    # Nie z uprzejmości: pod „/" stoi aplikacja, której pierwszy ekran to portfel
+    # pokazowy, więc na frazę o kalendarzu wyników nie ma tam ani jednego zdania
+    # treści. Stronę, która tę frazę faktycznie obsługuje — prawie tysiąc słów,
+    # dane FAQ, żywe terminy — trzeba wskazać robotowi wprost, bo inaczej sami
+    # wystawiamy przeciw konkurencji pusty pojemnik na JavaScript.
+    poz: list[tuple[str, str, str, str]] = [
+        ("/kalendarz-wynikow-spolek", "monthly", "1.0", features.ZMIENIONO),
+        ("/", "daily", "0.9", zywe),
+        (season.SCIEZKA, "daily", "0.9", zywe),
+        ("/wyniki-finansowe", "daily", "0.9", zywe),
+        ("/wyniki-finansowe/gpw", "daily", "0.8", zywe),
+        ("/wyniki-finansowe/usa", "daily", "0.8", zywe),
+        ("/funkcje", "monthly", "0.7", features.ZMIENIONO),
+        ("/poradniki", "monthly", "0.7", guides.ZMIENIONO),
+        ("/slownik", "monthly", "0.7", glossary.ZMIENIONO),
     ]
-    poz += [(s, "monthly", "0.8") for s in features.STRONY
-            if s != "/kalendarz-wynikow-spolek"]
-    poz += [(a, "weekly", "0.8") for a in sectors.adresy()]
-    poz += [(a, "monthly", "0.7") for a in etfs.adresy()]
-    poz += [(a, "daily", "0.7") for a in companies.adresy()]
-    poz += [(f"/poradniki/{s}", "monthly", "0.6") for s in guides.KOLEJNOSC]
-    poz += [(f"/slownik/{h[0]}", "yearly", "0.5") for h in glossary.HASLA]
-    poz += [("/premium", "monthly", "0.5"), ("/kontakt", "yearly", "0.3"),
-            ("/regulamin", "yearly", "0.2"), ("/prywatnosc", "yearly", "0.2")]
-    return poz
+    # Strony funkcji to opis produktu, nie notowania — „daily" byłoby na nich
+    # kłamstwem nawet dla kalendarza wyników, bo żywe terminy stoją na
+    # `/sezon-wynikow` i na kartach spółek, a nie tutaj.
+    poz += [(s, "monthly", "0.8", features.ZMIENIONO) for s in features.STRONY]
+    poz += [(a, "daily", "0.8", zywe) for a in sectors.adresy()]
+    poz += [(a, "monthly", "0.7", etfs.ZMIENIONO) for a in etfs.adresy()]
+    poz += [(a, "daily", "0.7", zywe) for a in companies.adresy()]
+    poz += [(f"/poradniki/{s}", "yearly", "0.6", guides.ZMIENIONO)
+            for s in guides.KOLEJNOSC]
+    poz += [(f"/slownik/{h[0]}", "yearly", "0.5", glossary.ZMIENIONO)
+            for h in glossary.HASLA]
+    poz += [("/premium", "monthly", "0.5", features.ZMIENIONO),
+            ("/kontakt", "yearly", "0.3", site.ZMIENIONO),
+            ("/regulamin", "yearly", "0.2", site.ZMIENIONO),
+            ("/prywatnosc", "yearly", "0.2", site.ZMIENIONO)]
+
+    # Zabezpieczenie przed kolizją slugu spółki z własnym adresem serwisu.
+    # Tak się już zdarzyło: GPW S.A. jest spółką notowaną i dostała slug „gpw",
+    # czyli adres spisu spółek z warszawskiej giełdy. Sitemapa wymieniała ten
+    # adres dwa razy, z dwoma priorytetami — a dla robota dwa wpisy o jednym
+    # adresie to sygnał, że mapy nikt nie pilnuje. Katalog naprawiony
+    # (`make_catalog.ZAJETE_SLUGI`), ale odsiew zostaje: przy odświeżaniu
+    # katalogu łatwiej o taką kolizję niż o jej zauważenie.
+    widziane: set[str] = set()
+    unikalne = []
+    for wpis in poz:
+        if wpis[0] in widziane:
+            continue
+        widziane.add(wpis[0])
+        unikalne.append(wpis)
+    return unikalne
 
 
-@router.get("/sitemap.xml", include_in_schema=False)
+@strona("/sitemap.xml")
 def sitemap():
-    dzis = dt.date.today().isoformat()
     czesci = ['<?xml version="1.0" encoding="UTF-8"?>',
               '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-    for sciezka, czestosc, priorytet in _wpisy():
+    for sciezka, czestosc, priorytet, zmieniono in _wpisy():
         czesci.append(
             f"<url><loc>{site.absolute(sciezka)}</loc>"
-            f"<lastmod>{dzis}</lastmod>"
+            f"<lastmod>{zmieniono}</lastmod>"
             f"<changefreq>{czestosc}</changefreq>"
             f"<priority>{priorytet}</priority></url>")
     czesci.append("</urlset>")
@@ -326,7 +382,7 @@ _PLIKI = [
 ]
 
 
-@router.get("/api/seo/strony", include_in_schema=False)
+@strona("/api/seo/strony")
 def spis_stron_json():
     """Spis podstron dla przeglądarki wewnątrz aplikacji.
 
@@ -373,7 +429,7 @@ ROBOTY_AI = [
 ZABLOKOWANE = ["/api/", "/account", "/static/premium", "/static/auth"]
 
 
-@router.get("/robots.txt", include_in_schema=False)
+@strona("/robots.txt")
 def robots(request: Request):
     """Plik dla robotów. Pod niekanonicznym hostem blokujemy indeksowanie w całości."""
     if not site.kanoniczny_host(request.headers.get("host", "")):
@@ -398,7 +454,7 @@ def robots(request: Request):
 # --------------------------------------------------------------- llms.txt
 
 
-@router.get("/llms.txt", include_in_schema=False)
+@strona("/llms.txt")
 def llms(request: Request):
     """Opis serwisu dla modeli językowych — jeden plik zamiast przekopywania HTML-a.
 
@@ -510,7 +566,7 @@ def llms(request: Request):
 # --------------------------------------------------------------- manifest PWA
 
 
-@router.get("/manifest.webmanifest", include_in_schema=False)
+@strona("/manifest.webmanifest")
 def manifest():
     """Manifest aplikacji webowej — to dzięki niemu Portevo da się „zainstalować”.
 
@@ -545,8 +601,8 @@ def manifest():
         headers={"Cache-Control": "public, max-age=86400"})
 
 
-@router.get("/apple-touch-icon.png", include_in_schema=False)
-@router.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+@strona("/apple-touch-icon.png")
+@strona("/apple-touch-icon-precomposed.png")
 def apple_icon():
     """iOS pyta o ten adres z automatu przy dodawaniu strony do ekranu głównego."""
     from fastapi.responses import FileResponse

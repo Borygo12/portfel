@@ -21,6 +21,10 @@ from __future__ import annotations
 
 from . import jsonld, render, site
 
+#: Dzień ostatniej zmiany w definicjach — `lastmod` w sitemapie. Podnieś przy
+#: poprawce treści, nie przy każdym wdrożeniu (patrz `guides.ZMIENIONO`).
+ZMIENIONO = "2026-08-11"
+
 #: (slug, nazwa, krótka definicja, akapity, przykład, powiązane slugi)
 HASLA = [
     # ---------------------------------------------------------- wyniki spółek
