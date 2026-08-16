@@ -203,6 +203,12 @@ def dopobierz_brakujace(przerwa_s: float = PRZERWA_S, limit: int = 0) -> int:
                     zbudowane += 1
             except Exception as e:  # noqa: BLE001
                 log.warning("Raport %s: %s", s["symbol"], e)
+            # Zapis co kawałek, nie dopiero na końcu — przebieg trwa pół godziny
+            # i przy jednym zapisie ranking stał pusty przez cały ten czas.
+            if zbudowane and (i + 1) % 10 == 0:
+                pamiec.zapisz("reakcje", _z_cache())
+                log.info("Reakcje: %d/%d przerobionych, %d w rankingu",
+                         i + 1, len(brakujace), zbudowane)
         log.info("Reakcje: zbudowano %d z %d", zbudowane, len(brakujace))
         pamiec.zapisz("reakcje", _z_cache())
         return zbudowane

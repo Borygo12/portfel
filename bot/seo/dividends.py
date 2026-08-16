@@ -291,9 +291,16 @@ def dopobierz_brakujace(przerwa_s: float = PRZERWA_S, limit: int = 0) -> int:
                     dobrane += 1
             except Exception as e:  # noqa: BLE001
                 log.warning("Dywidenda %s: %s", s["symbol"], e)
+            # Przepisujemy listę CO KAWAŁEK, a nie dopiero na końcu. Przebieg trwa
+            # kwadrans, a przy jednym zapisie na końcu strona przez cały ten czas
+            # stała pusta, choć dane już były — i nie było po czym poznać, czy
+            # cokolwiek się dzieje, czy przebieg stanął. Teraz lista rośnie
+            # w oczach, a przerwana rozgrzewka i tak zostawia to, co zdążyła.
+            if dobrane and (i + 1) % 20 == 0:
+                pamiec.zapisz("dywidendy", _z_cache())
+                log.info("Dywidendy: %d/%d sprawdzonych, %d z dywidendą",
+                         i + 1, len(brakujace), dobrane)
         log.info("Dywidendy: dobrano %d z %d", dobrane, len(brakujace))
-        # Lista w pamięci pochodzi sprzed dociągnięcia — bez tego nowe spółki
-        # pokazałyby się dopiero po wygaśnięciu wpisu, czyli za kwadrans.
         pamiec.zapisz("dywidendy", _z_cache())
         return dobrane
     finally:
