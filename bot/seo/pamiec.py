@@ -86,6 +86,46 @@ def zapamietane(klucz: str, oblicz):
     return zapisz(klucz, oblicz())
 
 
+def poczekaj_na_yahoo(prob: int = 5, przerwa_s: float = 20.0) -> bool:
+    """Czeka, aż da się zdobyć klucz dostępowy Yahoo (crumb). Zwraca, czy się udało.
+
+    **Po co to istnieje — na tym się przejechaliśmy.** Yahoo wymaga ciasteczka
+    i krótkiego klucza (`crumb`), który zdobywa się osobnym żądaniem. Przy
+    obsłudze zwykłego wejścia jest już dawno w ręku, bo zdobył go pierwszy lepszy
+    odczyt notowań. Ale **rozgrzewka startuje razem z serwerem**, czyli zanim
+    ktokolwiek o cokolwiek poprosił — i wtedy klucza nie ma jeszcze wcale.
+
+    Kod pobierający wyglądał tak, że brak klucza w pierwszym podejściu kończył
+    całą próbę. Efekt na produkcji: przebieg sumiennie przechodził przez dwieście
+    sześćdziesiąt spółek z czterosekundową przerwą, za każdym razem odbijał się
+    od braku klucza i po kwadransie kończył z zerem. Strony pokazywały „dane się
+    jeszcze zbierają” bez końca, choć samo pobieranie działało bez zarzutu —
+    karta pojedynczej spółki dowoziła dywidendę w ułamku sekundy, bo tam klucz
+    już był.
+
+    Dlatego rozgrzewka najpierw upewnia się, że klucz jest, i dopiero potem
+    rusza z listą. Kilka podejść z przerwą, bo tuż po starcie kontenera sieć
+    bywa jeszcze niegotowa.
+    """
+    try:
+        from portfolio import market as pf_market
+    except Exception as e:  # noqa: BLE001
+        log.warning("Brak modułu notowań: %s", e)
+        return False
+
+    for i in range(prob):
+        try:
+            if pf_market._get_crumb(force=bool(i)):
+                return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("Klucz Yahoo, podejście %d: %s", i + 1, e)
+        if i + 1 < prob:
+            log.info("Klucz Yahoo jeszcze niedostępny — czekam %.0f s", przerwa_s)
+            time.sleep(przerwa_s)
+    log.warning("Nie udało się zdobyć klucza Yahoo — rozgrzewka bez pobierania")
+    return False
+
+
 def rozgrzej(zadania) -> None:
     """Liczy podane zestawy w tle, zaraz po starcie serwera.
 

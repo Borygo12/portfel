@@ -192,6 +192,10 @@ def dopobierz_brakujace(przerwa_s: float = PRZERWA_S, limit: int = 0) -> int:
         if not brakujace:
             return 0
 
+        if not pamiec.poczekaj_na_yahoo():
+            log.warning("Reakcje: bez klucza Yahoo nie ma z czego budować raportów")
+            return 0
+
         log.info("Reakcje: buduję %d raportów co %.0f s", len(brakujace), przerwa_s)
         zbudowane = 0
         for i, s in enumerate(brakujace):

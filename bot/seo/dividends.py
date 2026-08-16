@@ -114,8 +114,14 @@ def _pobierz(symbol: str):
 
     def build():
         for proba in (0, 1):
+            # Brak klucza w pierwszym podejściu NIE kończy próby — trzeba go
+            # wymusić. Odwrotnie było przyczyną tego, że rozgrzewka po starcie
+            # kontenera wracała z zerem: klucza jeszcze nie było, a pętla
+            # odbijała się od niego przy każdej z 266 spółek.
             crumb = pf_market._get_crumb(force=bool(proba))
             if not crumb:
+                if proba == 0:
+                    continue
                 return None
             try:
                 r = pf_market._session.get(
@@ -279,6 +285,10 @@ def dopobierz_brakujace(przerwa_s: float = PRZERWA_S, limit: int = 0) -> int:
         if limit:
             brakujace = brakujace[:limit]
         if not brakujace:
+            return 0
+
+        if not pamiec.poczekaj_na_yahoo():
+            log.warning("Dywidendy: bez klucza Yahoo nie ma czego dociągać")
             return 0
 
         log.info("Dywidendy: dociągam %d spółek co %.1f s", len(brakujace), przerwa_s)
