@@ -365,6 +365,10 @@ app.include_router(seo_routes.router)
 import dividends_api                             # noqa: E402
 app.include_router(dividends_api.router)
 
+# Portfele i majątek poza rachunkiem maklerskim (mieszkania, złoto, obligacje).
+import wealth_api                                # noqa: E402
+app.include_router(wealth_api.router)
+
 
 @app.on_event("startup")
 def _rozgrzej_seo():
@@ -1611,6 +1615,29 @@ def portfolio_allocation(by: str = "asset_class"):
     if cash > 0.01 and by != "position":
         groups["Gotówka"] = {"label": "Gotówka", "value": cash, "pl": 0.0, "tickers": []}
 
+    # Majątek spoza rachunku maklerskiego — mieszkanie, złoto, obligacje.
+    # Wchodzi do TEGO SAMEGO wykresu co akcje, bo inaczej alokacja kłamałaby:
+    # portfel z mieszkaniem wartym więcej niż wszystkie akcje razem pokazywałby
+    # „100% akcje". Grupy są oznaczone `manual`, żeby front mógł narysować je
+    # inną obramówką i nie udawać, że mieszkanie ma kurs giełdowy.
+    try:
+        import wealth
+        for a in wealth.majatek()["aktywa"]:
+            if a["wartosc"] <= 0.01:
+                continue
+            key = a["nazwa"] if by == "position" else a["klasa"]
+            g = groups.setdefault(key, {"label": key, "value": 0.0, "pl": 0.0,
+                                        "tickers": [], "manual": True})
+            g["value"] += a["wartosc"]
+            g["manual"] = True
+            if a["zysk"]:
+                g["pl"] += a["zysk"]
+            g["tickers"].append(a["nazwa"])
+    except Exception as e:  # noqa: BLE001
+        # Majątek jest dodatkiem — gdy się nie policzy, alokacja ma pokazać
+        # rachunki maklerskie, a nie wywalić się w całości.
+        log.warning("Majątek w alokacji: %s", e)
+
     total = sum(g["value"] for g in groups.values()) or 1.0
     out = sorted(groups.values(), key=lambda g: -g["value"])
     for g in out:
@@ -1618,6 +1645,7 @@ def portfolio_allocation(by: str = "asset_class"):
         g["pl"] = round(g["pl"], 2)
         g["pct"] = round(g["value"] / total * 100, 2)
         g["count"] = len(g["tickers"])
+        g["manual"] = bool(g.get("manual"))
     return {"empty": False, "by": by, "total": round(total, 2), "groups": out}
 
 

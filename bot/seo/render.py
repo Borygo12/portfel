@@ -534,11 +534,28 @@ def zacheta(tytul: str, tekst: str, adres: str = "/",
     nie wybór, tylko wahanie przeniesione na czytelnika.
     """
     poboczne = "".join(
-        f'<a class="btn ghost" href="{esc(p[0])}">{esc(p[1])}</a>'
+        f'<a class="btn ghost" href="{esc(p[0])}"{_rel(p[0])}>{esc(p[1])}</a>'
         for p in (drugi, trzeci) if p)
     return (f'<div class="cta"><h2>{esc(tytul)}</h2><p>{esc(tekst)}</p>'
-            f'<div class="actions"><a class="btn big" href="{esc(adres)}">{esc(etykieta)}</a>'
+            f'<div class="actions">'
+            f'<a class="btn big" href="{esc(adres)}"{_rel(adres)}>{esc(etykieta)}</a>'
             f"{poboczne}</div></div>")
+
+
+def _rel(adres: str) -> str:
+    """`rel="nofollow"` dla wejść do aplikacji z parametrem w adresie.
+
+    Karty spółek mają przyciski prowadzące do `/?spolka=CDR.WA` — aplikacja
+    otwiera wtedy właściwą spółkę. Dla człowieka to skrót, dla robota
+    **trzysta siedem razy dwa adresy, które wszystkie wskazują kanonicznie na
+    stronę główną**. Search Console raportowało je jako „alternatywna strona
+    zawierająca prawidłowy tag kanoniczny" — czyli Google robił z nimi dokładnie
+    to, co trzeba, tylko musiał je najpierw pobrać.
+
+    `nofollow` sprawia, że w ogóle po nie nie sięga. Przycisk działa jak działał,
+    a budżet indeksowania idzie na podstrony, które mają coś do zaindeksowania.
+    """
+    return ' rel="nofollow"' if "?" in (adres or "") else ""
 
 
 def zastrzezenie() -> str:
