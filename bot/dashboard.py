@@ -379,11 +379,17 @@ def _rozgrzej_seo():
     from seo import upcoming as seo_upcoming
     try:
         seo_upcoming.rozgrzej()
-        # Dywidendy i reakcje idą jednym wątkiem, po kolei: dociąganie dywidend
-        # chodzi kwadrans z przerwami, a nie ma powodu, żeby biegło równolegle
-        # z czymkolwiek innym, co też puka do Yahoo.
-        seo_pamiec.rozgrzej(seo_reactions.rozgrzej_zadania()
-                            + seo_dividends.rozgrzej_zadania())
+        # Jeden wątek, po kolei — nie ma powodu, żeby dwa przebiegi pukały do
+        # Yahoo równolegle.
+        #
+        # **Dywidendy IDĄ PIERWSZE i to nie jest obojętne.** Jedna spółka to tam
+        # jedno lekkie zapytanie, więc cały katalog schodzi w kwadrans; przy
+        # reakcjach każda spółka to pełny raport, czyli kilka zapytań i pół
+        # godziny na sto czterdzieści spółek. Przy odwrotnej kolejności strony
+        # dywidendowe stały puste przez pierwsze pół godziny po każdym wdrożeniu,
+        # choć ich dane były do wzięcia od razu — sprawdzone na produkcji.
+        seo_pamiec.rozgrzej(seo_dividends.rozgrzej_zadania()
+                            + seo_reactions.rozgrzej_zadania())
     except Exception:  # noqa: BLE001 — rozgrzewka nie może zatrzymać startu
         log.exception("Nie udało się uruchomić rozgrzewania warstwy SEO")
 
