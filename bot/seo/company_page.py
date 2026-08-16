@@ -324,6 +324,127 @@ def _sekcja_o_spolce(spolka: dict, d: dict) -> str:
                          lista=lista, kotwica="o-spolce")
 
 
+def _sekcja_dywidenda(spolka: dict, d: dict) -> str:
+    """Dywidenda spółki — liczby z jej własnego raportu, nie ze wspólnej listy.
+
+    Czytamy z `d`, a nie z `dividends.dla_spolki()`, celowo: wspólna lista
+    powstaje z tego, co akurat leży w cache, więc dla świeżo odwiedzonej spółki
+    bywa jeszcze pusta, podczas gdy jej własny raport jest już w ręku.
+    """
+    from . import dividends
+
+    # Najpierw własny raport spółki (jest w ręku, więc najświeższy), a gdy
+    # pochodzi sprzed dodania tego pola — osobny cache dywidend.
+    dyw = d.get("dividend")
+    if not isinstance(dyw, dict):
+        dyw = dividends.surowa(spolka["symbol"])
+    if not isinstance(dyw, dict):
+        return ""
+    stopa = dyw.get("stopa_pct")
+    if not isinstance(stopa, (int, float)) or stopa < dividends.MIN_STOPA:
+        return ""
+
+    nazwa = spolka["name"]
+    waluta = d.get("currency") or spolka.get("currency") or ""
+    kwota = dyw.get("na_akcje")
+    wyplata = dyw.get("wyplata_pct")
+    bez = dyw.get("bez_dywidendy") or ""
+
+    poz = [("Stopa dywidendy", render.procent(stopa, ze_znakiem=False),
+            "z ostatniej wypłaty")]
+    if isinstance(kwota, (int, float)):
+        poz.append(("Na akcję", f"{render.liczba(kwota)} {waluta}".strip(), "rocznie"))
+    if isinstance(wyplata, (int, float)):
+        poz.append(("Wskaźnik wypłaty", render.procent(wyplata, ze_znakiem=False),
+                    "część zysku oddana akcjonariuszom"))
+    if bez:
+        poz.append(("Dzień bez dywidendy", data_pl(bez),
+                    "ostatni znany" if not dyw.get("przyszla") else "najbliższy"))
+
+    akapity = []
+    if dyw.get("przyszla"):
+        akapity.append(
+            f"Najbliższy dzień bez dywidendy dla {render.esc(nazwa)} przypada "
+            f"<strong>{data_pl(bez)}</strong>. Żeby dostać tę wypłatę, akcje trzeba "
+            "mieć na koniec sesji poprzedzającej tę datę — kupno w samym dniu bez "
+            "dywidendy jest już za późne.")
+    elif bez:
+        akapity.append(
+            f"Ostatni dzień bez dywidendy przypadał <strong>{data_pl(bez)}</strong>. "
+            "Terminu kolejnej wypłaty jeszcze nie znamy — zależy od uchwały walnego "
+            "zgromadzenia, a Yahoo podaje datę dopiero po jej ogłoszeniu.")
+
+    # Wskaźnik wypłaty powyżej 100% to najważniejsza rzecz, jaką można tu
+    # powiedzieć, i nie wolno jej przemilczeć na stronie o dywidendzie.
+    if isinstance(wyplata, (int, float)) and wyplata > 100:
+        akapity.append(
+            f"Uwaga: wskaźnik wypłaty wynosi <strong>"
+            f"{render.procent(wyplata, ze_znakiem=False)}</strong>, czyli "
+            f"{render.esc(nazwa)} wypłaciła <strong>więcej, niż zarobiła</strong> — "
+            "z oszczędności, z długu albo z jednorazowego zysku. Taka dywidenda "
+            "nie musi się powtórzyć w przyszłym roku.")
+
+    return render.sekcja(
+        f"Dywidenda {nazwa}", *akapity, kotwica="dywidenda",
+        html_dodatkowy=render.statystyki(poz) + render.chipsy([
+            ("/dywidendy", "Wszystkie dywidendy"),
+            ("/dywidendy/gpw" if spolka["market"] == "GPW" else "/dywidendy/usa",
+             "Dywidendy z GPW" if spolka["market"] == "GPW" else "Dywidendy z USA"),
+            ("/dywidendy/kalendarz", "Kalendarz dywidend")]))
+
+
+def _sekcja_zmiennosc(spolka: dict, d: dict) -> str:
+    """Miejsce spółki w rankingu reakcji kursu — most z karty do nowego działu.
+
+    Po co osobna sekcja, skoro średni ruch jest już w kaflach u góry: kafel podaje
+    liczbę, a ta sekcja mówi, **czy to dużo**. „5,4%” nic nie znaczy bez punktu
+    odniesienia, a „dwudziesta spółka na sto czterdzieści” znaczy od razu — i to
+    jest naturalny moment, żeby ktoś, kto właśnie oglądał wyniki, przeszedł do
+    rankingu zamiast wracać do wyszukiwarki.
+    """
+    from . import reactions
+
+    st = d.get("stats") or {}
+    sredni = st.get("avg_move_pct")
+    if not isinstance(sredni, (int, float)):
+        return ""
+    if (st.get("quarters") or 0) < reactions.MIN_KWARTALOW:
+        return ""
+
+    nazwa = spolka["name"]
+    poz = reactions.miejsce(spolka["slug"])
+    zdanie = (f"Kurs {render.esc(nazwa)} zmienia się po publikacji wyników średnio "
+              f"o <strong>{render.procent(sredni, ze_znakiem=False)}</strong> na "
+              f"pierwszej sesji — licząc z ostatnich {int(st.get('quarters') or 0)} "
+              "raportów, bez względu na kierunek.")
+    if poz:
+        miejsce, ile = poz
+        zdanie += (f" To <strong>{miejsce}. miejsce na {ile}</strong> spółek, dla "
+                   "których policzyliśmy tę statystykę.")
+
+    sasiedzi = reactions.sasiedzi_w_rankingu(spolka["slug"], 5)
+    lista = ""
+    if sasiedzi:
+        lista = render.wiersze([{
+            "logo": logos.znak(p["spolka"], 32),
+            "tytul": f"{p['nazwa']} ({companies.ticker(p['spolka'])})",
+            "podtytul": f"{p['kwartalow']} ostatnich raportów",
+            "adres": p["adres"],
+            "wartosc": render.procent(p["sredni"], ze_znakiem=False),
+            "nota": "średnio po wynikach",
+        } for p in sasiedzi], naglowek=("Spółki o podobnej zmienności", ""))
+
+    return render.sekcja(
+        "Jak mocno ta spółka rusza się po wynikach", zdanie,
+        kotwica="zmiennosc",
+        html_dodatkowy=lista + render.chipsy([
+            ("/reakcja-kursu-po-wynikach", "Pełny ranking reakcji kursu"),
+            ("/reakcja-kursu-po-wynikach/gpw" if spolka["market"] == "GPW"
+             else "/reakcja-kursu-po-wynikach/usa",
+             "Ranking dla GPW" if spolka["market"] == "GPW" else "Ranking dla USA"),
+            ("/reakcja-kursu-po-wynikach/najspokojniejsze", "Najspokojniejsze spółki")]))
+
+
 def _sekcja_kalendarz(spolka: dict, d: dict) -> str:
     """Mini-kalendarz: kto jeszcze raportuje w najbliższych tygodniach.
 
@@ -467,8 +588,9 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
             "stronę za chwilę albo otwórz kartę spółki w aplikacji — tam dane "
             "dociągają się w tle."))
 
-    for buduj in (_sekcja_termin, _sekcja_historia, _sekcja_prognozy,
-                  _sekcja_marze, _sekcja_kalendarz, _sekcja_o_spolce):
+    for buduj in (_sekcja_termin, _sekcja_historia, _sekcja_zmiennosc,
+                  _sekcja_prognozy, _sekcja_marze, _sekcja_dywidenda,
+                  _sekcja_kalendarz, _sekcja_o_spolce):
         kawalek = buduj(spolka, d)
         if kawalek:
             bloki.append(kawalek)

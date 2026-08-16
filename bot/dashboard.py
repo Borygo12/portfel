@@ -373,9 +373,17 @@ def _rozgrzej_seo():
     podstron. Rozgrzewka chodzi w wątku pobocznym, więc serwer startuje
     normalnie i zdąży odpowiedzieć na healthcheck.
     """
+    from seo import dividends as seo_dividends
+    from seo import pamiec as seo_pamiec
+    from seo import reactions as seo_reactions
     from seo import upcoming as seo_upcoming
     try:
         seo_upcoming.rozgrzej()
+        # Dywidendy i reakcje idą jednym wątkiem, po kolei: dociąganie dywidend
+        # chodzi kwadrans z przerwami, a nie ma powodu, żeby biegło równolegle
+        # z czymkolwiek innym, co też puka do Yahoo.
+        seo_pamiec.rozgrzej(seo_reactions.rozgrzej_zadania()
+                            + seo_dividends.rozgrzej_zadania())
     except Exception:  # noqa: BLE001 — rozgrzewka nie może zatrzymać startu
         log.exception("Nie udało się uruchomić rozgrzewania warstwy SEO")
 

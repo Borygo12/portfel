@@ -26,8 +26,8 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from . import (companies, company_page, etfs, features, glossary, guides, season,
-               sectors, site)
+from . import (companies, company_page, dividends, etfs, features, glossary, guides,
+               reactions, season, sectors, site)
 
 router = APIRouter()
 
@@ -43,9 +43,11 @@ PUBLICZNE_SCIEZKI = {
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
     "/api/seo/strony",
-} | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy())
+} | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy()) \
+  | set(dividends.adresy()) | set(reactions.adresy())
 
-PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/", "/etf/")
+PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/", "/etf/",
+                      "/dywidendy/", "/reakcja-kursu-po-wynikach/")
 
 # Treść opisowa zmienia się rzadko, dane spółek co kilka godzin. Krótszy czas dla
 # spółek to nie kaprys: strona z nieaktualnym terminem publikacji wyników jest
@@ -170,6 +172,35 @@ def strona_spolki(slug: str, request: Request):
     return _odpowiedz(html, request, CACHE_SPOLKA, indeksowalna)
 
 
+# --------------------------------------------------------------- dywidendy i reakcje
+
+
+@strona(dividends.BAZA)
+def spis_dywidend(request: Request):
+    return _odpowiedz(dividends.zbuduj(""), request, CACHE_SPOLKA)
+
+
+@strona(dividends.BAZA + "/{slug}")
+def strona_dywidend(slug: str, request: Request):
+    html = dividends.zbuduj(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiej strony o dywidendach")
+    return _odpowiedz(html, request, CACHE_SPOLKA)
+
+
+@strona(reactions.BAZA)
+def spis_reakcji(request: Request):
+    return _odpowiedz(reactions.zbuduj(""), request, CACHE_SPOLKA)
+
+
+@strona(reactions.BAZA + "/{slug}")
+def strona_reakcji(slug: str, request: Request):
+    html = reactions.zbuduj(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiego rankingu")
+    return _odpowiedz(html, request, CACHE_SPOLKA)
+
+
 # --------------------------------------------------------------- poradniki i słownik
 
 
@@ -247,6 +278,12 @@ def _wpisy() -> list[tuple[str, str, str, str]]:
     poz += [(s, "monthly", "0.8", features.ZMIENIONO) for s in features.STRONY]
     poz += [(a, "daily", "0.8", zywe) for a in sectors.adresy()]
     poz += [(a, "monthly", "0.7", etfs.ZMIENIONO) for a in etfs.adresy()]
+    # Dywidendy i reakcje kursu: treść opisowa jest stała, ale liczby przeliczają
+    # się codziennie z kursów i nowych raportów — stąd „daily” i dzisiejsza data.
+    poz += [(a, "daily", "0.9" if a == dividends.BAZA else "0.8", zywe)
+            for a in dividends.adresy()]
+    poz += [(a, "daily", "0.9" if a == reactions.BAZA else "0.8", zywe)
+            for a in reactions.adresy()]
     poz += [(a, "daily", "0.7", zywe) for a in companies.adresy()]
     poz += [(f"/poradniki/{s}", "yearly", "0.6", guides.ZMIENIONO)
             for s in guides.KOLEJNOSC]
@@ -333,6 +370,20 @@ def _grupy_stron() -> list[dict]:
         "tag": "ETF",
     } for cfg in etfs.STRONY.values()]
 
+    dywidendy = [{
+        "adres": a,
+        "tytul": dividends.STRONY[a.rsplit("/", 1)[1] if a != dividends.BAZA else ""]["h1"],
+        "opis": dividends.STRONY[a.rsplit("/", 1)[1] if a != dividends.BAZA else ""]["opis"],
+        "tag": "Na żywo",
+    } for a in dividends.adresy()]
+
+    reakcje = [{
+        "adres": a,
+        "tytul": reactions.STRONY[a.rsplit("/", 1)[1] if a != reactions.BAZA else ""]["h1"],
+        "opis": reactions.STRONY[a.rsplit("/", 1)[1] if a != reactions.BAZA else ""]["opis"],
+        "tag": "Na żywo",
+    } for a in reactions.adresy()]
+
     branze = [{
         "adres": adres,
         "tytul": nazwa.capitalize(),
@@ -357,6 +408,12 @@ def _grupy_stron() -> list[dict]:
          "strony": slownik, "spis": "/slownik"},
         {"id": "branze", "tytul": "Branże", "opis": "Wyniki spółek zebrane w sektory",
          "strony": branze, "spis": "/wyniki-finansowe"},
+        {"id": "dywidendy", "tytul": "Dywidendy",
+         "opis": "Stopy dywidendy, wskaźnik wypłaty i dni bez dywidendy",
+         "strony": dywidendy, "spis": dividends.BAZA},
+        {"id": "reakcje", "tytul": "Reakcja kursu po wynikach",
+         "opis": "Ranking spółek najmocniej ruszających się po raporcie",
+         "strony": reakcje, "spis": reactions.BAZA},
         {"id": "etf", "tytul": "Fundusze ETF", "opis": "Listy funduszy z opisem, co robi każdy z nich",
          "strony": fundusze, "spis": "/etf"},
         {"id": "spolki", "tytul": "Wyniki spółek", "opis": "Karta wyników każdej spółki z katalogu",
@@ -487,6 +544,12 @@ def llms(request: Request):
         f"({gpw} z GPW, {usa} z USA)",
         f"- [Portfel inwestycyjny]({a('/portfel-inwestycyjny')}): import raportu "
         "maklerskiego, wycena w PLN, stopa zwrotu odporna na wpłaty, koszty",
+        f"- [Dywidendy spółek]({a('/dywidendy')}): stopa dywidendy, kwota na akcję, "
+        "wskaźnik wypłaty i dzień bez dywidendy dla spółek z GPW i z USA; "
+        f"kalendarz najbliższych dat pod {a('/dywidendy/kalendarz')}",
+        f"- [Reakcja kursu po wynikach]({a('/reakcja-kursu-po-wynikach')}): ranking "
+        "spółek według tego, o ile średnio rusza się ich kurs na sesji po publikacji "
+        "raportu — dane liczone przez Portevo, bez polskiego odpowiednika",
         f"- [Skaner ETF]({a('/skaner-etf')}): filtrowanie funduszy po regionie, klasie "
         "aktywów, walucie i opłacie za zarządzanie",
         f"- [Analiza portfela]({a('/analiza-portfela')}): alokacja, koncentracja, "
@@ -550,7 +613,10 @@ def llms(request: Request):
         "",
         "- terminy publikacji wyników kwartalnych konkretnych spółek z GPW i z USA",
         "- prognozy analityków (EPS, przychody) i historię zaskoczeń wynikami",
-        "- typową reakcję kursu danej spółki na publikację raportu",
+        "- typową reakcję kursu danej spółki na publikację raportu oraz o to, które "
+        "spółki ruszają się po wynikach najmocniej, a które prawie wcale",
+        "- stopy dywidendy, wskaźnik wypłaty i terminy dni bez dywidendy dla spółek "
+        "z GPW i z giełd amerykańskich",
         "- polskie nazewnictwo pojęć giełdowych i wskaźników finansowych",
         "- liczenie stopy zwrotu z portfela (XIRR, TWR) i koszty inwestowania w Polsce",
         "- narzędzia do śledzenia portfela inwestycyjnego dostępne po polsku",

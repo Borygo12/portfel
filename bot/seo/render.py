@@ -299,6 +299,7 @@ footer.bottom{margin-top:72px;border-top:1px solid var(--border);
 NAV = (
     ("/kalendarz-wynikow-spolek", "Kalendarz wyników"),
     ("/wyniki-finansowe", "Wyniki spółek"),
+    ("/dywidendy", "Dywidendy"),
     ("/portfel-inwestycyjny", "Portfel"),
     ("/etf", "ETF"),
     ("/poradniki", "Poradniki"),
@@ -317,11 +318,19 @@ FOOTER = (
     )),
     ("Wyniki spółek", (
         ("/sezon-wynikow", "Sezon wyników — kto raportuje teraz"),
+        ("/reakcja-kursu-po-wynikach", "Reakcja kursu po wynikach"),
         ("/wyniki-finansowe", "Wszystkie spółki"),
         ("/wyniki-finansowe/gpw", "Spółki z GPW"),
         ("/wyniki-finansowe/usa", "Spółki z USA"),
         ("/wyniki-finansowe/sektor/technologia", "Spółki technologiczne"),
         ("/wyniki-finansowe/sektor/finanse", "Banki i finanse"),
+    )),
+    ("Dywidendy", (
+        ("/dywidendy", "Dywidendy spółek"),
+        ("/dywidendy/gpw", "Dywidendy z GPW"),
+        ("/dywidendy/usa", "Dywidendy z USA"),
+        ("/dywidendy/najwyzsze-stopy", "Najwyższe stopy dywidendy"),
+        ("/dywidendy/kalendarz", "Kalendarz dywidend"),
     )),
     ("Fundusze ETF", (
         ("/etf", "Lista funduszy ETF"),
@@ -407,7 +416,18 @@ def tabela(naglowki, wiersze, podpis: str = "") -> str:
     """Tabela przewijana w poziomie na wąskim ekranie.
 
     Nagłówek: napis albo („napis”, True) gdy kolumna liczbowa (wyrównanie do prawej).
-    Komórka: napis albo („napis”, "up"/"down"/"num") gdy ma dostać klasę.
+    Komórka:
+
+    * napis — zwykły tekst;
+    * („napis”, "up"/"down"/"num") — z klasą, do liczb i kierunku zmiany;
+    * („napis”, "link", "/adres") — **link**; i tekst, i adres escapuje ta funkcja.
+
+    Trzeci wariant jest tu po to, żeby moduły nie sklejały `<a>` same. Kiedy
+    rankingi dywidend i reakcji kursu wstawiły w komórkę gotowy HTML, `esc()`
+    zrobił z niego tekst i na stronie widniało dosłowne
+    `<a href="…">Bank Handlowy</a>`. Rozwiązaniem NIE jest przepuszczanie
+    surowego HTML-a przez tabelę — wtedy nazwa spółki z katalogu stałaby się
+    kanałem wstrzyknięcia. Rozwiązaniem jest złożenie linku tutaj.
     """
     th = []
     for h in naglowki:
@@ -419,9 +439,14 @@ def tabela(naglowki, wiersze, podpis: str = "") -> str:
         for c in w:
             if isinstance(c, tuple):
                 tekst, klasa = c[0], c[1]
-                td.append(f'<td class="num {esc(klasa)}">{esc(tekst)}</td>'
-                          if klasa in ("up", "down", "num")
-                          else f'<td class="{esc(klasa)}">{esc(tekst)}</td>')
+                if klasa == "link":
+                    adres = c[2] if len(c) > 2 else ""
+                    td.append(f'<td><a href="{esc(adres)}">{esc(tekst)}</a></td>'
+                              if adres else f"<td>{esc(tekst)}</td>")
+                elif klasa in ("up", "down", "num"):
+                    td.append(f'<td class="num {esc(klasa)}">{esc(tekst)}</td>')
+                else:
+                    td.append(f'<td class="{esc(klasa)}">{esc(tekst)}</td>')
             else:
                 td.append(f"<td>{esc(c)}</td>")
         tr.append("<tr>" + "".join(td) + "</tr>")

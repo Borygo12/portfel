@@ -282,6 +282,70 @@ def _quarterly_revenue(node: dict) -> list:
 
 # ---------------- złożenie raportu ----------------
 
+def _dividend(sd: dict, cal: dict) -> dict:
+    """Dywidenda spółki z tego, co i tak przyszło w `quoteSummary`.
+
+    Nie ma tu żadnego nowego zapytania: `summaryDetail` i `calendarEvents` są
+    w `MODULES` od początku, tylko nikt z nich tych pól nie czytał.
+
+    Trzy rzeczy, na których łatwo się przejechać, i dlatego są tu opisane:
+
+    1. **Jednostki się nie zgadzają między polami.** `dividendYield` przychodzi
+       jako ułamek (0.0553), a `fiveYearAvgDividendYield` już jako procent
+       (3.87). Zmierzone na PKO, Orlenie, CD Projekcie, Apple, Coca-Coli
+       i Nvidii — wszędzie tak samo. Wyrównujemy do procentu tutaj, żeby nikt
+       dalej nie musiał o tym pamiętać.
+    2. **`exDividendDate` bywa datą PRZESZŁĄ.** CD Projekt oddaje czerwiec 2025,
+       bo od tamtej pory nie wypłacał. Kalendarz, który wystawiłby to jako
+       „nadchodzące", kłamałby — stąd `przyszla`, po której filtrują strony.
+    3. **`dividendDate` (dzień wypłaty) jest puste dla spółek z GPW.** Yahoo
+       podaje je tylko dla rynku amerykańskiego. Dla polskiej spółki mamy więc
+       dzień bez dywidendy i nic więcej — i tak trzeba to pokazywać.
+    """
+    def raw(node, key):
+        v = (node or {}).get(key)
+        if isinstance(v, dict):
+            v = v.get("raw")
+        return v if isinstance(v, (int, float)) else None
+
+    def proc(v):
+        return round(v * 100, 2) if v is not None else None
+
+    stopa = proc(raw(sd, "dividendYield"))
+    bez_dywidendy = _fmt_date(sd.get("exDividendDate")) or _fmt_date(cal.get("exDividendDate"))
+
+    # Yahoo wstawia w `payoutRatio` zero także wtedy, gdy po prostu nie ma danych
+    # (Kogeneracja: stopa 9,04% i wypłata „0%"). Spółka, która płaci dywidendę,
+    # nie może oddać zera procent zysku — więc zero przy dodatniej stopie znaczy
+    # „nie wiemy", a nie „nic nie wypłaciła". Pokazanie zera byłoby fałszem
+    # brzmiącym jak fakt, a to gorsze niż kreska.
+    wyplata = proc(raw(sd, "payoutRatio"))
+    if wyplata == 0 and stopa:
+        wyplata = None
+
+    przyszla = False
+    if bez_dywidendy:
+        try:
+            przyszla = dt.date.fromisoformat(bez_dywidendy) >= dt.date.today()
+        except ValueError:
+            przyszla = False
+
+    piec_lat = raw(sd, "fiveYearAvgDividendYield")   # już w procentach, patrz wyżej
+
+    return {
+        "stopa_pct": stopa,
+        "na_akcje": raw(sd, "dividendRate"),
+        "stopa_12m_pct": proc(raw(sd, "trailingAnnualDividendYield")),
+        "na_akcje_12m": raw(sd, "trailingAnnualDividendRate"),
+        "wyplata_pct": wyplata,
+        "srednia_5lat_pct": round(piec_lat, 2) if piec_lat is not None else None,
+        "bez_dywidendy": bez_dywidendy,
+        "przyszla": przyszla,
+        "wyplacana": _fmt_date(cal.get("dividendDate")),
+        "placi": bool(stopa),
+    }
+
+
 def report(symbol: str) -> dict:
     """Pełny raport spółki przed publikacją wyników."""
     from portfolio import market as pf_market
@@ -419,6 +483,7 @@ def report(symbol: str) -> dict:
                 "annual": _timeseries(sym, "annual"),
             },
             "quarters": _quarterly_revenue(d.get("earnings")),
+            "dividend": _dividend(sd, d.get("calendarEvents") or {}),
             "stats": {
                 "quarters": len(history),
                 "beats": len(beats),

@@ -15,10 +15,9 @@ Stąd dwa źródła i różne zasady dla każdego z nich:
   o sto symboli w trakcie obsługi żądania kończyłoby się blokadą dostawcy,
   która zabrałaby dane także aplikacji.
 
-Wynik jest zapamiętywany w pamięci procesu na `TTL_LISTY` sekund. Bez tego
-strona spisu spółek czytałaby po kilkaset plików cache przy każdym odświeżeniu —
-to nie jest ruch po sieci, ale przy robocie wchodzącym na 50 podstron naraz
-robi się z tego wąskie gardło na dysku.
+Gotowe listy trzyma `pamiec.zapamietane` — wspólny mechanizm dla wszystkich
+stron zbiorczych, z podawaniem nieświeżego wyniku i odświeżaniem w tle. Bez tego
+strona spisu spółek czytałaby po kilkaset plików cache przy każdym odświeżeniu.
 
 Zasada, której nie wolno tu złamać: **żadna z tych funkcji nie może rzucić
 wyjątkiem ani zawiesić się na dłużej niż budżet.** Sekcja „kto raportuje w tym
@@ -30,84 +29,14 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import threading
-import time
 
-from . import companies
+from . import companies, pamiec
 
 log = logging.getLogger("seo.upcoming")
 
-#: Jak długo złożona lista jest uznawana za świeżą.
-TTL_LISTY = 900
-#: Jak długo wolno jeszcze PODAĆ nieświeżą listę, odświeżając ją w tle.
-#:
-#: Bez tego okna cache wygasał co kwadrans i pełny koszt złożenia listy —
-#: zapytanie do Nasdaqa plus kilkaset plików cache z dysku — płacił pierwszy,
-#: kto wszedł po wygaśnięciu. Na czynnym serwisie tym pierwszym jest zwykle
-#: robot wyszukiwarki, bo chodzi regularnie, a ludzie nie. Zmierzone skutki:
-#: `/sezon-wynikow` na zimno 9,2 s, `/funkcje` 3,1 s, te same strony na ciepło
-#: 0,1 s. Dziewięć sekund to dla Googlebota sygnał wolnego serwera i powód, by
-#: przy następnym obchodzie odwiedzić mniej podstron.
-#:
-#: Teraz nieświeży wynik idzie na stronę OD RAZU, a świeży dojeżdża w tle na
-#: następne wejście. Tydzień staremu terminowi publikacji nie szkodzi —
-#: to i tak data w przyszłości, a nie notowanie.
-TTL_AWARYJNY = 12 * 3600
 #: Cache raportu spółki bywa starszy niż ten, którym karmimy podstronę — data
 #: publikacji zmienia się rzadko, więc wolno sięgnąć po wpis sprzed doby.
 TTL_RAPORTU = 24 * 3600
-
-_pamiec: dict[str, tuple[float, list]] = {}
-_zamek = threading.Lock()
-#: Klucze, dla których odświeżenie już biegnie w tle — żeby dziesięć żądań
-#: naraz nie wystartowało dziesięciu wątków pytających Nasdaq o to samo.
-_w_locie: set[str] = set()
-
-
-def _do_pamieci(klucz: str, dane: list) -> list:
-    with _zamek:
-        _pamiec[klucz] = (time.time(), dane)
-    return dane
-
-
-def _odswiez_w_tle(klucz: str, oblicz) -> None:
-    def zadanie():
-        try:
-            _do_pamieci(klucz, oblicz())
-        except Exception as e:  # noqa: BLE001
-            # Odświeżenie w tle nie ma prawa niczego wywrócić — stary wynik
-            # został już podany, a następne wejście spróbuje ponownie.
-            log.warning("Odświeżanie %s w tle nie powiodło się: %s", klucz, e)
-        finally:
-            with _zamek:
-                _w_locie.discard(klucz)
-
-    with _zamek:
-        if klucz in _w_locie:
-            return
-        _w_locie.add(klucz)
-    threading.Thread(target=zadanie, name=f"seo-odswiez-{klucz}",
-                     daemon=True).start()
-
-
-def _zapamietane(klucz: str, oblicz):
-    """Wynik z pamięci; gdy się zestarzał — stary teraz, świeży w tle.
-
-    Trzy przypadki: świeży wpis idzie wprost, nieświeży w oknie `TTL_AWARYJNY`
-    idzie wprost i zleca odświeżenie, a brak wpisu (albo wpis starszy niż okno)
-    oznacza policzenie na miejscu — pierwszemu wejściu po starcie serwera nie
-    da się tego oszczędzić inaczej niż rozgrzaniem, patrz `rozgrzej()`.
-    """
-    with _zamek:
-        wpis = _pamiec.get(klucz)
-    if wpis:
-        wiek = time.time() - wpis[0]
-        if wiek < TTL_LISTY:
-            return wpis[1]
-        if wiek < TTL_AWARYJNY:
-            _odswiez_w_tle(klucz, oblicz)
-            return wpis[1]
-    return _do_pamieci(klucz, oblicz())
 
 
 # --------------------------------------------------------------- spółki z katalogu
@@ -208,7 +137,7 @@ def _katalog(dni: int) -> list[dict]:
         scalone.update(_z_raportow(dzis, dzis + dt.timedelta(days=dni)))
         return sorted(scalone.values(), key=lambda x: (x["data"], x["nazwa"].lower()))
 
-    return _zapamietane(f"katalog-{dni}", oblicz)
+    return pamiec.zapamietane(f"katalog-{dni}", oblicz)
 
 
 def najblizsze(dni: int = 21, rynek: str = "", pomin_slug: str = "",
@@ -292,7 +221,7 @@ def rynek_usa(dni: int = 10, budzet_s: float = 6.0, min_kapitalizacja: float = 5
             dni_wynik.append((data, pozycje))
         return dni_wynik
 
-    return _zapamietane(f"usa-{dni}-{int(min_kapitalizacja)}-{na_dzien}", oblicz)
+    return pamiec.zapamietane(f"usa-{dni}-{int(min_kapitalizacja)}-{na_dzien}", oblicz)
 
 
 # --------------------------------------------------------------- pory publikacji
@@ -308,35 +237,11 @@ PORY = {
 
 
 def rozgrzej() -> None:
-    """Wypełnia cache zaraz po starcie serwera, w tle.
-
-    Okno `TTL_AWARYJNY` chroni przed zapłaceniem pełnego kosztu przy wygaśnięciu
-    wpisu, ale nie przed pierwszym wejściem po wdrożeniu — wtedy pamięć jest
-    pusta i ktoś musi te dane złożyć. Wdrożenia robimy w środku dnia, więc tym
-    „kimś” bywa robot: wchodzi na `/sezon-wynikow` minutę po restarcie i czeka
-    dziewięć sekund. Tutaj składamy więc te same zestawy, po które sięgają
-    strony, zanim ktokolwiek o nie poprosi.
-
-    Wątek jest `daemon`: gdy serwer się zamyka, nie ma na co czekać. Wszystko
-    w środku jest opakowane, bo rozgrzewka nie ma prawa przeszkodzić w starcie —
-    w najgorszym razie po prostu nie zadziała i pierwsze wejście będzie wolne.
-    """
-    def zadanie():
-        for opis, wolanie in (
-            ("kalendarz USA (sezon)", lambda: rynek_usa(dni=12, na_dzien=7)),
-            ("kalendarz USA (widget)", lambda: rynek_usa(dni=7, na_dzien=5)),
-            ("katalog 21 dni (karty spółek)", lambda: _katalog(21)),
-            ("katalog 30 dni (branże)", lambda: _katalog(30)),
-            ("katalog 45 dni (GPW)", lambda: _katalog(45)),
-        ):
-            try:
-                start = time.time()
-                pozycji = len(wolanie())
-                log.info("Rozgrzano %s: %d pozycji w %.1f s",
-                         opis, pozycji, time.time() - start)
-            except Exception as e:  # noqa: BLE001
-                log.warning("Rozgrzewanie %s nie powiodło się: %s", opis, e)
-
-    threading.Thread(target=zadanie, name="seo-rozgrzewanie", daemon=True).start()
-
-PORY_KROTKO = {"bmo": "przed sesją", "amc": "po sesji", "tbd": "—"}
+    """Zestawy, po które sięgają strony — złożone, zanim ktokolwiek o nie poprosi."""
+    pamiec.rozgrzej((
+        ("kalendarz USA (sezon)", lambda: rynek_usa(dni=12, na_dzien=7)),
+        ("kalendarz USA (widget)", lambda: rynek_usa(dni=7, na_dzien=5)),
+        ("katalog 21 dni (karty spółek)", lambda: _katalog(21)),
+        ("katalog 30 dni (branże)", lambda: _katalog(30)),
+        ("katalog 45 dni (GPW)", lambda: _katalog(45)),
+    ))
