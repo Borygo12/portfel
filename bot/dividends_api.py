@@ -300,13 +300,16 @@ def meta(_v=Depends(require_login)):
             {"id": "2", "nazwa": "Co pół roku"},
             {"id": "1", "nazwa": "Raz w roku"},
         ],
+        # `krotka` jest dla telefonu i nie jest ozdobnikiem: cztery pełne nazwy
+        # w przełączniku na ekranie o szerokości 390 px przycinały się do
+        # „Najwyższa st…" i „Najbezpieczn…", czyli do czegoś nieczytelnego.
         "sortowania": [
-            {"id": "stopa", "nazwa": "Najwyższa stopa"},
-            {"id": "ocena", "nazwa": "Najbezpieczniejsza"},
-            {"id": "seria", "nazwa": "Najdłuższa seria podwyżek"},
-            {"id": "wzrost", "nazwa": "Najszybszy wzrost wypłaty"},
-            {"id": "termin", "nazwa": "Najbliższy dzień bez dywidendy"},
-            {"id": "nazwa", "nazwa": "Alfabetycznie"},
+            {"id": "stopa", "nazwa": "Najwyższa stopa", "krotka": "Stopa"},
+            {"id": "ocena", "nazwa": "Najbezpieczniejsza", "krotka": "Bezpieczna"},
+            {"id": "seria", "nazwa": "Najdłuższa seria podwyżek", "krotka": "Seria"},
+            {"id": "wzrost", "nazwa": "Najszybszy wzrost wypłaty", "krotka": "Wzrost"},
+            {"id": "termin", "nazwa": "Najbliższy dzień bez dywidendy", "krotka": "Termin"},
+            {"id": "nazwa", "nazwa": "Alfabetycznie", "krotka": "A–Z"},
         ],
         "podatek": {"belka_pct": lab.PODATEK_PL, "zrodlo_usa_pct": lab.PODATEK_ZRODLO_USA},
     }
