@@ -47,7 +47,7 @@ PLANS = [
         "price_id_env": "STRIPE_PRICE_MONTHLY",
         # identyfikator produktu w App Store Connect — na iPhonie sprzedaje Apple,
         # nie Stripe (wytyczna 3.1.1). Cenę pokazuje wtedy StoreKit, nie ta tabela.
-        "apple_id": "pl.borygo.portevo.premium.monthly",
+        "apple_id": "pl.borygo.portevo.sub.monthly",
     },
     {
         "id": "yearly",
@@ -459,6 +459,12 @@ def stripe_price_id(plan_id: str) -> str:
 
 
 APPLE_PRODUCTS = {p["apple_id"]: p["id"] for p in PLANS if p.get("apple_id")}
+
+# Identyfikatora produktu w App Store Connect NIE da się później zmienić, więc przy
+# zakładaniu subskrypcji łatwo o rozjazd z tą tabelą. Stare nazwy zostają tu jako
+# aliasy: gdyby ktoś kupił po nich wcześniej, jego paragon nadal ma nadać premium.
+APPLE_PRODUCTS.setdefault("pl.borygo.portevo.premium.monthly", "monthly")
+APPLE_PRODUCTS.setdefault("pl.borygo.portevo.premium.yearly", "yearly")
 
 
 def plan_for_apple_product(product_id: str) -> str:
