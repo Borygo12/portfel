@@ -591,14 +591,34 @@ def zbuduj(slug: str = "") -> str | None:
                 html_dodatkowy=_wiersze_kalendarza(nad)
                 + render.chipsy([(f"{BAZA}/kalendarz", "Pełny kalendarz dywidend")])))
 
+    bloki.append(render.sekcja(
+        "Policz to na swoich pieniądzach",
+        "Ta strona pokazuje, ile spółki płacą. Pytanie, które zadaje się zaraz "
+        "potem, brzmi <strong>„ile z tego będę miał ja”</strong> — a na nie "
+        "odpowiada narzędzie w aplikacji. Wpisujesz kwotę, wybierasz spółki "
+        "i widzisz kwotę miesięczną po podatku Belki, z uwzględnieniem "
+        "reinwestycji i corocznych dopłat.",
+        lista=[
+            "<strong>Skaner</strong> — filtry po stopie, serii podwyżek, "
+            "wskaźniku wypłaty i ocenie bezpieczeństwa wypłaty",
+            "<strong>Kalendarz</strong> — nadchodzące dni bez dywidendy "
+            "z odliczaniem i rozkładem wypłat na cały rok",
+            "<strong>Kalkulator</strong> — projekcja dochodu na lata naprzód "
+            "wraz z yield on cost, czyli stopą liczoną od Twojej ceny zakupu",
+            "<strong>Twój portfel</strong> — ile dywidend realnie płynie "
+            "z wgranego raportu maklerskiego i czego w nim brakuje",
+        ],
+        html_dodatkowy=render.chipsy([
+            ("/narzedzia", "Otwórz narzędzie dywidendowe"),
+        ])))
     bloki.append(render.sekcja("Zanim rzucisz się na wysoką stopę", _OSTRZEZENIE))
     bloki.append(render.sekcja("Więcej o dywidendach", html_dodatkowy=_linki_poboczne(slug)))
     bloki.append(render.faq(_faq_pary("na GPW" if slug == "gpw" else "")))
     bloki.append(render.zacheta(
-        "Śledź dywidendy swoich spółek",
-        "Dodaj spółkę do obserwowanych, a jej dywidendę i termin publikacji wyników "
-        "zobaczysz razem z resztą portfela.",
-        "/", "Otwórz Portevo",
+        "Policz swoje dywidendy",
+        "Skaner z filtrami, kalendarz wypłat i kalkulator pokazujący kwotę po "
+        "podatku — w aplikacji, za darmo po założeniu konta.",
+        "/narzedzia", "Otwórz narzędzie dywidendowe",
         drugi=("/kalendarz-wynikow-spolek", "Kalendarz wyników"),
         trzeci=("/etf/dywidendowe", "ETF dywidendowe")))
     bloki.append(render.zastrzezenie())
