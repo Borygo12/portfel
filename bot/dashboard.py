@@ -382,6 +382,17 @@ def _rozgrzej_seo():
     from seo import pamiec as seo_pamiec
     from seo import reactions as seo_reactions
     from seo import upcoming as seo_upcoming
+
+    # Jedna linijka, która oszczędza godzinę zgadywania: mówi wprost, gdzie
+    # ląduje cache. Gdy pokazuje ścieżkę wewnątrz katalogu z kodem, znaczy to,
+    # że wolumin NIE jest podpięty i po każdym wdrożeniu dane budują się od zera.
+    try:
+        from earnings import cache as e_cache
+        log.info("Cache danych: %s (wolumin: %s)", e_cache._DIR,
+                 os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or "brak")
+    except Exception:  # noqa: BLE001
+        pass
+
     try:
         seo_upcoming.rozgrzej()
         # Jeden wątek, po kolei — nie ma powodu, żeby dwa przebiegi pukały do

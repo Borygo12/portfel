@@ -17,8 +17,33 @@ import time
 
 log = logging.getLogger("earnings.cache")
 
-_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "portfolio_data", "earnings_cache")
+def _katalog_cache() -> str:
+    """Gdzie trzymamy cache na dysku — z uwzględnieniem woluminu na hostingu.
+
+    **Domyślnie `bot/portfolio_data/earnings_cache`, ale kontener bez trwałego
+    dysku kasuje ten katalog przy każdym wdrożeniu.** Skutek widać było gołym
+    okiem: strony zbiorcze (dywidendy, reakcje kursu) po każdym pushu wracały do
+    stanu „dane się zbierają" i musiały odbudować kilkaset plików, co zajmowało
+    pół godziny.
+
+    Railway po podpięciu woluminu ustawia `RAILWAY_VOLUME_MOUNT_PATH` na ścieżkę
+    montowania. Czytamy ją zamiast zakładać, że wolumin wisi akurat tam, gdzie
+    leży kod — bo nie musi i u nas nie wisiał. Dzięki temu wolumin działa bez
+    względu na to, jaką ścieżkę ktoś wpisał w panelu, a lokalnie (gdzie tej
+    zmiennej nie ma) nic się nie zmienia.
+
+    `DATA_DIR` daje to samo ręcznie — przydaje się na innym hostingu i w testach.
+    """
+    reczny = (os.environ.get("DATA_DIR") or "").strip()
+    wolumin = (os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or "").strip()
+    baza = reczny or wolumin
+    if baza:
+        return os.path.join(baza, "earnings_cache")
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "portfolio_data", "earnings_cache")
+
+
+_DIR = _katalog_cache()
 _mem: dict = {}
 _lock = threading.Lock()
 
