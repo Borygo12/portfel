@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import threading
+import time
 
 from . import companies, dates, jsonld, logos, pamiec, render
 
@@ -50,6 +52,12 @@ TTL_RAPORTU = 30 * 24 * 3600
 #: „średnia" jest pojedynczym odczytem przebranym za statystykę — a ranking
 #: zbudowany na jednym kwartale byłby losowaniem, nie danymi.
 MIN_KWARTALOW = 3
+
+#: Przerwa między budowanymi raportami przy uzupełnianiu w tle. Dziesięć sekund,
+#: bo jeden raport to kilka zapytań (Yahoo + Nasdaq), a nie jedno jak przy
+#: dywidendach. Około stu czterdziestu spółek daje pół godziny jednorazowo
+#: po starcie — i tyle wystarczy, bo przebieg chodzi raz.
+PRZERWA_S = 10.0
 
 
 # --------------------------------------------------------------- dane
@@ -135,8 +143,78 @@ def miejsce(slug: str) -> tuple[int, int] | None:
     return None
 
 
+# --------------------------------------------------------------- uzupełnianie w tle
+
+
+_uzupelnianie = threading.Lock()
+
+
+def dopobierz_brakujace(przerwa_s: float = PRZERWA_S, limit: int = 0) -> int:
+    """Buduje raporty spółek, dla których nie mamy jeszcze statystyki reakcji.
+
+    **Dlaczego to musi istnieć.** Kontener na Railway nie ma woluminu, więc
+    `bot/portfolio_data/earnings_cache` znika przy każdym wdrożeniu. Raport
+    spółki powstaje dopiero wtedy, gdy ktoś wejdzie na jej stronę — a to znaczy,
+    że po każdym wdrożeniu ranking startowałby pusty i zapełniał się tygodniami,
+    w tempie, w jakim robot obchodzi karty spółek. Tutaj budujemy je sami.
+
+    Tylko spółki z USA, bo tylko dla nich da się policzyć reakcję: potrzebne są
+    daty publikacji minionych raportów, a te podaje wyłącznie Nasdaq, który
+    warszawskiego parkietu nie zna.
+
+    Przerwa jest tu dłuższa niż przy dywidendach, bo **jeden raport to kilka
+    zapytań** — do Yahoo po dane i notowania, do Nasdaqa po daty. Przy tym
+    tempie przebieg trwa jakieś pół godziny, chodzi raz po starcie i przy okazji
+    rozgrzewa karty spółek, więc robot zastaje je gotowe zamiast czekać.
+    """
+    if not _uzupelnianie.acquire(blocking=False):
+        log.info("Uzupełnianie reakcji już trwa — pomijam")
+        return 0
+    try:
+        from earnings import cache as e_cache
+        from earnings import report as e_report
+    except Exception as e:  # noqa: BLE001
+        log.warning("Brak modułów do zbudowania raportów: %s", e)
+        _uzupelnianie.release()
+        return 0
+
+    try:
+        brakujace = []
+        for s in companies.SPOLKI:
+            if s["market"] != "USA":
+                continue
+            raport = e_cache.get(f"report-{s['symbol']}", TTL_RAPORTU)
+            if raport and (raport.get("stats") or {}).get("avg_move_pct") is not None:
+                continue
+            brakujace.append(s)
+        if limit:
+            brakujace = brakujace[:limit]
+        if not brakujace:
+            return 0
+
+        log.info("Reakcje: buduję %d raportów co %.0f s", len(brakujace), przerwa_s)
+        zbudowane = 0
+        for i, s in enumerate(brakujace):
+            if i:
+                time.sleep(przerwa_s)
+            try:
+                d = e_report.report(s["symbol"])
+                if d and not d.get("error"):
+                    zbudowane += 1
+            except Exception as e:  # noqa: BLE001
+                log.warning("Raport %s: %s", s["symbol"], e)
+        log.info("Reakcje: zbudowano %d z %d", zbudowane, len(brakujace))
+        pamiec.zapisz("reakcje", _z_cache())
+        return zbudowane
+    finally:
+        _uzupelnianie.release()
+
+
 def rozgrzej_zadania():
-    return (("reakcje kursu po wynikach", wszystkie),)
+    return (
+        ("reakcje z cache", wszystkie),
+        ("reakcje — budowanie brakujących raportów", dopobierz_brakujace),
+    )
 
 
 # --------------------------------------------------------------- prezentacja
