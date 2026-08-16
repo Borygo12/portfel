@@ -147,3 +147,31 @@ returns void language sql security invoker set search_path = public as $$
 $$;
 
 grant execute on function public.wipe_my_portfolio() to authenticated;
+
+-- ============================================================ odczyt raportu AI
+--
+-- Raport z nieznanego brokera czyta model językowy (bot/report_ai.py). To
+-- kosztuje, więc konto bez premium ma jeden taki odczyt, a premium bez limitu.
+--
+-- Liczymy WYŁĄCZNIE udane odczyty. Nieudana próba nie może zjadać limitu:
+-- człowiek nie dostał nic w zamian, a gdyby zjadała, pierwszy raport ucięty
+-- przez timeout zamykałby drogę na zawsze i zostawiał wrażenie oszustwa.
+
+create table if not exists public.ai_report_usage (
+  user_id  uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  used_at  timestamptz not null default now(),
+  model    text default '',
+  positions integer default 0,
+  id       uuid primary key default gen_random_uuid()
+);
+
+create index if not exists ai_report_usage_user_idx
+  on public.ai_report_usage (user_id, used_at);
+
+alter table public.ai_report_usage enable row level security;
+
+drop policy if exists "odczyty AI: moje" on public.ai_report_usage;
+create policy "odczyty AI: moje" on public.ai_report_usage for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+grant select, insert on public.ai_report_usage to authenticated;
