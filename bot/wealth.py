@@ -41,19 +41,29 @@ log = logging.getLogger("wealth")
 #: font systemowy decydował o wyglądzie majątku, inaczej na każdej platformie.
 #: Nazwy nieznanej aplikacja nie rysuje wcale (`maIkone`), więc dołożenie tu
 #: kategorii przed wydaniem nowej wersji aplikacji niczego nie psuje.
+#: Kolejność wpisów jest kolejnością kafelków w formularzu „Dodaj do majątku",
+#: więc nie jest przypadkowa: najpierw to, czego NIE DA SIĘ wziąć z raportu
+#: maklerskiego i po co ten formularz w ogóle powstał — mieszkanie, złoto,
+#: obligacje, gotówka.
 KATEGORIE = {
-    # „akcje" i „etf" wyglądają jak coś, co powinno przyjść z raportu — i zwykle
-    # przychodzą. Są tu dla tych, którzy wpisują pojedyncze pozycje ręcznie, bo
-    # ich broker nie ma eksportu albo mają u niego trzy walory. Wycena `auto`
-    # po symbolu sprawia, że taka pozycja żyje dokładnie tak jak z raportu.
-    "akcje":        {"nazwa": "Akcje", "ikona": "akcje", "klasa": "Akcje"},
-    "etf":          {"nazwa": "Fundusze ETF", "ikona": "etf", "klasa": "ETF"},
     "nieruchomosc": {"nazwa": "Nieruchomości", "ikona": "nieruchomosc", "klasa": "Nieruchomości"},
     "metal":        {"nazwa": "Metale szlachetne", "ikona": "metal", "klasa": "Metale"},
     "krypto":       {"nazwa": "Kryptowaluty", "ikona": "krypto", "klasa": "Kryptowaluty"},
     "obligacje":    {"nazwa": "Obligacje", "ikona": "obligacje", "klasa": "Obligacje"},
     "gotowka":      {"nazwa": "Gotówka i lokaty", "ikona": "gotowka", "klasa": "Gotówka"},
     "inne":         {"nazwa": "Inne", "ikona": "inne", "klasa": "Inne"},
+    # Na końcu, bo prawie zawsze są złym wyborem — i dlatego mają `uwaga`.
+    # Wpisane ręcznie dają jedną pozycję bez ceny zakupu, bez prowizji i bez
+    # historii, więc wynik portfela policzy się z nich gorzej niż z raportu.
+    # Zostają w formularzu dla tych, których broker nie ma eksportu albo mają
+    # u niego trzy walory — wycena `auto` po symbolu sprawia, że taka pozycja
+    # żyje potem dokładnie tak jak pozycja z raportu.
+    "akcje":        {"nazwa": "Akcje", "ikona": "akcje", "klasa": "Akcje",
+                     "uwaga": "Akcje lepiej wczytać z raportu brokera — wtedy trafi tu cena "
+                              "zakupu, prowizje i cała historia, których ręczny wpis nie ma."},
+    "etf":          {"nazwa": "Fundusze ETF", "ikona": "etf", "klasa": "ETF",
+                     "uwaga": "Fundusze lepiej wczytać z raportu brokera — wtedy trafi tu cena "
+                              "zakupu, prowizje i cała historia, których ręczny wpis nie ma."},
 }
 
 #: Podpowiedzi symboli dla aktywów wycenianych z rynku. To nie jest zamknięta
