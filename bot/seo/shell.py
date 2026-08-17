@@ -60,11 +60,9 @@ _pamiec: dict = {}
 SCIEZKI_APLIKACJI = (
     "/przeglad", "/alokacja", "/zamkniete", "/earnings", "/bot-newsow",
     "/narzedzia", "/artykuly", "/wiecej", "/aplikacja",
-    # Panel dewelopera. Adres jest publiczny, bo pod każdym z tych adresów serwer
-    # podaje tę samą aplikację — ale zakładka pokazuje się wyłącznie właścicielowi,
-    # a wszystkie akcje pod nią stoją za `require_owner`. Ktoś obcy zobaczy tu
-    # aplikację otwartą na Przeglądzie i nic więcej.
-    "/dev",
+    # Panelu dewelopera nie ma już pod własnym adresem: rozwija się w „Więcej"
+    # i widzi go wyłącznie właściciel. Dostęp i tak pilnuje `require_owner`
+    # przy każdym endpointcie, nie routing.
 )
 
 
@@ -112,7 +110,6 @@ TYTULY = {
     "/artykuly": "Artykuły i dane — Portevo",
     "/wiecej": "Więcej — Portevo",
     "/aplikacja": "Portevo na telefon — pobierz aplikację",
-    "/dev": "Panel dewelopera — Portevo",
 }
 
 
