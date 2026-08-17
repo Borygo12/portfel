@@ -29,6 +29,20 @@ def meta(_v=Depends(require_login)):
     }
 
 
+@router.get("/api/wealth/spot")
+def spot(symbol: str, _v=Depends(require_login)):
+    """Cena jednej uncji/sztuki w PLN — formularz przelicza z niej gramy i kwoty.
+
+    Osobno od `/api/wealth/overview`, bo pytamy o to w trakcie WPISYWANIA, przy
+    każdej zmianie metalu — a przeliczanie całego majątku przy okazji byłoby
+    kilkuset milisekundami czekania na liczbę, która ma pojawić się od razu.
+    """
+    try:
+        return wealth.spot(symbol)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/api/wealth/overview")
 def overview(_v=Depends(require_login)):
     """Portfele, majątek i przypisanie rachunków — wszystko do jednego ekranu.
@@ -61,8 +75,18 @@ def overview(_v=Depends(require_login)):
             for p in d.get("positions", []):
                 if p.get("no_price"):
                     continue
-                wartosci_kont[p.get("account", "")] = (
-                    wartosci_kont.get(p.get("account", ""), 0.0) + p["value_pln"])
+                konto = p.get("account") or ""
+                wartosci_kont[konto] = wartosci_kont.get(konto, 0.0) + p["value_pln"]
+            # Gotówka na rachunku to też majątek — pominięta sprawiałaby, że suma
+            # tutaj nie zgadza się z kwotą nad wykresem u kogoś, kto właśnie
+            # sprzedał i jeszcze nie kupił.
+            kursy = wealth._przeliczniki([a.get("currency") for a in d.get("accounts", [])])
+            for a in d.get("accounts", []):
+                got = float(a.get("cash") or 0)
+                if got:
+                    wartosci_kont[a["account"]] = (
+                        wartosci_kont.get(a["account"], 0.0)
+                        + got * kursy.get((a.get("currency") or "PLN").upper(), 1.0))
     except Exception as e:  # noqa: BLE001
         log.warning("Wartość rachunków dla portfeli: %s", e)
 

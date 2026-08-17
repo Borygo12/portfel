@@ -413,6 +413,11 @@ def _compute_now(key: str) -> dict:
         cost_exit = exit_cost["by_position"].get(p["ticker"], 0.0)
         net_val = p["value_pln"] - cost_exit
         p["exit_cost_pln"] = cost_exit
+        # Konto, na którym pozycja stoi (to samo, którego użyliśmy do kosztów
+        # wyjścia). Sam widok portfela go nie potrzebuje — potrzebuje go podział
+        # majątku na portfele, który bez tego przypisywał rachunkom zero i pokazywał
+        # mieszkanie jako sto procent majątku człowieka mającego też akcje.
+        p["account"] = pos_account.get(p["ticker"], "")
         p["value_net_pln"] = round(net_val, 2)
         p["pl_net_pln"] = round(net_val - p["cost_pln"], 2)
         p["pl_net_pct"] = (round((net_val / p["cost_pln"] - 1) * 100, 2)

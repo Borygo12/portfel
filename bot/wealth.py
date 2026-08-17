@@ -35,26 +35,50 @@ log = logging.getLogger("wealth")
 
 #: Kategorie majątku. Klucz trafia do bazy, reszta steruje wyglądem i tym,
 #: do której grupy aktywo wchodzi w Alokacji.
+#:
+#: `ikona` to NAZWA RYSUNKU z `mobile/src/ui/Icon.tsx`, nie znak do wypisania.
+#: Wcześniej stały tu emoji i aplikacja wstawiała je wprost do tekstu — przez co
+#: font systemowy decydował o wyglądzie majątku, inaczej na każdej platformie.
+#: Nazwy nieznanej aplikacja nie rysuje wcale (`maIkone`), więc dołożenie tu
+#: kategorii przed wydaniem nowej wersji aplikacji niczego nie psuje.
 KATEGORIE = {
-    "nieruchomosc": {"nazwa": "Nieruchomości", "ikona": "🏠", "klasa": "Nieruchomości"},
-    "metal":        {"nazwa": "Metale szlachetne", "ikona": "🥇", "klasa": "Metale"},
-    "krypto":       {"nazwa": "Kryptowaluty", "ikona": "₿", "klasa": "Kryptowaluty"},
-    "obligacje":    {"nazwa": "Obligacje", "ikona": "📜", "klasa": "Obligacje"},
-    "gotowka":      {"nazwa": "Gotówka i lokaty", "ikona": "💵", "klasa": "Gotówka"},
-    "inne":         {"nazwa": "Inne", "ikona": "📦", "klasa": "Inne"},
+    # „akcje" i „etf" wyglądają jak coś, co powinno przyjść z raportu — i zwykle
+    # przychodzą. Są tu dla tych, którzy wpisują pojedyncze pozycje ręcznie, bo
+    # ich broker nie ma eksportu albo mają u niego trzy walory. Wycena `auto`
+    # po symbolu sprawia, że taka pozycja żyje dokładnie tak jak z raportu.
+    "akcje":        {"nazwa": "Akcje", "ikona": "akcje", "klasa": "Akcje"},
+    "etf":          {"nazwa": "Fundusze ETF", "ikona": "etf", "klasa": "ETF"},
+    "nieruchomosc": {"nazwa": "Nieruchomości", "ikona": "nieruchomosc", "klasa": "Nieruchomości"},
+    "metal":        {"nazwa": "Metale szlachetne", "ikona": "metal", "klasa": "Metale"},
+    "krypto":       {"nazwa": "Kryptowaluty", "ikona": "krypto", "klasa": "Kryptowaluty"},
+    "obligacje":    {"nazwa": "Obligacje", "ikona": "obligacje", "klasa": "Obligacje"},
+    "gotowka":      {"nazwa": "Gotówka i lokaty", "ikona": "gotowka", "klasa": "Gotówka"},
+    "inne":         {"nazwa": "Inne", "ikona": "inne", "klasa": "Inne"},
 }
 
 #: Podpowiedzi symboli dla aktywów wycenianych z rynku. To nie jest zamknięta
 #: lista — użytkownik może wpisać dowolny symbol, który zna nasze źródło
 #: notowań — ale te załatwiają większość przypadków bez szukania.
+#:
+#: `metal` mówi, że symbol jest notowany ZA UNCJĘ TROJAŃSKĄ. Formularz przelicza
+#: wtedy gramy i kwotę w złotych na uncje, bo nikt nie kupuje złota na uncje —
+#: kupuje się „sztabkę 100 g" albo „za 20 tysięcy".
 SYMBOLE = [
-    {"symbol": "GC=F", "nazwa": "Złoto (uncja)", "kategoria": "metal", "waluta": "USD"},
-    {"symbol": "SI=F", "nazwa": "Srebro (uncja)", "kategoria": "metal", "waluta": "USD"},
-    {"symbol": "PL=F", "nazwa": "Platyna (uncja)", "kategoria": "metal", "waluta": "USD"},
+    {"symbol": "GC=F", "nazwa": "Złoto (uncja)", "kategoria": "metal", "waluta": "USD",
+     "metal": "zloto", "jednostka": "uncja"},
+    {"symbol": "SI=F", "nazwa": "Srebro (uncja)", "kategoria": "metal", "waluta": "USD",
+     "metal": "srebro", "jednostka": "uncja"},
+    {"symbol": "PL=F", "nazwa": "Platyna (uncja)", "kategoria": "metal", "waluta": "USD",
+     "metal": "platyna", "jednostka": "uncja"},
     {"symbol": "BTC-USD", "nazwa": "Bitcoin", "kategoria": "krypto", "waluta": "USD"},
     {"symbol": "ETH-USD", "nazwa": "Ethereum", "kategoria": "krypto", "waluta": "USD"},
     {"symbol": "SOL-USD", "nazwa": "Solana", "kategoria": "krypto", "waluta": "USD"},
 ]
+
+#: Gramów w uncji trojańskiej. Metale szlachetne notowane są w uncjach, a ludzie
+#: trzymają w domu sztabki gramowe — bez tej stałej formularz kazałby dzielić
+#: w pamięci.
+UNCJA_G = 31.1034768
 
 
 # --------------------------------------------------------------- portfele
@@ -278,6 +302,95 @@ def _przeliczniki(waluty: list[str]) -> dict:
     return out
 
 
+def spot(symbol: str) -> dict:
+    """Bieżąca cena jednej sztuki/uncji w PLN — do przeliczeń w formularzu.
+
+    Formularz majątku pyta „ile masz złota", a odpowiedź brzmi „sztabka 100 g"
+    albo „kupiłem za 20 tysięcy". Jedno i drugie da się zamienić na uncje, ale
+    tylko wtedy, gdy przód zna cenę — dlatego jest ten endpoint, zamiast
+    zmuszać kogokolwiek do dzielenia w pamięci przez 31,1.
+    """
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise ValueError("Podaj symbol")
+    q = _kursy([symbol]).get(symbol) or {}
+    kurs = q.get("price")
+    if kurs is None:
+        return {"symbol": symbol, "kurs": None, "waluta": "", "pln": None,
+                "pln_gram": None, "gram_w_uncji": UNCJA_G}
+    waluta = (q.get("currency") or "USD").upper()
+    fx = _przeliczniki([waluta]).get(waluta, 1.0)
+    pln = float(kurs) * fx
+    return {"symbol": symbol, "kurs": float(kurs), "waluta": waluta, "fx": round(fx, 4),
+            "pln": round(pln, 2), "pln_gram": round(pln / UNCJA_G, 2),
+            "gram_w_uncji": UNCJA_G}
+
+
+# ------------------------------------------------------- szacunek po inflacji
+
+
+#: Od ilu miesięcy wycena nieruchomości jest na tyle stara, że warto o niej
+#: przypomnieć. Pół roku to kompromis: rynek mieszkaniowy nie rusza się z tygodnia
+#: na tydzień, a dopominanie się co miesiąc byłoby zrzędzeniem.
+STARA_WYCENA_MIES = 6
+
+
+def _hicp() -> dict:
+    """{data: poziom indeksu HICP PL} — miesięcznie, z cache benchmarków."""
+    try:
+        from portfolio import benchmarks
+        return benchmarks.series("inflation", "2005-01-01") or {}
+    except Exception as e:  # noqa: BLE001
+        log.warning("Indeks inflacji dla majątku: %s", e)
+        return {}
+
+
+def _mnoznik_inflacji(od: str, indeks: dict) -> tuple[float, str]:
+    """Ile razy urosły ceny od dnia `od` do ostatniego znanego odczytu HICP."""
+    if not indeks or not od:
+        return 1.0, ""
+    daty = sorted(indeks)
+    wczesniejsze = [d for d in daty if d <= od[:10]]
+    if not wczesniejsze:
+        return 1.0, ""
+    start = indeks[wczesniejsze[-1]]
+    koniec_data = daty[-1]
+    koniec = indeks[koniec_data]
+    if not start:
+        return 1.0, ""
+    return koniec / start, koniec_data
+
+
+def szacunek_nieruchomosci(a: dict, indeks: dict) -> dict:
+    """Ile TWOJA ostatnia wycena warta jest dziś po inflacji — i nic więcej.
+
+    To jest jedyny uczciwy automat, jaki możemy tu podłączyć. Mieszkanie nie ma
+    kursu: nie wiemy, czy Twoje jest w bloku z wielkiej płyty, czy w kamienicy
+    po remoncie, a wskaźnik NBP dla „lokali mieszkalnych w Warszawie" powiedziałby
+    o Twoim mieszkaniu dokładnie tyle, co średnia krajowa o Twojej pensji.
+
+    Dlatego szacunek NIE nadpisuje wartości — leży obok niej jako podpowiedź
+    „Twoja wycena sprzed dwóch lat odpowiada dziś mniej więcej tylu złotym".
+    Zamienia się w wartość dopiero wtedy, gdy sam ją zatwierdzisz.
+    """
+    if a["wycena"] != "manual" or not a.get("data"):
+        return {}
+    mnoznik, do_dnia = _mnoznik_inflacji(a["data"], indeks)
+    if mnoznik <= 1.0001 or not a.get("wartosc"):
+        return {}
+    try:
+        dni = (dt.date.today() - dt.date.fromisoformat(a["data"][:10])).days
+    except ValueError:
+        return {}
+    return {
+        "szacunek": round(float(a["wartosc"]) * mnoznik, 2),
+        "szacunek_pct": round((mnoznik - 1) * 100, 2),
+        "szacunek_do": do_dnia,
+        "wycena_dni": dni,
+        "wycena_stara": dni >= STARA_WYCENA_MIES * 30,
+    }
+
+
 def wartosc_aktywa(a: dict, historia: dict[str, list], kursy: dict,
                    przeliczniki: dict) -> dict:
     """Bieżąca wartość jednego aktywa w PLN plus skąd się wzięła.
@@ -325,11 +438,18 @@ def majatek() -> dict:
         [(kursy.get(a["symbol"].upper()) or {}).get("currency") or a["waluta"]
          for a in lista])
 
+    # Indeks inflacji ściągamy raz na cały majątek i tylko wtedy, gdy jest do
+    # czego — bez ani jednego aktywa wycenianego ręcznie byłoby to żądanie do
+    # Eurostatu po nic.
+    indeks = _hicp() if any(a["wycena"] == "manual" for a in lista) else {}
+
     out, razem = [], 0.0
     for a in lista:
         w = wartosc_aktywa(a, historia, kursy, przeliczniki)
         razem += w["wartosc"]
-        out.append({**a, **w, "historia": historia.get(a["id"]) or [],
+        pelne = {**a, **w}
+        out.append({**pelne, **szacunek_nieruchomosci(pelne, indeks),
+                    "historia": historia.get(a["id"]) or [],
                     "zysk": round(w["wartosc"] - float(a["koszt"] or 0), 2)
                     if a["koszt"] else None})
     return {"aktywa": out, "razem": round(razem, 2)}

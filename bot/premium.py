@@ -82,6 +82,15 @@ GROUPS = [
 ]
 
 # ------------------------------------------------------------------ funkcje
+#
+# `icon` w każdym wpisie to NAZWA RYSUNKU z `mobile/src/ui/Icon.tsx`, a nie znak
+# do wypisania. Wcześniej stały tu emoji i to font systemowy decydował, jak
+# wygląda katalog premium — inaczej na Windowsie, inaczej na iPhonie, i zawsze
+# na kolorowo, więc ikona nie umiała przygasnąć razem z zablokowaną funkcją.
+#
+# Aplikacja pomija nazwy, których nie zna (`maIkone` w `Icon.tsx`), więc nowa
+# funkcja dołożona tutaj przed wydaniem nowej wersji aplikacji pokaże się bez
+# ikony — a nie z surowym napisem w jej miejscu.
 
 FEATURES: list[dict] = [
     # ---------------------------------------------------------------- narzędzia
@@ -90,7 +99,7 @@ FEATURES: list[dict] = [
         "group": "tools",
         "screen": "tools",
         "status": "live",
-        "icon": "🔬",
+        "icon": "etf",
         "title": "Skaner ETF",
         "tagline": "Zobacz, co naprawdę kupujesz — zanim kupisz",
         "pitch": (
@@ -115,7 +124,7 @@ FEATURES: list[dict] = [
         "group": "tools",
         "screen": "tools",
         "status": "live",
-        "icon": "💰",
+        "icon": "dywidendy",
         "title": "Inwestowanie dywidendowe",
         "tagline": "Policz, ile realnie wpłynie na konto — i czy ta wypłata przetrwa",
         "pitch": (
@@ -143,7 +152,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "bot",
         "status": "live",
-        "icon": "📡",
+        "icon": "antena",
         "title": "Bot newsów na żywo",
         "tagline": "Zrozum wiadomość szybciej, niż zdążysz odświeżyć portal",
         "pitch": (
@@ -165,7 +174,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "bot",
         "status": "live",
-        "icon": "🧠",
+        "icon": "ai",
         "title": "Mózg AI — własne zasady",
         "tagline": "Ustaw, na co bot ma reagować, a co ma ignorować",
         "pitch": (
@@ -186,7 +195,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "bot",
         "status": "live",
-        "icon": "📈",
+        "icon": "pomiar",
         "title": "Sprawdzalność analiz",
         "tagline": "Zobacz, co kurs naprawdę robił po takich wiadomościach",
         "pitch": (
@@ -206,7 +215,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "tools",
         "status": "live",
-        "icon": "🎙",
+        "icon": "live",
         "title": "Wystąpienia na żywo",
         "tagline": "Słuchaj konferencji, zanim media zdążą ją streścić",
         "pitch": (
@@ -226,7 +235,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "bot",
         "status": "soon",
-        "icon": "🔔",
+        "icon": "dzwonek",
         "title": "Alerty push z newsów",
         "tagline": "Telefon zawibruje, gdy pojawi się mocny sygnał dla Twojej spółki",
         "pitch": (
@@ -248,7 +257,7 @@ FEATURES: list[dict] = [
         "group": "alloc",
         "screen": "allocation",
         "status": "live",
-        "icon": "🎯",
+        "icon": "ryzyko",
         "title": "Rentgen ryzyka",
         "tagline": "Nie „ile masz w akcjach”, tylko „co Cię realnie boli”",
         "pitch": (
@@ -270,7 +279,7 @@ FEATURES: list[dict] = [
         "group": "alloc",
         "screen": "allocation",
         "status": "live",
-        "icon": "🕸",
+        "icon": "korelacja",
         "title": "Mapa korelacji",
         "tagline": "Dziesięć spółek to nie dywersyfikacja, jeśli chodzą tak samo",
         "pitch": (
@@ -290,7 +299,7 @@ FEATURES: list[dict] = [
         "group": "alloc",
         "screen": "allocation",
         "status": "soon",
-        "icon": "⚖️",
+        "icon": "wagi",
         "title": "Alokacja docelowa i rebalancing",
         "tagline": "Ustal proporcje raz, potem tylko wyrównuj",
         "pitch": (
@@ -310,7 +319,7 @@ FEATURES: list[dict] = [
         "group": "alloc",
         "screen": "allocation",
         "status": "soon",
-        "icon": "🔎",
+        "icon": "lupa",
         "title": "Prześwietlenie ETF-ów",
         "tagline": "Twoje trzy ETF-y mogą być w połowie tą samą siódemką spółek",
         "pitch": (
@@ -330,7 +339,7 @@ FEATURES: list[dict] = [
         "group": "alloc",
         "screen": "allocation",
         "status": "soon",
-        "icon": "📈",
+        "icon": "akcje",
         "title": "Alokacja w czasie",
         "tagline": "Jak portfel dryfował, gdy patrzyłeś gdzie indziej",
         "pitch": (
@@ -351,7 +360,7 @@ FEATURES: list[dict] = [
         "group": "portfolio",
         "screen": "overview",
         "status": "live",
-        "icon": "🏁",
+        "icon": "meta",
         "title": "Pełne porównanie z rynkiem",
         "tagline": "Zarabiasz, czy tylko rynek rósł razem z Tobą",
         "pitch": (
@@ -371,7 +380,7 @@ FEATURES: list[dict] = [
         "group": "portfolio",
         "screen": "more",
         "status": "soon",
-        "icon": "🧾",
+        "icon": "rozliczenia",
         "title": "Rozliczenie podatkowe",
         "tagline": "PIT-38 policzony z Twoich raportów, nie z pamięci",
         "pitch": (
@@ -392,7 +401,7 @@ FEATURES: list[dict] = [
         "group": "portfolio",
         "screen": "more",
         "status": "soon",
-        "icon": "📄",
+        "icon": "streszczenie",
         "title": "Raport miesięczny PDF",
         "tagline": "Podsumowanie miesiąca na jednej kartce, na maila",
         "pitch": (
@@ -410,7 +419,7 @@ FEATURES: list[dict] = [
         "group": "market",
         "screen": "company",
         "status": "soon",
-        "icon": "🧮",
+        "icon": "kalkulator",
         "title": "Skaner spółek",
         "tagline": "Własne kryteria zamiast przeglądania setek tickerów",
         "pitch": (
@@ -430,7 +439,7 @@ FEATURES: list[dict] = [
         "group": "market",
         "screen": "company",
         "status": "soon",
-        "icon": "⏰",
+        "icon": "zegar",
         "title": "Alerty cenowe i wynikowe",
         "tagline": "Nie musisz sprawdzać kursu — to on odezwie się do Ciebie",
         "pitch": (
@@ -450,7 +459,7 @@ FEATURES: list[dict] = [
         "group": "market",
         "screen": "company",
         "status": "soon",
-        "icon": "💬",
+        "icon": "rozmowa",
         "title": "Asystent portfela",
         "tagline": "Zapytaj po polsku, co się dzieje z Twoimi pieniędzmi",
         "pitch": (
