@@ -165,14 +165,48 @@ TERMS = {
             "usunąć w każdej chwili w zakładce „Więcej”; usunięcie kasuje także dane portfela.",
         ),
         _sec(
-            "Wersja płatna",
+            "Wersja płatna — subskrypcja Portevo Premium",
             "Część funkcji jest płatna. Cena, okres rozliczeniowy i zakres są widoczne przed "
-            "zakupem. Zakupy w aplikacji na iOS rozlicza Apple i tam też składasz wniosek o "
-            "zwrot; subskrypcję wyłączasz w ustawieniach App Store.",
+            "zakupem, na tym samym ekranie, na którym stoi przycisk zakupu.",
+            "Dostępne są dwa okresy rozliczeniowe: miesięczny (1 miesiąc) i roczny "
+            "(12 miesięcy). Oba są subskrypcjami odnawialnymi automatycznie: po zakończeniu "
+            "okresu przedłużają się na kolejny taki sam okres i pobierana jest kolejna opłata, "
+            "dopóki nie wyłączysz odnawiania.",
             "Jeśli jesteś konsumentem, masz 14 dni na odstąpienie od umowy. Rozpoczynając "
             "korzystanie z treści cyfrowych od razu, zgadzasz się na wykonanie usługi przed "
             "upływem tego terminu, co — zgodnie z przepisami — wyłącza prawo odstąpienia w "
             "zakresie już wykonanym.",
+        ),
+        _sec(
+            "Zakupy w aplikacji na iPhonie (App Store)",
+            "W aplikacji na iOS subskrypcję sprzedaje i rozlicza Apple, w ramach zakupu "
+            "w aplikacji. Obowiązują wtedy poniższe zasady Apple:",
+            bullets=[
+                "Opłata pobierana jest z konta App Store w chwili potwierdzenia zakupu.",
+                "Subskrypcja odnawia się automatycznie, a konto jest obciążane za kolejny "
+                "okres w ciągu 24 godzin przed końcem bieżącego okresu.",
+                "Odnawianie wyłączysz sam: Ustawienia iPhone’a → Twoje imię → Subskrypcje. "
+                "Trzeba to zrobić najpóźniej 24 godziny przed końcem okresu; wyłączenie "
+                "w trakcie okresu nie skraca dostępu, który zostaje do jego końca.",
+                "Aktualną cenę i walutę zawsze pokazuje App Store — to ona jest wiążąca.",
+                "Niewykorzystanej części okresu nie zwracamy, gdy sam zrezygnujesz; wnioski "
+                "o zwrot rozpatruje Apple (reportaproblem.apple.com), nie my.",
+            ],
+        ),
+        _sec(
+            "Umowa licencyjna (EULA)",
+            "Ten regulamin jest jednocześnie umową licencyjną użytkownika końcowego. "
+            "Udzielamy Ci niezbywalnej, niewyłącznej licencji na korzystanie z aplikacji "
+            "Portevo na urządzeniach, których jesteś właścicielem lub które kontrolujesz, "
+            "zgodnie z zasadami sklepu, z którego pobrałeś aplikację.",
+            "Umowa jest zawierana wyłącznie między Tobą a nami — Apple nie jest jej stroną. "
+            "Za aplikację, jej treść i wsparcie odpowiadamy my; Apple nie ma obowiązku "
+            "świadczenia wsparcia ani obsługi ewentualnych roszczeń dotyczących aplikacji. "
+            "Apple i jego podmioty zależne są beneficjentami tej umowy i mogą egzekwować jej "
+            "postanowienia wobec Ciebie jako jej strony trzeciej.",
+            "Korzystając z aplikacji oświadczasz, że nie przebywasz w kraju objętym embargiem "
+            "i nie figurujesz na listach podmiotów objętych sankcjami.",
+            f"Pytania dotyczące tej umowy: {OWNER_MAIL}.",
         ),
         _sec(
             "Zasady korzystania",
