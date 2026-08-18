@@ -345,8 +345,24 @@ def render_html(slug: str) -> str | None:
             body += "<ul>" + "".join(f"<li>{_esc(x)}</li>" for x in s["list"]) + "</ul>"
         parts.append(f"<section><h2>{_esc(s['h'])}</h2>{body}</section>")
 
+    lang = d.get("lang", "pl")
+    # Etykiety obudowy strony (powrót, data, stopka) idą za językiem dokumentu:
+    # angielska polityka z polską stopką wygląda jak pomyłka, a to ten adres
+    # ogląda recenzent App Store w lokalizacji en-US.
+    if lang == "en":
+        wroc, obowiazuje = "← Portevo", "Effective from"
+        stopka = [("/privacy", "Privacy"), ("/terms", "Terms"),
+                  ("/privacy-choices", "Privacy choices"), ("/support", "Contact"),
+                  ("/", "App")]
+    else:
+        wroc, obowiazuje = "← Portevo", "Obowiązuje od"
+        stopka = [("/prywatnosc", "Prywatność"), ("/regulamin", "Regulamin"),
+                  ("/prywatnosc/wybory", "Twoje wybory"), ("/kontakt", "Kontakt"),
+                  ("/", "Aplikacja")]
+    stopka_html = "·".join(f'<a href="{a}">{_esc(t)}</a>' for a, t in stopka)
+
     return f"""<!DOCTYPE html>
-<html lang="pl">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -358,15 +374,346 @@ def render_html(slug: str) -> str | None:
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><a href="/">← Portevo</a><span>{_esc(UPDATED)}</span></div>
+  <div class="top"><a href="/">{wroc}</a><span>{_esc(UPDATED)}</span></div>
   <h1>{_esc(d['title'])}</h1>
   <p class="lead">{_esc(d['lead'])}</p>
-  <p class="upd">Obowiązuje od {_esc(UPDATED)}</p>
+  <p class="upd">{obowiazuje} {_esc(UPDATED)}</p>
   {''.join(parts)}
-  <footer>
-    <a href="/prywatnosc">Prywatność</a>·<a href="/regulamin">Regulamin</a>
-    ·<a href="/kontakt">Kontakt</a>·<a href="/">Aplikacja</a>
-  </footer>
+  <footer>{stopka_html}</footer>
 </div>
 </body>
 </html>"""
+
+
+# ------------------------------------------------- wersje angielskie i wybory
+
+# Po co osobne dokumenty po angielsku, skoro aplikacja jest polska: App Store
+# Connect trzyma adresy prawne OSOBNO dla każdej lokalizacji, a językiem
+# podstawowym Portevo jest English (U.S.). Recenzent wchodzący na polski adres
+# widzi dokument w języku, którego nie zna — a to on ocenia, czy odnośnik
+# „działa". Treść jest tłumaczeniem, nie osobną umową: rozjazd wersji językowych
+# byłby gorszy niż brak tłumaczenia, więc zmiany nanosi się w OBU naraz.
+
+PRIVACY_EN = {
+    "slug": "privacy-en",
+    "path": "/privacy",
+    "lang": "en",
+    "title": "Privacy Policy",
+    "lead": "In short: we store only what the app needs to work. We do not sell "
+            "your data and we do not track you across other sites.",
+    "sections": [
+        _sec(
+            "Who is responsible for your data",
+            f"The data controller is {_ADMIN}. "
+            "Write to that address in any matter concerning your data — we reply within 30 days.",
+        ),
+        _sec(
+            "What we collect",
+            "Only what you provide yourself or what the account cannot work without:",
+            bullets=[
+                "Email address and password (stored encrypted) — for signing in. "
+                "When you sign in with Google we receive your email address and account name.",
+                "Your portfolio data: transactions from the reports you upload, instrument "
+                "names, amounts, watched companies and app settings.",
+                "Payment status (whether and until when you have Premium).",
+                "Technical request data: IP address, time, device type — kept in server logs "
+                "for security and troubleshooting.",
+                "Product events: which Premium features you open — without portfolio contents, "
+                "so we know what to build next.",
+            ],
+        ),
+        _sec(
+            "Why, and on what legal basis",
+            "Account and portfolio data are processed to perform the service agreement "
+            "(Art. 6(1)(b) GDPR). Logs and security measures rely on our legitimate interest "
+            "(Art. 6(1)(f)). Accounting records for purchases are kept because tax law "
+            "requires it (Art. 6(1)(c)).",
+            "We do not carry out profiling with legal effects, nor automated decision-making "
+            "about you.",
+        ),
+        _sec(
+            "What we do NOT do",
+            bullets=[
+                "We do not sell or rent your data.",
+                "We do not connect to your brokerage account and have no access to your money "
+                "— portfolio data comes only from the reports you upload.",
+                "We do not execute transactions on your behalf.",
+                "We embed no third-party advertising or tracking pixels.",
+            ],
+        ),
+        _sec(
+            "Who processes data on our behalf",
+            "We use services the app could not run without. They are processors bound by "
+            "data processing agreements:",
+            bullets=[
+                "Supabase — accounts, sign-in and database (servers in the European Union).",
+                "Railway — application hosting.",
+                "Google — only if you choose to sign in with Google.",
+                "Market data providers — they receive the instrument symbol, never your "
+                "personal data or position sizes.",
+                "Language models used for analysis — they receive the text of a news item or "
+                "a company report, not your account data.",
+            ],
+        ),
+        _sec(
+            "How long we keep it",
+            "Account data is kept for as long as the account exists. When you delete the "
+            "account we erase it together with the portfolio — immediately and irreversibly. "
+            "Technical logs expire after 90 days. Accounting records are kept for 5 years "
+            "because the law requires it.",
+        ),
+        _sec(
+            "Your rights",
+            "You have the right to access your data, rectify it, erase it, restrict processing, "
+            "port it and object. You may also lodge a complaint with the President of the "
+            "Personal Data Protection Office (ul. Stawki 2, 00-193 Warsaw, Poland).",
+            "You can delete your account with all its data yourself, without writing to us: in "
+            "the app, the “More” tab → “Delete account”. It also works in the browser.",
+        ),
+        _sec(
+            "Browser storage and cookies",
+            "We use no cookies for tracking or advertising. In the browser we store only what "
+            "the app needs to run, in the local storage of your device:",
+            bullets=[
+                "the signed-in session token — otherwise every refresh would sign you out,",
+                "view settings: chosen background, last tab, server address.",
+            ],
+        ),
+        _sec(
+            "Children",
+            "The service is not intended for people under 16 and we do not knowingly collect "
+            "their data.",
+        ),
+        _sec(
+            "Changes",
+            f"Last updated: {UPDATED}. We announce material changes in the app before they "
+            "take effect.",
+        ),
+    ],
+}
+
+TERMS_EN = {
+    "slug": "terms-en",
+    "path": "/terms",
+    "lang": "en",
+    "title": "Terms of Use (EULA)",
+    "lead": "Portevo shows and analyses your portfolio. It is not an investment adviser "
+            "and it does not execute transactions.",
+    "sections": [
+        _sec(
+            "What Portevo is",
+            f"Portevo is an application ({SITE} and a mobile app) for tracking an investment "
+            "portfolio, company earnings calendars and market events. The service is provided "
+            f"by {_ADMIN}.",
+        ),
+        _sec(
+            "This is not investment advice",
+            "Content in the app is informational and educational. It is not investment advice, "
+            "a recommendation, or an offer to buy or sell financial instruments.",
+            "Part of the analysis is produced by a language model and may contain errors. "
+            "Quotes come from third-party providers, may be delayed and may be incomplete. "
+            "Investment decisions are yours alone, at your own risk.",
+        ),
+        _sec(
+            "Account",
+            "Some features require an account. Provide a real email address, do not share your "
+            "password and do not create an account for somebody else. You can delete the "
+            "account at any time in the “More” tab; deletion also erases portfolio data.",
+        ),
+        _sec(
+            "Paid version — the Portevo Premium subscription",
+            "Some features are paid. The price, the billing period and the scope are shown "
+            "before purchase, on the same screen as the purchase button.",
+            "Two billing periods are available: monthly (1 month) and yearly (12 months). Both "
+            "are auto-renewable subscriptions: at the end of a period they renew for another "
+            "period of the same length and a further charge is made, until you turn off "
+            "automatic renewal.",
+            "If you are a consumer you have 14 days to withdraw from the agreement. By starting "
+            "to use the digital content immediately you agree to performance before that period "
+            "ends, which — under applicable law — excludes the right of withdrawal to the "
+            "extent already performed.",
+        ),
+        _sec(
+            "In-app purchases on iPhone (App Store)",
+            "In the iOS app the subscription is sold and billed by Apple as an in-app purchase. "
+            "The following Apple rules then apply:",
+            bullets=[
+                "Payment is charged to your App Store account upon confirmation of purchase.",
+                "The subscription renews automatically and the account is charged for the next "
+                "period within 24 hours before the end of the current period.",
+                "You can turn renewal off yourself: iPhone Settings → your name → "
+                "Subscriptions. This must be done at least 24 hours before the period ends; "
+                "turning it off during a period does not shorten access, which lasts until the "
+                "end of that period.",
+                "The current price and currency are always the ones shown by the App Store — "
+                "those are binding.",
+                "No refund is given for the unused part of a period if you cancel yourself; "
+                "refund requests are handled by Apple (reportaproblem.apple.com), not by us.",
+            ],
+        ),
+        _sec(
+            "End User License Agreement (EULA)",
+            "These terms are also the end user license agreement. We grant you a "
+            "non-transferable, non-exclusive license to use the Portevo application on devices "
+            "that you own or control, in accordance with the rules of the store you downloaded "
+            "the application from.",
+            "This agreement is concluded solely between you and us — Apple is not a party to "
+            "it. We, not Apple, are responsible for the application, its content and support; "
+            "Apple has no obligation to furnish maintenance and support services, or to handle "
+            "any claims relating to the application. Apple and its subsidiaries are third-party "
+            "beneficiaries of this agreement and may enforce it against you.",
+            "By using the application you represent that you are not located in an embargoed "
+            "country and are not listed on any sanctions list.",
+            f"Questions about this agreement: {OWNER_MAIL}.",
+        ),
+        _sec(
+            "Rules of use",
+            bullets=[
+                "Do not circumvent security measures or paid-version limits.",
+                "Do not download data automatically in a way that burdens the server.",
+                "Do not resell access to the service or its data.",
+            ],
+        ),
+        _sec(
+            "Availability and liability",
+            "We do our best to keep the service running, but we do not guarantee continuity — "
+            "updates and provider outages happen. We are not liable for losses resulting from "
+            "investment decisions or from unavailability of market data. This does not limit "
+            "liability that cannot be excluded by law.",
+        ),
+        _sec(
+            "Complaints",
+            f"Send complaints to {OWNER_MAIL}. We respond within 14 days.",
+        ),
+        _sec(
+            "Changes to these terms",
+            f"Last updated: {UPDATED}. We announce changes in the app in advance; continued use "
+            "after they take effect means acceptance.",
+        ),
+    ],
+}
+
+SUPPORT_EN = {
+    "slug": "support-en",
+    "path": "/support",
+    "lang": "en",
+    "title": "Contact and support",
+    "lead": "One address, and it goes straight to the author of the app.",
+    "sections": [
+        _sec(
+            "Write to us",
+            f"Email: {OWNER_MAIL}",
+            "We usually reply within two business days, at the latest within 14 days.",
+        ),
+        _sec(
+            "Most common matters",
+            bullets=[
+                "I cannot see my data — check that you are signed in to the same account; the "
+                "portfolio belongs to the account, not to the device.",
+                "The uploaded report changed nothing — upload the transaction history file "
+                "from your brokerage account (an XTB report in XLSX format).",
+                "I forgot my password — choose password recovery on the sign-in screen.",
+                "I want to delete my account — the “More” tab → “Delete account”. "
+                "It erases everything, at once, without writing to us.",
+                "I bought Premium but still see the free version — in the “More” tab press "
+                "“Refresh”; if that does not help, write to us with the account email address.",
+            ],
+        ),
+        _sec(
+            "Reporting a bug",
+            "What helps most: what you did, what you saw, which phone or browser you use, and "
+            "a screenshot. The app version is in “More” → “Connection”.",
+        ),
+        _sec(
+            "Important documents",
+            bullets=[
+                f"Privacy Policy: {SITE}/privacy",
+                f"Terms of Use (EULA): {SITE}/terms",
+                f"Your privacy choices: {SITE}/privacy-choices",
+            ],
+        ),
+    ],
+}
+
+# --------------------------------------------------------- wybory prywatności
+
+# „User Privacy Choices URL" w App Store Connect to pole na stronę, na której
+# człowiek realnie COŚ ROBI ze swoimi danymi, a nie czyta o nich kolejny raz.
+# U nas wyborów jest mało, bo mało zbieramy — i dokładnie to ta strona mówi
+# wprost, zamiast udawać panel z dziesięcioma przełącznikami do niczego.
+
+_CHOICES_PL = [
+    "Nie sprzedajemy i nie udostępniamy Twoich danych nikomu w celach "
+    "marketingowych — nie ma więc czego wyłączać.",
+    "Nie śledzimy Cię w innych aplikacjach ani na innych stronach. W aplikacji "
+    "nie ma ani jednego SDK reklamowego, więc systemowe pytanie o zgodę na "
+    "śledzenie (ATT) w ogóle się nie pojawia.",
+    "Usunięcie konta i wszystkich danych: w aplikacji zakładka „Więcej” → "
+    "„Usuń konto”. Działa też w przeglądarce, jest natychmiastowe i nie wymaga "
+    "pisania do nas.",
+    "Wgląd w dane i sprostowanie: portfel, obserwowane i ustawienia widzisz "
+    "w aplikacji; poprawiasz je tam, gdzie je wprowadziłeś.",
+    "Kopia danych albo sprzeciw wobec przetwarzania: napisz na adres niżej — "
+    "odpowiadamy do 30 dni.",
+    "Pamięć przeglądarki: zapisujemy tylko token sesji i ustawienia widoku. "
+    "Wyczyścisz je, wylogowując się albo kasując dane witryny w przeglądarce.",
+]
+
+_CHOICES_EN = [
+    "We do not sell or share your data with anyone for marketing purposes — so "
+    "there is nothing here to opt out of.",
+    "We do not track you across other apps or websites. The app contains no "
+    "advertising SDK at all, which is why the system tracking prompt (ATT) never "
+    "appears.",
+    "Delete your account and all data: in the app, the “More” tab → "
+    "“Delete account”. It also works in the browser, takes effect immediately "
+    "and needs no message to us.",
+    "Access and rectification: your portfolio, watchlist and settings are visible "
+    "in the app; you correct them where you entered them.",
+    "A copy of your data, or an objection to processing: write to the address "
+    "below — we reply within 30 days.",
+    "Browser storage: we keep only the session token and view settings. You can "
+    "clear them by signing out or by clearing site data in your browser.",
+]
+
+CHOICES = {
+    "slug": "choices",
+    "path": "/prywatnosc/wybory",
+    "title": "Twoje wybory prywatności",
+    "lead": "Co możesz zrobić ze swoimi danymi w Portevo — i czego nie musisz "
+            "wyłączać, bo tego nie robimy.",
+    "sections": [
+        _sec("Twoje wybory", bullets=_CHOICES_PL),
+        _sec(
+            "Kontakt w sprawach danych",
+            f"Administrator: {_ADMIN}.",
+            f"Pełna polityka prywatności: {SITE}/prywatnosc",
+        ),
+    ],
+}
+
+CHOICES_EN = {
+    "slug": "choices-en",
+    "path": "/privacy-choices",
+    "lang": "en",
+    "title": "Your privacy choices",
+    "lead": "What you can do with your data in Portevo — and what you do not need "
+            "to switch off, because we do not do it.",
+    "sections": [
+        _sec("Your choices", bullets=_CHOICES_EN),
+        _sec(
+            "Data protection contact",
+            f"Controller: {_ADMIN}.",
+            f"Full privacy policy: {SITE}/privacy",
+        ),
+    ],
+}
+
+_EN_DOCS = (PRIVACY_EN, TERMS_EN, SUPPORT_EN, CHOICES, CHOICES_EN)
+
+DOCS.update({d["slug"]: d for d in _EN_DOCS})
+
+# Adresy angielskie przejmują `/privacy`, `/terms` i `/support`: wcześniej były
+# tylko aliasami polskich dokumentów, a to właśnie te adresy wpisuje się
+# w sklepach dla lokalizacji angielskiej.
+ROUTES.update({d["path"]: d["slug"] for d in _EN_DOCS})
