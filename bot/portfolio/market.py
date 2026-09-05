@@ -311,6 +311,9 @@ def company(symbol: str, with_peers: bool = True) -> dict:
             except Exception:
                 pass
             cur = "PLN" if symbol.upper().endswith(".PL") else "USD"
+            bz = prices.fetch_biznesradar_quote(symbol.split(".")[0]) if symbol.upper().endswith(".PL") else None
+            price = bz["price"] if bz else None
+            change_pct = bz.get("change_pct") if bz else None
             return {
                 "symbol": symbol,
                 "name": name,
@@ -320,8 +323,8 @@ def company(symbol: str, with_peers: bool = True) -> dict:
                 "sector": info.get("sector") or "",
                 "industry": "",
                 "country": "Polska" if symbol.upper().endswith(".PL") else "",
-                "price": None,
-                "change_pct": None,
+                "price": price,
+                "change_pct": change_pct,
                 "values": {},
                 "metrics": [],
             }

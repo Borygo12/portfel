@@ -232,6 +232,16 @@ def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
                 log.info("Rozwiązano %s -> %s", xtb_ticker, ysym)
                 break
     if not series:
+        if xtb_ticker.upper().endswith(".PL"):
+            base = xtb_ticker.upper().split(".")[0]
+            bz = fetch_biznesradar_quote(base)
+            if bz:
+                today = datetime.date.today().isoformat()
+                series = {today: bz["price"]}
+                currency = "PLN"
+                status = "ok|PLN"
+                store.put_prices(key, series, "biznesradar", status, _now_iso())
+                return series, currency
         if cached:   # sieć padła albo nic nie znaleziono — zostań przy cache
             return cached, _meta_currency(meta)
         store.put_prices(key, {}, "yahoo", "empty|", _now_iso())
@@ -427,6 +437,36 @@ def live_fx(currencies) -> dict:
     return {cur: data[sym] for cur, sym in pairs if sym in data}
 
 
+def fetch_biznesradar_quote(base_ticker: str) -> dict | None:
+    """Pobiera bieżący kurs dla spółek z GPW/NewConnect z BiznesRadar (zapas, gdy Yahoo nie zna waloru)."""
+    try:
+        url = f"https://www.biznesradar.pl/notowania/{requests.utils.quote(base_ticker.upper())}"
+        r = _session.get(url, timeout=6)
+        if r.status_code != 200:
+            return None
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+        node = soup.select_one(".q_ch_act")
+        if not node:
+            return None
+        txt = node.text.strip().replace(" ", "").replace(",", ".")
+        price = float(txt)
+        if price <= 0:
+            return None
+        ch_node = soup.select_one(".q_ch_per")
+        ch_pct = None
+        if ch_node:
+            ch_txt = ch_node.text.strip().replace("(", "").replace(")", "").replace("%", "").replace(",", ".").replace("+", "").strip()
+            try:
+                ch_pct = float(ch_txt)
+            except ValueError:
+                pass
+        return {"price": price, "change_pct": ch_pct, "currency": "PLN", "ts": int(time.time()), "source": "biznesradar"}
+    except Exception as e:  # noqa: BLE001
+        log.warning("Biznesradar %s: %s", base_ticker, e)
+        return None
+
+
 def live_quotes(tickers: list) -> dict:
     """{ticker XTB: {price, ts, currency}} — świeże kursy, jednym żądaniem na 20 walorów."""
     pairs = [(t, resolved_symbol(t)) for t in tickers]
@@ -437,6 +477,14 @@ def live_quotes(tickers: list) -> dict:
     out = {}
     for t, ysym in pairs:
         q = data.get(ysym)
+        if not q and t.upper().endswith(".PL"):
+            # Zapasowe źródło dla polskich spółek z NewConnect / GPW nieobecnych na Yahoo
+            base = t.upper().split(".")[0]
+            bz = fetch_biznesradar_quote(base)
+            if bz:
+                q = {"price": bz["price"], "ts": bz["ts"], "currency": "PLN", "fetched": time.time()}
+                with _quotes_lock:
+                    _quotes[ysym] = q
         if not q:
             continue
         out[t] = q
