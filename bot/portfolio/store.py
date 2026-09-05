@@ -146,6 +146,17 @@ def set_meta(symbol: str, source: str, status: str, fetched_at: str) -> None:
     )
 
 
+def delete_price_meta(symbol: str) -> None:
+    """Usuwa wpis z tabeli price_meta (np. błędne rozwiązanie tickera)."""
+    db.shared_execute("DELETE FROM price_meta WHERE symbol=%s", (symbol,))
+
+
+def delete_instrument_meta(ticker: str) -> None:
+    """Usuwa wpis z tabeli instrument_meta."""
+    db.shared_execute("DELETE FROM instrument_meta WHERE ticker=%s", (ticker,))
+
+
+
 # ---------- kasowanie danych (zarządzanie raportami z UI) ----------
 
 def delete_account(account: str) -> dict:

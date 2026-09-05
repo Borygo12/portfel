@@ -279,15 +279,28 @@ def _compute_now(key: str) -> dict:
     for tick in parsed["share_delta"]:
         series, ccy = prices.price_series(tick, from_date)
         if not series:
-            price_warn.append(tick)
-            continue
+            # Fallback dla walorów bez notowań na Yahoo (np. NewConnect / mikrospółki GPW):
+            # Używamy średniej ceny zakupu z otwartych lotów, żeby wycena pozycji nie spadła do 0.
+            open_lots = parsed["lots"].get(tick, [])
+            lot_vol = sum(l[0] for l in open_lots)
+            if lot_vol > 1e-12:
+                avg_buy_price = sum(l[0] * l[1] for l in open_lots) / lot_vol
+                lot_acct = open_lots[-1][3] if open_lots else ""
+                fallback_ccy = parsed["accounts"].get(lot_acct) or ("PLN" if tick.upper().endswith(".PL") else "USD")
+                first_lot_date = min((l[4] for l in open_lots), default=today)
+                series = {first_lot_date: avg_buy_price, today: avg_buy_price}
+                ccy = fallback_ccy
+                price_warn.append(tick)
+            else:
+                price_warn.append(tick)
+                continue
         q = quotes.get(tick)
         if q:   # bieżący kurs nadpisuje ostatni słupek dzienny
             series = dict(series)
             series[today] = q["price"]
             ccy = q["currency"] or ccy
         price_step[tick] = _Step(series)
-        tick_ccy[tick] = ccy or "USD"
+        tick_ccy[tick] = ccy or ("PLN" if tick.upper().endswith(".PL") else "USD")
         currencies.add(tick_ccy[tick])
 
     # DZISIEJSZY kurs bierzemy z rynku (NBP publikuje raz dziennie ~12:15, a portfel
@@ -368,8 +381,8 @@ def _compute_now(key: str) -> dict:
         open_lots = parsed["lots"][t]
         lot_vol = sum(l[0] for l in open_lots)
         avg_open = (sum(l[0] * l[1] for l in open_lots) / lot_vol) if lot_vol > 1e-12 else 0.0
-        cur_price = price_step[t].at(today) if t in price_step else 0.0
-        ccy = tick_ccy.get(t, "USD")
+        cur_price = price_step[t].at(today) if t in price_step else avg_open
+        ccy = tick_ccy.get(t) or ("PLN" if t.upper().endswith(".PL") else "USD")
         val_pln = to_pln(sh * cur_price, ccy, today)
         # koszt = realnie wydane pieniądze przeliczone kursem z dnia zakupu — tak jak XTB
         cost_pln = sum(
@@ -382,7 +395,7 @@ def _compute_now(key: str) -> dict:
             "cost_pln": round(cost_pln, 2),
             "pl_pln": round(val_pln - cost_pln, 2),
             "pl_pct": round((val_pln / cost_pln - 1) * 100, 2) if cost_pln > 1e-9 else 0.0,
-            "no_price": t not in price_step,
+            "no_price": (t in price_warn and not q) or (t not in price_step),
             # znacznik czasu notowania — na jego podstawie UI pokazuje świeżość wyceny
             "quote_ts": q["ts"] if q else None,
         })

@@ -42,6 +42,27 @@ app = FastAPI(title="Portevo — serwer danych")
 _DIR = os.path.dirname(__file__)
 _STARTED_AT = int(time.time())          # do rozpoznania, czy panel wstał po restarcie
 
+def _cleanup_incompatible_symbols_once():
+    """Jednorazowe czyszczenie starych błędnych mapowań giełdowych z bazy (np. MIG.PL -> MIG ETF)."""
+    try:
+        import db
+        db.shared_execute(
+            """DELETE FROM price_meta 
+               WHERE symbol LIKE 'res:%.PL' AND status NOT LIKE '%.WA'"""
+        )
+        db.shared_execute(
+            """DELETE FROM instrument_meta 
+               WHERE ticker = 'MIG.PL' OR (ticker LIKE '%.PL' AND quote_type = 'ETF' AND ticker NOT LIKE '%ETF%')"""
+        )
+    except Exception as e:
+        log.warning("Cleanup incompatible symbols: %s", e)
+
+try:
+    _cleanup_incompatible_symbols_once()
+except Exception:
+    pass
+
+
 # ---------------- dostęp z sieci (telefon) ----------------
 # Panel steruje botem i pokazuje prywatny portfel, więc z LAN/VPN wpuszczamy TYLKO z tokenem.
 # Z localhost (przeglądarka na tym komputerze) wszystko działa jak dotąd, bez zmian.
@@ -1389,9 +1410,16 @@ def market_company(symbol: str, peers: bool = True):
     d = pf_engine.compute()
     if not d.get("empty"):
         sym = (data.get("symbol") or "").upper()
+        orig_sym = (symbol or "").upper()
         for p in d["positions"]:
-            if pf_prices.resolved_symbol(p["ticker"]).upper() == sym:
+            pt = (p.get("ticker") or "").upper()
+            if pf_prices.resolved_symbol(pt).upper() == sym or pt == orig_sym or pt == sym:
                 data["position"] = p
+                # Jeśli profil nie ma nazwy lub ceny z Yahoo (np. NewConnect), uzupełniamy z pozycji
+                if not data.get("name") or data.get("name") == data.get("symbol"):
+                    data["name"] = p.get("name") or p["ticker"]
+                if data.get("price") is None and p.get("price"):
+                    data["price"] = p["price"]
                 break
     data["trades"] = _instrument_trades(data.get("symbol") or symbol)
     return data
@@ -1593,7 +1621,7 @@ def portfolio_allocation(by: str = "asset_class"):
     d = pf_engine.compute()
     if d.get("empty"):
         return {"empty": True}
-    positions = [p for p in d["positions"] if not p.get("no_price")]
+    positions = [p for p in d["positions"] if p.get("value_pln", 0) > 0]
 
     groups: dict = {}
     for p in positions:

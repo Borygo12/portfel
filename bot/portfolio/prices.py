@@ -110,8 +110,13 @@ def _yahoo_fetch(symbol: str, from_date: str) -> tuple:
     return series, currency
 
 
-def _yahoo_search(base: str) -> list:
-    """Kandydaci z wyszukiwarki Yahoo (np. BTEC -> BTEC.L), gdy bezpośredni symbol nie istnieje."""
+def _yahoo_search(base: str, expected_suffix: str = "") -> list:
+    """Kandydaci z wyszukiwarki Yahoo (np. BTEC -> BTEC.L), gdy bezpośredni symbol nie istnieje.
+
+    Gdy `expected_suffix` jest podany (np. '.WA' dla GPW), akceptujemy WYŁĄCZNIE
+    symbole z tego samego sufiksu giełdowego — żeby nie pomylić polskiej spółki
+    MIG.PL z amerykańskim ETF-em MIG.
+    """
     try:
         r = _session.get(
             f"https://query1.finance.yahoo.com/v1/finance/search?q={requests.utils.quote(base)}"
@@ -120,12 +125,23 @@ def _yahoo_search(base: str) -> list:
         out = []
         for q in r.json().get("quotes", []):
             sym = q.get("symbol") or ""
-            if q.get("quoteType") in ("EQUITY", "ETF") and sym.split(".")[0].upper() == base.upper():
-                out.append(sym)
+            if q.get("quoteType") not in ("EQUITY", "ETF"):
+                continue
+            if sym.split(".")[0].upper() != base.upper():
+                continue
+            # Gdy znamy oczekiwaną giełdę, odrzucamy symbole z INNEJ giełdy.
+            # Bez tego MIG.PL (GPW) mógł się zamienić w MIG (US ETF).
+            if expected_suffix:
+                cand_parts = sym.rsplit(".", 1)
+                cand_suffix = "." + cand_parts[1] if len(cand_parts) == 2 else ""
+                if cand_suffix.upper() != expected_suffix.upper():
+                    continue
+            out.append(sym)
         return out
     except Exception as e:  # noqa: BLE001
         log.warning("Yahoo search %s: %s", base, e)
         return []
+
 
 
 
@@ -177,7 +193,10 @@ def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
     """
     tkey = f"res:{(xtb_ticker or '').strip().upper()}"
     resolved = store.get_price_meta(tkey)
-    ysym = (resolved or {}).get("status") or yahoo_symbol(xtb_ticker)
+    res_status = (resolved or {}).get("status")
+    if res_status and not is_compatible_resolution(xtb_ticker, res_status):
+        res_status = None
+    ysym = res_status or yahoo_symbol(xtb_ticker)
     key = f"y:{ysym}"
     meta = store.get_price_meta(key)
     cached = store.get_prices(key)
@@ -190,11 +209,16 @@ def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
     except Exception as e:  # noqa: BLE001 — 404 = symbol nie istnieje; idziemy do wyszukiwarki
         log.warning("Yahoo %s: %s", ysym, e)
         series, currency = {}, ""
-    if not series and not resolved:
+    if not series and not res_status:
         # symbol nie istnieje na Yahoo — poszukaj tego instrumentu na innych giełdach
         base = ysym.split(".")[0]
-        for cand in _yahoo_search(base):
-            if cand == ysym:
+        # Sufiks giełdowy z oryginalnego mapowania (np. '.WA' dla GPW). Przekazujemy
+        # go do wyszukiwarki, żeby nie pomylić polskiej mikrospółki z amerykańskim
+        # ETF-em o tym samym tickerze (MIG.PL → MIG, VanEck ETF).
+        ysym_parts = ysym.rsplit(".", 1)
+        expected_suffix = "." + ysym_parts[1] if len(ysym_parts) == 2 else ""
+        for cand in _yahoo_search(base, expected_suffix):
+            if cand == ysym or not is_compatible_resolution(xtb_ticker, cand):
                 continue
             try:
                 series, currency = _yahoo_fetch(cand, from_date)
@@ -231,17 +255,51 @@ def _meta_currency(meta) -> str:
 # Dlatego notowania „na teraz" pobieramy osobno, równolegle i z krótkim TTL —
 # dzięki temu portfel pokazuje realną wartość, nawet gdy rynek leci w dół.
 
-_quotes: dict = {}          # ysym -> {"price", "ts", "currency", "fetched"}
-_quotes_lock = threading.Lock()
+def is_compatible_resolution(xtb_ticker: str, ysym: str) -> bool:
+    """Sprawdza, czy dopasowany symbol Yahoo pochodzi z właściwego rynku.
+
+    Chroni przed sytuacją, gdy polska spółka z GPW (np. MIG.PL) dopasuje się
+    do amerykańskiego ETF-a (MIG) albo kanadyjskiego waloru o tym samym skrócie.
+    """
+    t = (xtb_ticker or "").strip().upper()
+    y = (ysym or "").strip().upper()
+    if not y:
+        return False
+    m = re.match(r"^.+\.([A-Z]{2})$", t)
+    if not m:
+        return True
+    suf = m.group(1)
+    if suf == "PL":
+        # Polska giełda (GPW) na Yahoo ma wyłącznie sufiks .WA
+        return y.endswith(".WA")
+    if suf == "UK":
+        return y.endswith(".L") or y.endswith(".IL")
+    if suf == "DE":
+        return any(y.endswith(s) for s in (".DE", ".F", ".MU", ".SG", ".HM", ".DU", ".BE", ".SW"))
+    if suf == "US":
+        return "." not in y or any(y.endswith(s) for s in (".N", ".O", ".Q"))
+    return True
 
 
 def resolved_symbol(xtb_ticker: str) -> str:
     """Symbol Yahoo dla tickera XTB — z uwzględnieniem wcześniejszego dopasowania."""
     t = (xtb_ticker or "").strip().upper()
     res = store.get_price_meta(f"res:{t}")
-    if res and res.get("status"):
-        return res["status"]
+    status = (res or {}).get("status")
+    if status and is_compatible_resolution(t, status):
+        return status
+    if status and not is_compatible_resolution(t, status):
+        # Automatyczne czyszczenie niekompatybilnego wpisu z bazy
+        log.warning("Odrzucono niekompatybilne mapowanie z cache: %s -> %s", t, status)
+        try:
+            store.delete_price_meta(f"res:{t}")
+        except Exception:
+            pass
     return yahoo_symbol(t)
+
+
+_quotes: dict = {}          # ysym -> {"price", "ts", "currency", "fetched"}
+_quotes_lock = threading.Lock()
 
 
 def _norm(meta: dict) -> tuple:

@@ -264,6 +264,9 @@ def company(symbol: str, with_peers: bool = True) -> dict:
             return None
         ap = data.get("assetProfile") or {}
         pr = data.get("price") or {}
+        qt = (pr.get("quoteType") or "").upper()
+        if qt in ("NONE", "", "NULL") and not pr.get("regularMarketPrice"):
+            return None
         sd = data.get("summaryDetail") or {}
         fd = data.get("financialData") or {}
         return {
@@ -295,7 +298,35 @@ def company(symbol: str, with_peers: bool = True) -> dict:
 
     base = _cached(f"company:{sym}", PROFILE_TTL, build)
     if not base:
-        return {"error": "Nie udało się pobrać danych spółki", "symbol": sym}
+        # Awaryjny profil dla spółek bez danych na Yahoo (np. NewConnect / mikrospółki GPW):
+        # Zamiast błędu pokazujemy realną nazwę z raportu XTB, poprawny rynek (GPW) i klasę (Akcje).
+        try:
+            from . import classify
+            info = classify.describe(symbol)
+            name = symbol
+            try:
+                inst_rows = store.query("SELECT instrument FROM cash_ops WHERE ticker=%s LIMIT 1", (symbol,))
+                if inst_rows and inst_rows[0].get("instrument"):
+                    name = inst_rows[0]["instrument"]
+            except Exception:
+                pass
+            cur = "PLN" if symbol.upper().endswith(".PL") else "USD"
+            return {
+                "symbol": symbol,
+                "name": name,
+                "currency": cur,
+                "exchange": info.get("market") or "GPW",
+                "type": "EQUITY" if info.get("asset_class") == "Akcje" else "ETF",
+                "sector": info.get("sector") or "",
+                "industry": "",
+                "country": "Polska" if symbol.upper().endswith(".PL") else "",
+                "price": None,
+                "change_pct": None,
+                "values": {},
+                "metrics": [],
+            }
+        except Exception:
+            return {"error": "Nie udało się pobrać danych spółki", "symbol": sym}
 
     out = dict(base)
     out["metrics"] = [

@@ -64,11 +64,17 @@ def init() -> None:
 
 def _fetch_meta(ticker: str) -> dict:
     """Pobiera quoteType/sector z wyszukiwarki Yahoo dla jednego tickera."""
+    from .prices import is_compatible_resolution
     ysym = yahoo_symbol(ticker)
     res = store.get_price_meta(f"res:{ticker.upper()}")
-    if res and res.get("status"):
+    if res and res.get("status") and is_compatible_resolution(ticker, res["status"]):
         ysym = res["status"]
     base = ysym.split(".")[0]
+    # Sufiks giełdowy oczekiwanego symbolu (np. '.WA' dla GPW). Gdy Yahoo zwraca
+    # wiele wyników o tej samej bazie, preferujemy te z tej samej giełdy — żeby
+    # np. MIG.PL (Military Group SA, GPW) nie przejął metadanych od MIG (US ETF).
+    ysym_parts = ysym.rsplit(".", 1)
+    expected_suffix = ("." + ysym_parts[1]).upper() if len(ysym_parts) == 2 else ""
     try:
         r = _session.get(
             f"https://query1.finance.yahoo.com/v1/finance/search?q={requests.utils.quote(ysym)}"
@@ -79,8 +85,20 @@ def _fetch_meta(ticker: str) -> dict:
         log.warning("Yahoo search %s: %s", ysym, e)
         return {}
     exact = [q for q in quotes if (q.get("symbol") or "").upper() == ysym.upper()]
-    same_base = [q for q in quotes if (q.get("symbol") or "").split(".")[0].upper() == base.upper()]
-    q = (exact or same_base or quotes or [{}])[0]
+    # same_base: ten sam ticker bazowy I ta sama giełda (gdy znana). Bez tego
+    # filtra zapytanie o MIG.WA oddawało MIG (VanEck ETF na Cboe US).
+    same_base = []
+    for q in quotes:
+        sym = (q.get("symbol") or "")
+        if sym.split(".")[0].upper() != base.upper():
+            continue
+        if expected_suffix:
+            parts = sym.rsplit(".", 1)
+            cand_suffix = ("." + parts[1]).upper() if len(parts) == 2 else ""
+            if cand_suffix != expected_suffix:
+                continue
+        same_base.append(q)
+    q = (exact or same_base or [{}])[0]
     return {
         "quote_type": q.get("quoteType") or "",
         "sector": q.get("sector") or "",
@@ -125,7 +143,12 @@ def asset_class(ticker: str, m: dict, name: str = "") -> str:
         return "Kryptowaluty"
     if t in ("GOLD", "SILVER", "OIL.WTI", "NATGAS") or qt == "FUTURE":
         return "Surowce"
-    if qt == "ETF" or "ETF" in t or "ETF" in (name or "").upper():
+    is_etf_name = bool(re.search(r"\b(etf|ucits|index fund|ishares|vanguard|spdr|xtrackers|amundi)\b", (name or "").lower()))
+    is_etf_ticker = ("ETF" in t and not t.endswith(".PL")) or t.startswith("ETF")
+    # Żelazna zasada dla GPW: polskie spółki (.PL) to Akcje, o ile nie mają 'ETF' w nazwie lub tickerze (np. Beta ETF)
+    if t.endswith(".PL") and not (is_etf_name or "ETF" in t):
+        return "Akcje"
+    if qt == "ETF" or is_etf_name or is_etf_ticker:
         return "ETF"
     if qt == "INDEX":
         return "Indeksy"
