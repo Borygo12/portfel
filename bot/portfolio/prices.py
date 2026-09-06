@@ -10,6 +10,7 @@ Cache w SQLite (price_cache); dociągamy tylko gdy ostatni fetch starszy niż TT
 """
 
 import datetime
+import html as html_mod
 import logging
 import re
 import threading
@@ -437,31 +438,70 @@ def live_fx(currencies) -> dict:
     return {cur: data[sym] for cur, sym in pairs if sym in data}
 
 
+def _bez_tagow(html: str) -> str:
+    """Goły tekst z kawałka HTML — bez zewnętrznej biblioteki do parsowania."""
+    txt = re.sub(r"<[^>]+>", "", html)
+    return html_mod.unescape(txt).replace(" ", " ").strip()
+
+
+def _z_klasy(html: str, klasa: str) -> str | None:
+    """Zawartość pierwszego elementu o danej klasie CSS (BiznesRadar używa <span>)."""
+    m = re.search(r'class="[^"]*\b' + re.escape(klasa) + r'\b[^"]*"[^>]*>(.*?)</span>', html, re.S)
+    return _bez_tagow(m.group(1)) if m else None
+
+
 def fetch_biznesradar_quote(base_ticker: str) -> dict | None:
-    """Pobiera bieżący kurs dla spółek z GPW/NewConnect z BiznesRadar (zapas, gdy Yahoo nie zna waloru)."""
+    """Bieżący kurs spółki z GPW/NewConnect z BiznesRadar (zapas, gdy Yahoo nie zna waloru).
+
+    Stronę czytamy wyrażeniami regularnymi, a NIE BeautifulSoup. Obraz produkcyjny
+    instaluje tylko `bot/requirements.txt`, a `bs4` tam nie ma — import wpadał więc
+    w `except` i funkcja zawsze oddawała `None`. Objaw: na komputerze MIG.PL miał
+    cenę 0,433 zł, a na produkcji „brak notowania". Dwa spany to za mało powodu,
+    żeby dokładać zależność do obrazu.
+    """
     try:
         url = f"https://www.biznesradar.pl/notowania/{requests.utils.quote(base_ticker.upper())}"
         r = _session.get(url, timeout=6)
         if r.status_code != 200:
             return None
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(r.text, "html.parser")
-        node = soup.select_one(".q_ch_act")
-        if not node:
+        # Serwis nie zawsze deklaruje kodowanie w nagłówku, a wtedy `requests`
+        # zgaduje ISO-8859-1 i polskie znaki w nazwie wychodzą krzaczkami
+        # („Powszechny Zak?ad Ubezpiecze?"). Strona jest w UTF-8, więc dekodujemy sami.
+        html_txt = r.content.decode("utf-8", "replace")
+        txt = _z_klasy(html_txt, "q_ch_act")
+        if not txt:
             return None
-        txt = node.text.strip().replace(" ", "").replace(",", ".")
-        price = float(txt)
+        price = float(txt.replace(" ", "").replace(",", "."))
         if price <= 0:
             return None
-        ch_node = soup.select_one(".q_ch_per")
         ch_pct = None
-        if ch_node:
-            ch_txt = ch_node.text.strip().replace("(", "").replace(")", "").replace("%", "").replace(",", ".").replace("+", "").strip()
+        ch_txt = _z_klasy(html_txt, "q_ch_per")
+        if ch_txt:
+            ch_txt = (ch_txt.replace("(", "").replace(")", "").replace("%", "")
+                      .replace(",", ".").replace("+", "").replace(" ", "").strip())
             try:
                 ch_pct = float(ch_txt)
             except ValueError:
                 pass
-        return {"price": price, "change_pct": ch_pct, "currency": "PLN", "ts": int(time.time()), "source": "biznesradar"}
+        # Nazwa z tytułu strony: „Notowania MILITARY GROUP SA (MIG)- BiznesRadar.pl".
+        # Dla mikrospółek to często JEDYNE miejsce z pełną nazwą — Yahoo ich nie zna,
+        # a nazwa z raportu XTB jest widoczna tylko dla właściciela pozycji.
+        name = None
+        # Tytuł strony: „Notowania MILITARY GROUP SA (MIG)- BiznesRadar.pl".
+        # Najpierw wycinamy SAM tytuł, dopiero potem szukamy w nim nazwy — inaczej
+        # przy spółce bez nawiasu w tytule (XTB) dopasowanie uciekało w treść strony.
+        mt = re.search(r"<title>(.*?)</title>", html_txt, re.S | re.I)
+        if mt:
+            tytul = _bez_tagow(mt.group(1))
+            tytul = re.sub(r"^\s*Notowania\s+", "", tytul, flags=re.I)
+            # Ucinamy tylko ticker w nawiasie i ogon „- BiznesRadar.pl". Sam myślnik
+            # nie może być granicą — „XTB X-Trade Brokers" straciłoby pół nazwy.
+            tytul = re.split(r"\s*\(|\s*-\s*BiznesRadar", tytul, flags=re.I)[0].strip(" -")
+            if tytul:
+                name = re.sub(r"\b(Sa|S\.A\.|Nfi)\b",
+                              lambda m2: m2.group(1).upper(), tytul.title())
+        return {"price": price, "change_pct": ch_pct, "currency": "PLN",
+                "ts": int(time.time()), "source": "biznesradar", "name": name}
     except Exception as e:  # noqa: BLE001
         log.warning("Biznesradar %s: %s", base_ticker, e)
         return None

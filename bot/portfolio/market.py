@@ -314,6 +314,11 @@ def company(symbol: str, with_peers: bool = True) -> dict:
             bz = prices.fetch_biznesradar_quote(symbol.split(".")[0]) if symbol.upper().endswith(".PL") else None
             price = bz["price"] if bz else None
             change_pct = bz.get("change_pct") if bz else None
+            # Nazwa z raportu XTB jest widoczna TYLKO dla właściciela pozycji —
+            # ktoś, kto tej spółki nie ma, widział goły ticker („MIG.PL").
+            # BiznesRadar zna pełną nazwę, więc bierzemy ją, gdy raport milczy.
+            if name == symbol and bz and bz.get("name"):
+                name = bz["name"]
             return {
                 "symbol": symbol,
                 "name": name,
