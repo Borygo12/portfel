@@ -9,6 +9,7 @@ jeden wpis — etykieta, skąd wziąć liczbę, jak ją sformatować, co znaczy 
 znaczy lepiej". Aplikacja renderuje to generycznie, więc nie trzeba jej ruszać.
 """
 
+import datetime
 import logging
 import threading
 import time
@@ -367,6 +368,14 @@ def company(symbol: str, with_peers: bool = True) -> dict:
 
 # ---------------- wykres instrumentu ----------------
 
+# Zakresy w zapisie BiznesRadaru — używane, gdy Yahoo nie zna waloru (NewConnect,
+# mikrospółki GPW). Rozdzielczość dobiera serwis: 1d to świece minutowe, 5d
+# dziesięciominutowe, 1m półgodzinne, 3m dwugodzinne, 6m/1r dzienne, 3l/5l/max tygodniowe.
+BR_RANGES = {
+    "1d": "1d", "5d": "5d", "1m": "1m", "3m": "3m", "6m": "6m",
+    "ytd": "1r", "1y": "1r", "5y": "5l", "max": "max",
+}
+
 RANGES = {
     "1d": ("1d", "5m"), "5d": ("5d", "15m"), "1m": ("1mo", "1d"), "3m": ("3mo", "1d"),
     "6m": ("6mo", "1d"), "ytd": ("ytd", "1d"), "1y": ("1y", "1d"),
@@ -416,7 +425,37 @@ def chart(symbol: str, rng: str = "1y") -> dict:
             return None
 
     ttl = 60 if interval.endswith("m") else 900
-    return _cached(f"chart:{sym}:{rng}", ttl, build) or {"error": "Brak notowań", "symbol": sym}
+    out = _cached(f"chart:{sym}:{rng}", ttl, build)
+    if out:
+        return out
+
+    # Zapas dla polskich spółek spoza Yahoo. Bez niego wykres tych walorów był
+    # pusty — a to właśnie one nie mają alternatywy w aplikacji brokera.
+    if (symbol or "").upper().endswith(".PL") or sym.upper().endswith(".WA"):
+        base = (symbol or sym).upper().split(".")[0]
+        d = prices.fetch_biznesradar_chart(base, BR_RANGES.get(rng, "1r"))
+        if d:
+            if rng == "ytd":
+                # Zakresu „od początku roku" serwis nie zna — przycinamy roczny.
+                poczatek = datetime.datetime(datetime.date.today().year, 1, 1).timestamp()
+                pary = [(t, v) for t, v in zip(d["ts"], d["values"]) if t >= poczatek]
+                if len(pary) >= 2:
+                    d = {**d, "ts": [t for t, _ in pary], "values": [v for _, v in pary],
+                         "prev_close": pary[0][1]}
+            # Punkt odniesienia jak u Yahoo: dla jednego dnia zamknięcie POPRZEDNIEJ
+            # sesji, dla dłuższych zakresów pierwszy punkt przebiegu. Inaczej linia
+            # „początek zakresu" na wykresie rocznym stanęłaby na wczorajszej cenie.
+            odniesienie = d["prev_close"] if rng == "1d" else d["values"][0]
+            return {
+                "symbol": symbol or sym, "range": rng, "currency": "PLN",
+                "ts": d["ts"], "values": d["values"], "prev_close": odniesienie,
+                # Flaga steruje opisem osi (godziny kontra daty) — trzymamy ją zgodnie
+                # z tym, co dla tych samych zakresów zwraca Yahoo, choć BiznesRadar
+                # daje gęstsze świece także w miesiącu i kwartale.
+                "intraday": rng in ("1d", "5d"),
+                "source": "biznesradar",
+            }
+    return {"error": "Brak notowań", "symbol": sym}
 
 
 # ---------------- obserwowane ----------------

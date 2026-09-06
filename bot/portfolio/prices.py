@@ -507,6 +507,95 @@ def fetch_biznesradar_quote(base_ticker: str) -> dict | None:
         return None
 
 
+# ---------------- historia notowań z BiznesRadar ----------------
+#
+# Yahoo nie zna spółek z NewConnect i mikrospółek z GPW, więc dla nich wykres był
+# pusty — a to właśnie te walory mają najmniej innych źródeł. BiznesRadar karmi
+# swój wykres tym samym adresem, z którego korzystamy tutaj: POST /get-quotes-json/
+# z identyfikatorem waloru (oid) i kodem zakresu. Dostajemy świece OHLCV — dla
+# jednej sesji co MINUTĘ, czyli dokładniej niż dzienne zamknięcia.
+#
+# Kody zakresów są ich własne (sprawdzone na MIG): 1d→60 s, 5d→600 s, 1m→1800 s,
+# 3m→7200 s, 6m i 1r→dzień, 3l/5l/max→tydzień.
+
+_br_oid_cache: dict = {}
+_br_chart_cache: dict = {}
+BR_CHART_TTL_INTRADAY = 90     # sekund — sesja trwa, świece dochodzą
+BR_CHART_TTL_DZIENNE = 1800
+
+
+def biznesradar_oid(base_ticker: str) -> int | None:
+    """Wewnętrzny numer waloru w BiznesRadar — bez niego nie ruszy wykres.
+
+    Numer stoi w kodzie strony notowań (`showAddAlertModal({symbol_oid: 3525})`),
+    więc bierzemy go stamtąd i trzymamy w pamięci: dla danego tickera jest stały.
+    """
+    key = base_ticker.upper()
+    if key in _br_oid_cache:
+        return _br_oid_cache[key]
+    oid = None
+    try:
+        url = f"https://www.biznesradar.pl/notowania/{requests.utils.quote(key)}"
+        r = _session.get(url, timeout=8)
+        if r.status_code == 200:
+            m = re.search(r"symbol_oid:\s*(\d+)", r.content.decode("utf-8", "replace"))
+            if m:
+                oid = int(m.group(1))
+    except Exception as e:  # noqa: BLE001
+        log.warning("Biznesradar oid %s: %s", key, e)
+    _br_oid_cache[key] = oid
+    return oid
+
+
+def fetch_biznesradar_chart(base_ticker: str, br_range: str) -> dict | None:
+    """Przebieg notowań: {"ts": [...], "values": [...], "interval": sek, "prev_close": x}."""
+    oid = biznesradar_oid(base_ticker)
+    if not oid:
+        return None
+    key = f"{oid}:{br_range}"
+    hit = _br_chart_cache.get(key)
+    if hit and time.time() - hit["fetched"] < hit["ttl"]:
+        return hit["data"]
+    try:
+        r = _session.post("https://www.biznesradar.pl/get-quotes-json/",
+                          data={"oids[]": str(oid), "ranges[]": br_range},
+                          headers={"X-Requested-With": "XMLHttpRequest",
+                                   "Referer": f"https://www.biznesradar.pl/notowania/{base_ticker.upper()}"},
+                          timeout=12)
+        odp = r.json()
+        if odp.get("error") or not odp.get("data"):
+            return None
+        rec = odp["data"][0]
+        swiece = rec.get("quotes") or []
+        ts, vals = [], []
+        for q in swiece:
+            c = q.get("c")
+            t = q.get("ts")
+            if c is None or t is None:
+                continue
+            ts.append(int(t))
+            vals.append(round(float(c), 6))
+        if len(ts) < 2:
+            return None
+        # „pc" to zamknięcie poprzedniej sesji — punkt odniesienia dla wykresu
+        # jednodniowego. Dla dłuższych zakresów odniesieniem jest pierwszy punkt.
+        pc = (rec.get("symbol") or {}).get("pc")
+        dane = {
+            "ts": ts, "values": vals,
+            "interval": int(rec.get("interval") or 0),
+            "prev_close": round(float(pc), 6) if pc else vals[0],
+        }
+        interwal = dane["interval"]
+        _br_chart_cache[key] = {
+            "data": dane, "fetched": time.time(),
+            "ttl": BR_CHART_TTL_INTRADAY if 0 < interwal < 86400 else BR_CHART_TTL_DZIENNE,
+        }
+        return dane
+    except Exception as e:  # noqa: BLE001
+        log.warning("Biznesradar chart %s %s: %s", base_ticker, br_range, e)
+        return None
+
+
 def live_quotes(tickers: list) -> dict:
     """{ticker XTB: {price, ts, currency}} — świeże kursy, jednym żądaniem na 20 walorów."""
     pairs = [(t, resolved_symbol(t)) for t in tickers]
