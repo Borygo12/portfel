@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import apple_iap
 import premium
+import stripe_pay
 import supabase_auth as sa
 import supabase_sync as sync
 
@@ -118,13 +119,14 @@ def premium_features(v: sa.Viewer = Depends(viewer)):
 
 @router.post("/api/premium/checkout")
 async def premium_checkout(request: Request, v: sa.Viewer = Depends(require_login)):
-    """Rozpoczęcie płatności — GOTOWE POD STRIPE, ale jeszcze nieuzbrojone.
+    """Rozpoczęcie płatności na stronie — kasa Stripe.
 
-    Aplikacja woła tu z wybranym planem. Gdy w `keys/stripe.env` pojawią się
-    identyfikatory cen (`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`),
-    w miejscu oznaczonym niżej tworzy się sesję Stripe Checkout i zwraca `url`.
-    Dopóki ich nie ma, zwracamy `ready: false` — apka pokazuje uprzejmy komunikat
-    zamiast prowadzić donikąd.
+    To droga WYŁĄCZNIE dla przeglądarki. Na iPhonie sprzedaje Apple i aplikacja
+    nawet tu nie zagląda (`APPLE_STORE` w `PaywallScreen`), bo wyprowadzenie
+    użytkownika z apki do własnej kasy to odrzucenie wydania.
+
+    Dopóki w środowisku nie ma kluczy Stripe, zwracamy `ready: false` z jednym
+    zdaniem po polsku — apka pokazuje je zamiast prowadzić donikąd.
     """
     try:
         body = await request.json()
@@ -133,9 +135,9 @@ async def premium_checkout(request: Request, v: sa.Viewer = Depends(require_logi
     plan_id = str(body.get("plan") or "")
     if plan_id not in premium.PLAN_BY_ID:
         raise HTTPException(400, "Nieznany plan")
+    metoda = "blik" if str(body.get("method") or "") == "blik" else "card"
 
-    price_id = premium.stripe_price_id(plan_id)
-    if not price_id:
+    if not stripe_pay.configured():
         return {
             "ready": False,
             "message": (
@@ -144,10 +146,57 @@ async def premium_checkout(request: Request, v: sa.Viewer = Depends(require_logi
                 + (v.email or "") + "."
             ),
         }
+    if not v.user_id:
+        # właściciel na tokenie panelu — premium ma z urzędu, nie ma czego kupować
+        return {"ready": False, "message": "Zaloguj się kontem Portevo, żeby kupić premium."}
 
-    # TODO(owner): tu wpina się Stripe Checkout — utworzyć sesję dla `price_id`
-    # przypisaną do `v.user_id` i zwrócić `{"ready": True, "url": session.url}`.
-    return {"ready": False, "message": "Bramka płatności jest w trakcie konfiguracji."}
+    url, blad = stripe_pay.checkout_url(v.user_id, v.email or "", plan_id, metoda)
+    if not url:
+        return {"ready": False, "message": blad}
+    return {"ready": True, "url": url}
+
+
+@router.post("/api/premium/portal")
+def premium_portal(v: sa.Viewer = Depends(require_login)):
+    """Panel subskrypcji Stripe — tam klient sam anuluje albo zmienia kartę.
+
+    Osobny endpoint, a nie link w mailu: adres takiej sesji żyje kilka minut i
+    musi powstać dopiero w chwili kliknięcia. Subskrypcji kupionych na iPhonie
+    to nie dotyczy — tamtymi zarządza się w ustawieniach systemu.
+    """
+    url, blad = stripe_pay.portal_url(v.email or "")
+    if not url:
+        return {"ready": False, "message": blad}
+    return {"ready": True, "url": url}
+
+
+@router.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Powiadomienia ze Stripe — zakup, odnowienie, rezygnacja, zwrot.
+
+    To JEDYNE miejsce, w którym premium powstaje po zapłacie na stronie. Powrót
+    użytkownika na adres sukcesu niczego nie nadaje: ten adres da się wpisać
+    ręcznie, a podpisu tego żądania podrobić nie da się bez `whsec_…`.
+
+    Adres do wpisania w panelu Stripe (Developers → Webhooks):
+    https://www.portevo.pl/api/stripe/webhook
+
+    Zdarzenia: `checkout.session.completed`, `customer.subscription.created`,
+    `customer.subscription.updated`, `customer.subscription.deleted`.
+    """
+    surowe = await request.body()
+    if not stripe_pay.verify_signature(surowe, request.headers.get("stripe-signature", "")):
+        raise HTTPException(400, "Zły podpis")
+    try:
+        import json
+        event = json.loads(surowe.decode("utf-8"))
+    except Exception:
+        raise HTTPException(400, "Zły ładunek")
+
+    # Zawsze 200, nawet gdy zdarzenie nas nie dotyczy: kod inny niż 2xx każe
+    # Stripe ponawiać wysyłkę przez trzy dni, a nie o to chodzi przy zdarzeniu,
+    # które po prostu nie jest nasze.
+    return {"ok": True, "applied": stripe_pay.handle_event(event)}
 
 
 # ------------------------------------------------------- zakupy w App Store

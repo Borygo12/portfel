@@ -15,11 +15,14 @@ from __future__ import annotations
 # Ceny są w jednym miejscu: telefon i panel web pobierają je stąd, więc zmiana
 # kwoty nie wymaga wydania nowej wersji apki.
 #
-# GOTOWE DO STRIPE, ale jeszcze NIE podpięte: każdy plan ma `price_id_env` —
-# nazwę zmiennej środowiskowej z identyfikatorem ceny ze Stripe. Wystarczy
-# wpisać te trzy identyfikatory do `keys/stripe.env`, a endpoint
-# `/api/premium/checkout` (bot/account_api.py) sam ruszy. Dopóki ich nie ma,
-# przycisk „Wykup" pokazuje uprzejmy komunikat zamiast płatności.
+# Sprzedaż na STRONIE idzie przez Stripe (`bot/stripe_pay.py`): każdy plan ma
+# `price_id_env` — nazwę zmiennej środowiskowej z identyfikatorem ceny. Wystarczy
+# wpisać je do `keys/stripe.env` (albo w tablicę zmiennych na hostingu), a kasa
+# rusza sama. Dopóki ich nie ma, przycisk „Wykup" pokazuje uprzejmy komunikat.
+#
+# Kwota niżej musi się zgadzać z ceną wpisaną w panelu Stripe: przy karcie płaci
+# się według cennika Stripe, a ta tabela tylko go pokazuje. Przy BLIK-u odwrotnie
+# — kwota idzie stąd (patrz `stripe_pay.checkout_url`).
 
 # Promocja startowa — jedno źródło prawdy dla banera na stronie sprzedażowej.
 # `active` wyłącza całą oprawę promocyjną (przekreślone ceny, baner) jednym flagiem.
@@ -483,8 +486,10 @@ PLAN_BY_ID = {p["id"]: p for p in PLANS}
 def stripe_price_id(plan_id: str) -> str:
     """Identyfikator ceny ze Stripe dla planu — pusty, dopóki nie ma go w środowisku.
 
-    To jedyny styk z płatnościami: gdy `keys/stripe.env` dostanie
-    `STRIPE_PRICE_MONTHLY` i `STRIPE_PRICE_YEARLY`, checkout rusza sam.
+    To jedyny styk cennika z płatnościami: gdy `keys/stripe.env` dostanie
+    `STRIPE_PRICE_MONTHLY` i `STRIPE_PRICE_YEARLY`, checkout rusza sam. Ta sama
+    tabela działa też w drugą stronę — `stripe_pay._plan_po_cenie` odsiewa po niej
+    cudze subskrypcje, gdyby na koncie Stripe stała jeszcze inna marka.
     """
     import os
 
