@@ -112,7 +112,14 @@ _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/
                  # i ląduje w zakładce bota: gdyby ten adres wymagał logowania,
                  # zobaczyłby ekran logowania zamiast produktu. Endpoint nie oddaje
                  # ani treści analiz, ani promptów — tylko to, co i tak jest reklamą.
-                 "/api/bot/showcase"}
+                 "/api/bot/showcase",
+                 # Powiadomienia od bramek płatności. Puka tu SERWER Stripe albo
+                 # Apple, a nie przeglądarka z ciasteczkiem — bramka logowania
+                 # odsyłała im 401 i po zapłacie nikt nie dostawał premium.
+                 # Publiczne nie znaczy tu bezbronne: Stripe sprawdzamy podpisem
+                 # `whsec_…`, a od Apple bierzemy wyłącznie identyfikator
+                 # transakcji i sami pytamy o niego App Store Server API.
+                 "/api/stripe/webhook", "/api/apple/notifications"}
 # Pliki samej aplikacji (skrypty, czcionki, grafika) muszą być dostępne dla każdego —
 # inaczej bramka odsyła 401 na bundle i użytkownik widzi białą stronę zamiast apki.
 _PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/", "/api/legal/")
