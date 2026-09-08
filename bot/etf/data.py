@@ -452,6 +452,7 @@ def detail(symbol: str) -> dict:
     # ---- fundusze z GPW: Yahoo nie zna ich zawartości, składamy ją sami
     pl = cat.PL_FUND.get(symbol) or {}
     holdings_note, about = "", pl.get("about") or ""
+    single_asset = False        # fundusz o jednym składniku: kruszec, surowiec, dług
     if pl and not holdings:
         if pl.get("index"):
             built = _pl_index_composition(pl["index"])
@@ -479,6 +480,63 @@ def detail(symbol: str) -> dict:
             comp = {"stock_pct": 100.0, "bond_pct": 0.0, "cash_pct": 0.0, "other_pct": 0.0}
         elif pl.get("bonds"):
             comp = {"stock_pct": 0.0, "bond_pct": 100.0, "cash_pct": 0.0, "other_pct": 0.0}
+            holdings = [{"symbol": "", "name": pl.get("row") or "Obligacje skarbowe Skarbu Państwa",
+                         "pct": 100.0, "per_1000": 1000.0, "is_asset": True}]
+            top10, single_asset = None, True
+            holdings_note = ("Fundusz obligacji nie ma w środku spółek — są w nim serie długu, "
+                             "których dostawca nie publikuje pojedynczo.")
+
+    # ---- reszta katalogu: Yahoo nie opisuje części funduszy (patrz cat.FALLBACK)
+    family = profile.get("family") or pl.get("family") or ""
+    category = profile.get("categoryName") or pl.get("category") or ""
+
+    fb = cat.FALLBACK.get(symbol) or {}
+    if fb and not holdings:
+        ins = fb.get("inside")
+        if ins:
+            # fundusz bez spółek: jedna pozycja na całość zamiast pustej sekcji
+            holdings = [{"symbol": "", "name": ins["row"], "pct": 100.0,
+                         "per_1000": 1000.0, "is_asset": True}]
+            holdings_note = ins["note"]
+            comp = dict(ins["comp"])
+            sectors = []          # branże policzone przez Yahoo dla kruszcu czy długu
+            single_asset = True   # są zwyczajnie nieprawdziwe
+            top10 = None          # „dziesięć największych pozycji" nie ma tu sensu
+        else:
+            src = fb.get("twin") or fb.get("proxy")
+            sqs = _quote_summary(src) if src else {}
+            stop = sqs.get("topHoldings") or {}
+            built, built_top10 = _with_rest(_holdings_from(stop))
+            if built:
+                holdings, top10 = built, built_top10
+                sectors = sectors or _sectors(stop)
+                if not any(comp.values()):
+                    comp = {
+                        "stock_pct": round((_raw(stop, "stockPosition") or 0) * 100, 2),
+                        "bond_pct": round((_raw(stop, "bondPosition") or 0) * 100, 2),
+                        "cash_pct": round((_raw(stop, "cashPosition") or 0) * 100, 2),
+                        "other_pct": round((_raw(stop, "otherPosition") or 0) * 100, 2),
+                    }
+                if fb.get("twin"):
+                    holdings_note = (
+                        f"Yahoo nie publikuje karty składu dla tej linii notowań — pokazujemy "
+                        f"skład tego samego funduszu notowanego na {fb.get('twin_where') or 'innej giełdzie'} "
+                        f"({src}). To jeden i ten sam portfel, różni się wyłącznie parkiet "
+                        "i waluta, w której się go kupuje."
+                    )
+                    # ta sama linia funduszu = ta sama opłata i ten sam zarządzający
+                    sprofile = sqs.get("fundProfile") or {}
+                    sfees = sprofile.get("feesExpensesInvestment") or {}
+                    ter = ter or _raw(sfees, "annualReportExpenseRatio")
+                    family = family or sprofile.get("family") or ""
+                    category = category or sprofile.get("categoryName") or ""
+                else:
+                    holdings_note = (
+                        f"Yahoo nie publikuje składu tego funduszu — pokazujemy skład indeksu "
+                        f"{fb.get('proxy_label') or src}, który fundusz odwzorowuje, wzięty "
+                        f"z dużego funduszu na ten sam indeks ({src}). Spółki i ich udziały "
+                        "są te same; różnić się mogą opłata i sposób odwzorowania."
+                    )
 
     out = {
         "symbol": symbol,
@@ -500,8 +558,8 @@ def detail(symbol: str) -> dict:
         },
 
         "profile": {
-            "family": profile.get("family") or pl.get("family") or "",
-            "category": profile.get("categoryName") or pl.get("category") or "",
+            "family": family,
+            "category": category,
             "legal_type": profile.get("legalType") or "",
             "ter_pct": round(ter * 100, 3) if ter else None,
             # `totalNetAssets` z Yahoo bywa raz w milionach, raz w tysiącach i nie da się
@@ -531,10 +589,8 @@ def detail(symbol: str) -> dict:
 
         "risk": _risk(vol, dd, top10),
         "chart": _chart_payload(series),
-        "explain": _explain(meta, {
-            "family": profile.get("family") or pl.get("family") or "",
-            "categoryName": profile.get("categoryName") or pl.get("category") or "",
-        }, comp, ter, top10, holdings, currency),
+        "explain": _explain(meta, {"family": family, "categoryName": category},
+                            comp, ter, top10, holdings, currency, single_asset),
         "fetched_at": int(now),
     }
 
@@ -548,6 +604,23 @@ def detail(symbol: str) -> dict:
                     "dokument KID na stronie funduszu; u Beta ETF mieści się ona zwykle "
                     "w okolicach pół procenta rocznie, czyli więcej niż w dużych funduszach "
                     "zagranicznych, ale bez kosztu przewalutowania.",
+        })
+
+    if not ter and not pl:
+        # Yahoo nie podaje opłaty dla sporej części europejskich funduszy (m.in. całego
+        # Vanguarda) i dla papierów surowcowych. Zmyślona liczba byłaby gorsza od jej braku,
+        # więc zamiast pustego miejsca mówimy wprost, gdzie znaleźć aktualną stawkę.
+        surowiec = bool(fb.get("inside")) and meta.get("asset") in ("commodity", "crypto")
+        out["explain"].append({
+            "title": "Ile to kosztuje",
+            "text": "Rocznej opłaty tego funduszu nie mamy w danych — Yahoo nie udostępnia jej "
+                    "dla części funduszy notowanych w Europie. Aktualną stawkę podaje dokument "
+                    "KID (kilka stron, po polsku) na stronie dostawcy; dla szerokich funduszy "
+                    "indeksowych mieści się ona zwykle w przedziale 0,1–0,3% rocznie."
+                    + (" Przy złocie i srebrze bywa podobnie, przy kryptowalutach kilka razy "
+                       "wyżej — i schodzi z ilości surowca przypadającej na jednostkę, więc "
+                       "z czasem jedna jednostka odpowiada nieco mniejszej jego ilości."
+                       if surowiec else ""),
         })
 
     if not qs and not series:
@@ -585,18 +658,22 @@ def _chart_payload(series: dict) -> dict:
     }
 
 
-def _explain(meta, profile, comp, ter, top10, holdings, currency) -> list[dict]:
+def _explain(meta, profile, comp, ter, top10, holdings, currency,
+             single_asset: bool = False) -> list[dict]:
     """Sekcje „co to właściwie znaczy" — pisane dla kogoś, kto pierwszy raz widzi ETF."""
     out = []
 
-    if meta.get("acc") is not None:
+    income = not (single_asset and meta.get("asset") in ("commodity", "crypto"))
+    if meta.get("acc") is not None and income:
+        # fundusz obligacji nie wypłaca dywidend, tylko odsetki — nazwijmy rzecz po imieniu
+        payout = "odsetki od obligacji" if meta.get("asset") == "bond" else "dywidendy ze spółek"
         out.append({
             "title": "Akumulujący czy wypłacający?",
-            "text": ("Ten fundusz jest **akumulujący** — dywidendy ze spółek zostają w środku i "
+            "text": (f"Ten fundusz jest **akumulujący** — {payout} zostają w środku i "
                      "zwiększają jego wartość. Nic nie wpływa na rachunek, więc nie ma corocznego "
-                     "podatku od dywidend i nie trzeba samodzielnie reinwestować.")
+                     "podatku od wypłat i nie trzeba samodzielnie reinwestować.")
             if meta["acc"] else
-            ("Ten fundusz jest **wypłacający** — dywidendy trafiają na Twój rachunek gotówką. "
+            (f"Ten fundusz jest **wypłacający** — {payout} trafiają na Twój rachunek gotówką. "
              "Wygodne, jeśli chcesz z portfela żyć, ale każda wypłata jest opodatkowana i "
              "reinwestować trzeba ręcznie."),
         })
@@ -621,7 +698,15 @@ def _explain(meta, profile, comp, ter, top10, holdings, currency) -> list[dict]:
                         "To rozsądne rozłożenie — żadna pojedyncza spółka nie przesądza o wyniku.")),
         })
 
-    if holdings:
+    if holdings and single_asset:
+        out.append({
+            "title": "Co dokładnie kupujesz",
+            "text": f"Całość wpłaty pracuje w jednej rzeczy: **{holdings[0]['name'].lower()}**. "
+                    "Nie ma tu spółek, które mogłyby zbankrutować ani dywidend, które mogłyby "
+                    "kapać na rachunek — jest jedna wycena i jej wahania. Dlatego taki fundusz "
+                    "traktuje się jako dodatek do portfela, a nie jako jego podstawę.",
+        })
+    elif holdings:
         first = holdings[0]
         out.append({
             "title": "Co to znaczy w złotówkach",
@@ -631,7 +716,7 @@ def _explain(meta, profile, comp, ter, top10, holdings, currency) -> list[dict]:
                     "w takiej proporcji, w jakiej siedzą w indeksie.",
         })
 
-    if comp.get("bond_pct", 0) > 5:
+    if comp.get("bond_pct", 0) > 5 and not single_asset:
         out.append({
             "title": "Nie tylko akcje",
             "text": f"**{comp['bond_pct']:.0f}%** funduszu to obligacje. Ta część rzadko rośnie "

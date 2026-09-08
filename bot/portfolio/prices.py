@@ -186,6 +186,10 @@ def fx_series(currency: str, from_date: str) -> dict:
                      SERIES_MEMO_TTL, lambda: _fx_series_now(currency, from_date))
 
 
+#: poniżej tylu notowań linia giełdowa jest martwa, a nie „mało płynna"
+MIN_SERIES = 5
+
+
 def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
     """({data: close}, waluta) dla tickera XTB. Puste dict, gdy nic nie znaleziono.
 
@@ -210,6 +214,29 @@ def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
     except Exception as e:  # noqa: BLE001 — 404 = symbol nie istnieje; idziemy do wyszukiwarki
         log.warning("Yahoo %s: %s", ysym, e)
         series, currency = {}, ""
+
+    # Zapamiętane dopasowanie, które oddaje jeden punkt notowań, jest gorsze od żadnego:
+    # wyszukiwarka Yahoo potrafi wskazać martwą linię notowań tego samego funduszu
+    # (CNDX.L -> CNDX.AQ), a raz zapisana w bazie zostawała tam na zawsze i zabierała
+    # wykres oraz całą ocenę ryzyka. Kasujemy taki wpis i wracamy do symbolu z mapowania.
+    if res_status and len(series) < MIN_SERIES and ysym != yahoo_symbol(xtb_ticker):
+        log.warning("Martwe dopasowanie %s -> %s (%d notowań) — wracam do symbolu bazowego",
+                    xtb_ticker, ysym, len(series))
+        try:
+            store.delete_price_meta(tkey)
+        except Exception:                                    # noqa: BLE001
+            pass
+        res_status = None
+        ysym = yahoo_symbol(xtb_ticker)
+        key = f"y:{ysym}"
+        meta = store.get_price_meta(key)
+        cached = store.get_prices(key)
+        try:
+            series, currency = _yahoo_fetch(ysym, from_date)
+        except Exception as e:                               # noqa: BLE001
+            log.warning("Yahoo %s: %s", ysym, e)
+            series, currency = {}, ""
+
     if not series and not res_status:
         # symbol nie istnieje na Yahoo — poszukaj tego instrumentu na innych giełdach
         base = ysym.split(".")[0]
@@ -224,6 +251,10 @@ def _price_series_now(xtb_ticker: str, from_date: str) -> tuple:
             try:
                 series, currency = _yahoo_fetch(cand, from_date)
             except Exception:  # noqa: BLE001
+                continue
+            if len(series) < MIN_SERIES:
+                # linia notowań istnieje, ale jest martwa — nie zapisujemy jej na stałe
+                series = {}
                 continue
             if series:
                 ysym = cand

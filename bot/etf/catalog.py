@@ -319,8 +319,8 @@ CATALOG: list[dict] = [
     {"sym": "IEAC.L", "name": "iShares Core € Corp Bond", "region": "europe", "sector": "bond",
      "asset": B, "cur": "EUR", "acc": False,
      "note": "Obligacje dużych firm europejskich o wysokim ratingu."},
-    {"sym": "AGGH.L", "name": "iShares Global Aggregate Bond", "region": "world", "sector": "bond",
-     "asset": B, "cur": "USD", "acc": True,
+    {"sym": "AGGH.AS", "name": "iShares Global Aggregate Bond", "region": "world", "sector": "bond",
+     "asset": B, "cur": "EUR", "acc": True,
      "note": "Cały światowy rynek długu w jednym funduszu, z zabezpieczeniem walutowym."},
 
     # ---------------- krypto
@@ -461,15 +461,16 @@ CATALOG += [
      "note": "Korea Południowa — Samsung, Hyundai, SK Hynix."},
 
     # ---------------- Europa
-    {"sym": "CEU.L", "name": "iShares Core MSCI EMU", "region": "europe", "sector": "broad",
+    {"sym": "CSEMU.MI", "name": "iShares Core MSCI EMU", "region": "europe", "sector": "broad",
      "asset": E, "cur": "EUR", "acc": True,
      "note": "Strefa euro bez Wielkiej Brytanii i Szwajcarii — czysta ekspozycja na euro."},
     {"sym": "IEFM.L", "name": "iShares MSCI Europe Momentum", "region": "europe", "sector": "broad",
      "asset": E, "cur": "GBP", "acc": True,
      "note": "Europejskie spółki w najsilniejszym trendzie."},
-    {"sym": "IEUR.L", "name": "iShares FTSEurofirst 80", "region": "europe", "sector": "broad",
-     "asset": E, "cur": "GBP", "acc": False,
-     "note": "Osiemdziesiąt największych spółek strefy euro."},
+    {"sym": "SMEA.MI", "name": "iShares Core MSCI Europe", "region": "europe", "sector": "broad",
+     "asset": E, "cur": "EUR", "acc": True,
+     "note": "Cała rozwinięta Europa — razem z Wielką Brytanią i Szwajcarią, "
+             "których nie ma w funduszach na strefę euro."},
 
     # ---------------- obligacje
     {"sym": "IB01.L", "name": "iShares $ Treasury Bond 0-1yr", "region": "usa", "sector": "bond",
@@ -670,4 +671,134 @@ PL_FUND = {
                  "a o wyniku decydują stopy procentowe: gdy rynek oczekuje ich spadku, "
                  "wyceny obligacji rosną.",
     },
+}
+
+
+# ------------------------------------------ fundusze, których Yahoo nie opisuje
+#
+# Moduł `topHoldings` w Yahoo nie jest dostępny dla wszystkiego. Regularnie wypadają
+# z niego linie notowane w Londynie — przez to karta CNDX.L (Nasdaq 100, jeden
+# z najpopularniejszych ETF-ów świata) świeciła pustką — oraz wszystko, co z definicji
+# nie jest koszykiem akcji: kruszce, surowce, krypto i obligacje. Gorzej: dla takich
+# funduszy Yahoo potrafi oddać BRANŻE policzone jak dla akcji (koszyk surowców wychodzi
+# w 18% „finansowy", fundusz obligacji korporacyjnych w 100% „finansowy"), więc trzeba
+# je nie tylko uzupełnić, ale i zasłonić.
+#
+# Trzy lekarstwa:
+#   twin   — TEN SAM fundusz notowany na innej giełdzie. To jeden portfel i jedna
+#            opłata, różni się tylko parkiet i waluta notowania — bierzemy stamtąd
+#            skład, branże i TER.
+#   proxy  — INNY fundusz na ten sam indeks. Skład jest ten sam, ale opłata już nie,
+#            więc kopiujemy wyłącznie zawartość.
+#   inside — fundusz nie ma w środku spółek. Zawartość opisujemy sami, żeby sekcja
+#            „co jest w środku" mówiła prawdę zamiast znikać.
+
+_C_COMMODITY = {"stock_pct": 0.0, "bond_pct": 0.0, "cash_pct": 0.0, "other_pct": 100.0}
+_C_BOND = {"stock_pct": 0.0, "bond_pct": 100.0, "cash_pct": 0.0, "other_pct": 0.0}
+
+
+def _inside(row: str, note: str, comp: dict) -> dict:
+    """Zawartość funduszu, który nie ma spółek: jedna pozycja na 100% i wyjaśnienie."""
+    return {"inside": {"row": row, "note": note, "comp": comp}}
+
+
+_GOLD = _inside(
+    "Fizyczne złoto w sztabach",
+    "Ten fundusz nie kupuje żadnych spółek. Za każdą jednostkę stoi złoto zdeponowane "
+    "w skarbcu (zwykle londyńskim) i przypisane do funduszu — dlatego nie ma tu ani branż, "
+    "ani krajów. Jest jeden kruszec i jego cena, przeliczana na walutę notowania.",
+    _C_COMMODITY)
+
+_SILVER = _inside(
+    "Fizyczne srebro w sztabach",
+    "Ten fundusz nie kupuje żadnych spółek — trzyma srebro w skarbcu. Srebro chodzi "
+    "w tę samą stronę co złoto, ale wyraźnie mocniej: to również surowiec przemysłowy, "
+    "więc dokłada się do niego koniunktura w fotowoltaice i elektronice.",
+    _C_COMMODITY)
+
+FALLBACK: dict[str, dict] = {
+    # --- ten sam fundusz, inna giełda
+    "CNDX.L": {"twin": "SXRV.DE", "twin_where": "Xetrze we Frankfurcie"},
+
+    # --- inny fundusz na ten sam indeks
+    "XMUS.DE": {"proxy": "SXR4.DE", "proxy_label": "MSCI USA"},
+
+    # --- kruszce
+    "SGLN.L": _GOLD, "IGLN.L": _GOLD, "SGLD.L": _GOLD, "PHAU.L": _GOLD,
+    "SSLN.L": _SILVER, "SLVP.L": _SILVER,
+    "4GLD.DE": _inside(
+        "Fizyczne złoto (z prawem do wydania kruszcu)",
+        "Xetra-Gold to papier dłużny w całości pokryty złotem złożonym we Frankfurcie — "
+        "posiadacz może zażądać wydania sztabek. Nie ma tu spółek ani branż: jest kruszec "
+        "i jego cena w euro.",
+        _C_COMMODITY),
+    "CRUD.L": _inside(
+        "Kontrakty terminowe na ropę WTI",
+        "W środku nie ma ani spółek, ani baryłek w magazynie — są kontrakty terminowe na ropę, "
+        "rolowane co miesiąc na kolejną serię. Przy drogiej ropie „na później” samo rolowanie "
+        "zjada część wyniku, więc fundusz potrafi zarabiać mniej niż sama ropa.",
+        _C_COMMODITY),
+    "CMOD.L": _inside(
+        "Koszyk surowców (energia, metale, rolnictwo) przez swap",
+        "Fundusz nie trzyma surowców fizycznie — odwzorowuje indeks szerokiego koszyka "
+        "(ropa, gaz, metale przemysłowe, złoto, zboża) umową swap z bankiem. Branże i spółki "
+        "nie mają tu zastosowania; ryzykiem dodatkowym jest wiarygodność drugiej strony umowy.",
+        _C_COMMODITY),
+
+    # --- krypto
+    "BTCE.DE": _inside(
+        "Bitcoin w depozycie",
+        "Za każdą jednostkę stoi bitcoin przechowywany u wyspecjalizowanego depozytariusza. "
+        "To nie jest fundusz akcyjny — nie ma spółek, branż ani dywidend, jest jedna waluta "
+        "cyfrowa i jej kurs, potrafiący zmienić się o kilkadziesiąt procent w kilka tygodni.",
+        _C_COMMODITY),
+    "ZETH.DE": _inside(
+        "Ether (ETH) w depozycie",
+        "Za każdą jednostkę stoi ether przechowywany u depozytariusza. Wewnątrz nie ma spółek "
+        "ani branż — jest jedna kryptowaluta i jej kurs.",
+        _C_COMMODITY),
+
+    # --- obligacje (Yahoo nie oddaje ich składu, a branże liczy jak dla akcji)
+    "IB01.L": _inside(
+        "Bony skarbowe USA, zapadalność do 1 roku",
+        "W środku są krótkie papiery skarbowe Stanów Zjednoczonych. Nie ma spółek ani branż. "
+        "Taki fundusz zachowuje się prawie jak gotówka w dolarze: praktycznie nie reaguje na "
+        "zmiany stóp, a dochód odpowiada bieżącemu oprocentowaniu długu USA.",
+        _C_BOND),
+    "IBTA.L": _inside(
+        "Obligacje skarbowe USA, zapadalność 1–3 lata",
+        "Koszyk krótkich obligacji rządu USA — bez spółek i bez branż. Krótki termin oznacza, "
+        "że podwyżka stóp obniża wycenę tylko nieznacznie; to najspokojniejsza część rynku długu.",
+        _C_BOND),
+    "IBTM.L": _inside(
+        "Obligacje skarbowe USA, zapadalność 7–10 lat",
+        "Koszyk długich obligacji rządu USA. Nie ma tu spółek, jest za to wyraźna wrażliwość na "
+        "stopy procentowe: przy spadku rentowności o 1 punkt procentowy wycena rośnie o mniej "
+        "więcej 8%, a przy wzroście — tyle samo traci.",
+        _C_BOND),
+    "IEAC.L": _inside(
+        "Obligacje firm ze strefy euro (rating inwestycyjny)",
+        "Fundusz pożycza pieniądze setkom europejskich firm o solidnym ratingu — w praktyce "
+        "głównie bankom i koncernom przemysłowym. To dług, nie akcje: zarabia na odsetkach, "
+        "a traci, gdy stopy rosną albo gdy rynek zaczyna się bać o wypłacalność firm.",
+        _C_BOND),
+    "IHYG.L": _inside(
+        "Obligacje firm ze strefy euro o wysokim oprocentowaniu (high yield)",
+        "Dług firm poniżej ratingu inwestycyjnego — płacą więcej, bo ryzyko niewypłacalności "
+        "jest realne. W kryzysie taki fundusz spada razem z giełdą, nie zamiast niej, więc nie "
+        "pełni roli poduszki bezpieczeństwa.",
+        _C_BOND),
+    "AGGH.AS": _inside(
+        "Obligacje z całego świata (skarbowe i firmowe), zabezpieczone do euro",
+        "Najszerszy koszyk długu, jaki da się kupić jednym funduszem: obligacje rządów "
+        "i dużych firm z kilkudziesięciu krajów, w tysiącach serii — dlatego nie ma tu listy "
+        "pojedynczych pozycji. Kurs walut jest zabezpieczony do euro, więc o wyniku decydują "
+        "same stopy procentowe, a nie kurs dolara czy jena.",
+        _C_BOND),
+    "ERNS.L": _inside(
+        "Bardzo krótki dług w funtach (do roku)",
+        "Fundusz trzyma najkrótsze papiery w funcie brytyjskim — zamiennik gotówki dla kogoś, "
+        "kto rozlicza się w GBP. Wahania są minimalne, a wynik odpowiada bieżącej stopie "
+        "procentowej Banku Anglii.",
+        _C_BOND),
 }
