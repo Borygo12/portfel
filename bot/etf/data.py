@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from . import catalog as cat
+from . import xetra
 
 log = logging.getLogger("etf")
 
@@ -538,11 +539,38 @@ def detail(symbol: str) -> dict:
                         "są te same; różnić się mogą opłata i sposób odwzorowania."
                     )
 
+    # ---- drugie źródło: giełda we Frankfurcie (patrz xetra.py)
+    xf = xetra.fund(meta.get("isin", ""))
+    sources = ["Yahoo Finance"] if qs or series else []
+    if xf.get("ter_pct") is not None:
+        # opłatę bierzemy z giełdy, nawet gdy Yahoo coś podał: Yahoo dla CNDX
+        # twierdzi 0,30%, a w karcie funduszu jest 0,33% — giełda ma to z prospektu
+        ter = xf["ter_pct"] / 100.0
+    family = family or xf.get("issuer") or ""
+    index_label = xf.get("benchmark") or ""
+    if xf:
+        sources.append("Deutsche Börse (boerse-frankfurt.de)")
+
+    price_note = ""
+    if not price:
+        # Yahoo milczy — bierzemy cenę z Xetry. UWAGA: to notowanie w innej walucie
+        # i z innego parkietu, więc waluta MUSI pojechać razem z ceną, inaczej
+        # pokazalibyśmy euro z podpisem „USD"
+        xq = xetra.quote(meta.get("isin", ""))
+        if xq:
+            price = xq["price"] * div        # niżej i tak dzielimy przez `div`
+            currency = xq["currency"]
+            prev = None
+            price_note = ("Yahoo nie oddaje w tej chwili notowań tego funduszu — cena "
+                          "pochodzi z giełdy we Frankfurcie (Xetra) i jest w euro, "
+                          "niezależnie od waluty parkietu, na którym go kupujesz.")
+
     out = {
         "symbol": symbol,
         "name": meta.get("name") or price_node.get("shortName") or symbol,
         "long_name": price_node.get("longName") or "",
         "currency": currency,
+        "price_note": price_note,
         "currency_note": ("Na giełdzie w Londynie fundusz kwotowany jest w pensach — "
                           "tu pokazujemy ceny przeliczone na funty.") if raw_cur == "GBp" else "",
         "exchange": price_node.get("exchangeName") or "",
@@ -560,6 +588,9 @@ def detail(symbol: str) -> dict:
         "profile": {
             "family": family,
             "category": category,
+            "index_label": index_label,
+            "aum": xf.get("aum"),
+            "replication": xf.get("replication") or "",
             "legal_type": profile.get("legalType") or "",
             "ter_pct": round(ter * 100, 3) if ter else None,
             # `totalNetAssets` z Yahoo bywa raz w milionach, raz w tysiącach i nie da się
@@ -587,12 +618,24 @@ def detail(symbol: str) -> dict:
             "ytd": _round(_ytd(series)),
         },
 
+        "sources": sources,
         "risk": _risk(vol, dd, top10),
         "chart": _chart_payload(series),
         "explain": _explain(meta, {"family": family, "categoryName": category},
                             comp, ter, top10, holdings, currency, single_asset),
         "fetched_at": int(now),
     }
+
+    if xf.get("ter_pct") is not None:
+        out["explain"] = [e for e in out["explain"] if e["title"] != "Ile to kosztuje naprawdę"]
+        yearly = xf["ter_pct"]
+        out["explain"].insert(1, {
+            "title": "Ile to kosztuje naprawdę",
+            "text": f"Opłata roczna wynosi **{yearly:.2f}%** wartości inwestycji. Przy 10 000 zł "
+                    f"to około {yearly * 100:.0f} zł rocznie, pobierane po cichu z wyceny — nie "
+                    "zobaczysz tego jako osobnej transakcji. Stawka pochodzi z danych giełdy "
+                    "we Frankfurcie, czyli z oficjalnej karty funduszu.",
+        })
 
     if pl and not ter:
         # Yahoo nie oddaje opłat dla funduszy z GPW, a zmyślona liczba byłaby gorsza
@@ -605,6 +648,13 @@ def detail(symbol: str) -> dict:
                     "w okolicach pół procenta rocznie, czyli więcej niż w dużych funduszach "
                     "zagranicznych, ale bez kosztu przewalutowania.",
         })
+
+    perf = out["performance"]
+    if any(perf.get(k) is None for k in ("m1", "m3", "m6", "y1")):
+        xp = xetra.performance(meta.get("isin", ""))
+        for k in ("m1", "m3", "m6", "y1"):
+            if perf.get(k) is None and xp.get(k) is not None:
+                perf[k] = xp[k]
 
     if not ter and not pl:
         # Yahoo nie podaje opłaty dla sporej części europejskich funduszy (m.in. całego
@@ -759,13 +809,25 @@ def _row(symbol: str) -> dict:
     last = series[days[-1]] if days else None
     prev = series[days[-2]] if len(days) > 1 else None
 
-    # TER dociągamy z pełnej karty, ale tylko jeśli już siedzi w cache — lista
-    # nie ma prawa czekać na sześćdziesiąt zapytań do Yahoo
-    ter = None
-    with _lock:
-        cached = _cache.get(f"detail:{symbol}")
-    if cached:
-        ter = (cached[1].get("profile") or {}).get("ter_pct")
+    # Opłata: najpierw giełda we Frankfurcie (jedna migawka na dobę trzymana
+    # w pamięci, więc lista nic na nią nie czeka), potem to, co ewentualnie
+    # policzyła już pełna karta.
+    ter = xetra.fund(meta.get("isin", "")).get("ter_pct")
+    if ter is None:
+        with _lock:
+            cached = _cache.get(f"detail:{symbol}")
+        if cached:
+            ter = (cached[1].get("profile") or {}).get("ter_pct")
+
+    # Yahoo nie oddał notowań (blokada, martwa linia) — pokaż chociaż to,
+    # co widzi giełda we Frankfurcie, zamiast pustego wiersza
+    xq = xetra.quote(meta.get("isin", "")) if not days else {}
+    if xq:
+        last = xq["price"]
+        series_cur = xq["currency"]        # cena z Xetry jest w euro — podpis musi się zgadzać
+        xp = xetra.performance(meta.get("isin", ""))
+    else:
+        xp = {}
 
     return {
         "symbol": symbol,
@@ -776,17 +838,18 @@ def _row(symbol: str) -> dict:
         "currency": series_cur or meta.get("cur", ""), "acc": meta.get("acc"),
         "note": meta.get("note", ""),
         "price": round(last, 4) if last else None,
-        "change_pct": round((last / prev - 1) * 100, 2) if last and prev else None,
-        "y1_pct": _round(_change_over(series, 365)),
+        "change_pct": (round((last / prev - 1) * 100, 2) if last and prev
+                       else _round(xq.get("change_pct"))),
+        "y1_pct": _round(_change_over(series, 365)) if days else xp.get("y1"),
         "ytd_pct": _round(_ytd(series)),
-        "m1_pct": _round(_change_over(series, 30)),
-        "m3_pct": _round(_change_over(series, 91)),
+        "m1_pct": _round(_change_over(series, 30)) if days else xp.get("m1"),
+        "m3_pct": _round(_change_over(series, 91)) if days else xp.get("m3"),
         "vol_pct": round(vol, 1) if vol else None,
         "max_dd_pct": round(dd, 1) if dd else None,
         "risk_score": _risk(vol, dd, None)["score"],
         "ter_pct": ter,
         "sparkline": [round(series[d], 4) for d in days[-60:]],
-        "pending": not days,
+        "pending": not days and not xq,
     }
 
 
@@ -817,6 +880,9 @@ def _trend_score(row: dict):
 def screen(region: str = "", sector: str = "", asset: str = "", currency: str = "",
            query: str = "", sort: str = "y1", limit: int = 24, offset: int = 0) -> dict:
     """Filtrowanie katalogu. Wiersze bez danych wracają jako `pending` i dociągają się w tle."""
+    # migawka z giełdy we Frankfurcie (opłaty) ładuje się raz na dobę, w tle —
+    # pierwsze wejście na listę jej nie czeka
+    _pool.submit(xetra.warm)
     q = (query or "").strip().lower()
     picked = []
     for e in cat.CATALOG:
