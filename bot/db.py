@@ -107,12 +107,22 @@ def current_user() -> str:
     return _current_user.get()
 
 
+class NoIdentity(PermissionError):
+    """Zapytanie o czyjeś dane bez ustalonej tożsamości — jedyny powód na 401.
+
+    Osobna klasa, a nie goły `PermissionError`, bo tamten w Pythonie znaczy też
+    „system odmówił zapisu pliku" (jest podklasą OSError). Serwer zamieniał KAŻDY
+    `PermissionError` na „Zaloguj się" — więc dysk bez prawa zapisu objawiał się
+    oknem logowania u kogoś, kto był zalogowany. Patrz `paths.PROBLEM`.
+    """
+
+
 @contextlib.contextmanager
 def user_scope(user_id: str = ""):
     """Transakcja w imieniu użytkownika — RLS przycina wyniki do jego wierszy."""
     uid = user_id or current_user()
     if not uid:
-        raise PermissionError("Zapytanie o dane użytkownika bez ustalonej tożsamości.")
+        raise NoIdentity("Zapytanie o dane użytkownika bez ustalonej tożsamości.")
     pool = _get_pool()
     with pool.connection() as con:
         with con.transaction():

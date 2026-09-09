@@ -338,19 +338,38 @@ async def _naglowki_bezpieczenstwa(request, call_next):
 
 @app.exception_handler(Exception)
 async def _friendly_errors(request, exc):
-    """Zamienia dwa typowe błędy konfiguracji na czytelną odpowiedź zamiast 500.
+    """Zamienia typowe błędy konfiguracji na czytelną odpowiedź zamiast 500.
 
     Bez tego pierwsze uruchomienie na nowym serwerze kończy się „Internal Server
     Error" i zgadywaniem, czego brakuje.
+
+    Rozróżnienie, które kiedyś kosztowało wieczór szukania: 401 należy się
+    WYŁĄCZNIE `db.NoIdentity`. Wcześniej stał tu goły `PermissionError`, a ten
+    w Pythonie znaczy również „system odmówił zapisu pliku" — więc dysk bez
+    prawa zapisu (Railway podpina go jako root, serwer chodzi jako uid 10001)
+    objawiał się oknem logowania u kogoś, kto BYŁ zalogowany. Jedynym zapisem
+    na ścieżce „Uruchom nasłuch" jest `params.json`, więc wszystkie odczyty
+    działały i wyglądało to na kaprys uwierzytelniania.
     """
     from fastapi.responses import JSONResponse
 
     import db
     if isinstance(exc, db.NotConfigured):
         return JSONResponse({"error": str(exc), "code": "db_not_configured"}, status_code=503)
-    if isinstance(exc, PermissionError):
+    if isinstance(exc, db.NoIdentity):
         return JSONResponse({"error": "Zaloguj się, żeby zobaczyć swoje dane",
                              "code": "login_required"}, status_code=401)
+    if isinstance(exc, OSError):
+        # Kłopot z dyskiem, nie z kontem. Mówimy wprost, czego dotyczy, bo to
+        # zwykle znaczy „katalog danych nie jest zapisywalny".
+        log.exception("Błąd zapisu: %s %s", request.method, request.url.path)
+        import paths
+        return JSONResponse(
+            {"error": "Serwer nie może zapisać pliku roboczego. "
+                      + (paths.PROBLEM or f"Sprawdź katalog danych: {paths.DATA_DIR}."),
+             "code": "storage_error"},
+            status_code=503,
+        )
     log.exception("Nieobsłużony błąd: %s %s", request.method, request.url.path)
     return JSONResponse({"error": "Błąd serwera", "code": "server_error"}, status_code=500)
 
@@ -1058,6 +1077,9 @@ def dev_status(_v=Depends(require_owner)):
             "started_at": _STARTED_AT,
             "uptime_s": max(0.0, time.time() - _STARTED_AT),
         },
+        # Katalog na pliki robocze. `problem` niepuste = serwer pisze do katalogu
+        # tymczasowego, więc ustawienia i feed analiz znikną przy wdrożeniu.
+        "dane": {"katalog": paths.DATA_DIR, "problem": paths.PROBLEM},
         "bot": {
             "alive": runner.is_running(),
             "paused": bool(p.get("kill_switch")),
@@ -1841,11 +1863,16 @@ def api_health():
     czy proces żyje i czy baza odpowiada.
     """
     import db
+    import paths
     dbs = db.healthy()
     return {
         "ok": bool(dbs.get("ok")),
         "db": "ok" if dbs.get("ok") else "błąd",
         "auth": "ok" if _sa_configured() else "brak konfiguracji Supabase",
+        # Samo słowo, bez ścieżek: "zapasowy" znaczy, że katalog danych nie jest
+        # zapisywalny i pliki robocze zginą przy wdrożeniu. Szczegóły (ścieżka,
+        # powód odmowy) są w /api/dev/status, czyli za kontem właściciela.
+        "storage": "zapasowy" if paths.PROBLEM else "ok",
         "started_at": _STARTED_AT,
         "api": API_VERSION,
     }
