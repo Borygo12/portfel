@@ -35,8 +35,17 @@ RUN mkdir -p /data
 
 # Aplikacja nie potrzebuje roota. Gdyby ktoś kiedyś wykorzystał lukę w bibliotece,
 # nie dostanie od razu pełnych praw w kontenerze.
+#
+# Konta NIE ustawiamy tu przez `USER`, tylko w entrypoincie. Powód: dysk Railway
+# podpina się pod /data już PO zbudowaniu obrazu i przykrywa katalog stworzony
+# wyżej razem z jego właścicielem. Ktoś musi poprawić to przy starcie, a do tego
+# potrzebny jest root — entrypoint robi `chown` i dopiero potem schodzi na uid
+# 10001, więc sam serwer i tak chodzi bez uprawnień roota.
 RUN useradd --create-home --uid 10001 portevo && chown -R portevo:portevo /app /data
-USER portevo
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 EXPOSE 8080
 

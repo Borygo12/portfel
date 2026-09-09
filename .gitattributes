@@ -1,0 +1,5 @@
+# Skrypty powłoki MUSZĄ mieć końce linii LF. Windows zapisuje CRLF, a wtedy
+# w kontenerze Linuksa shebang czyta się jako "/bin/sh\r" — plik niby jest,
+# a start kończy się "no such file or directory". Ten wpis pilnuje tego przy
+# każdym checkoucie, niezależnie od ustawień core.autocrlf u kogokolwiek.
+*.sh text eol=lf
