@@ -50,7 +50,14 @@ _zrodla: dict[str, dict] = {}
 
 
 def is_running() -> bool:
-    return _running.is_set()
+    """Czy nasłuch NAPRAWDĘ chodzi — flaga ORAZ żywy wątek.
+
+    Sama flaga potrafiła kłamać: gdy wątek padał, `_running` zostawało ustawione
+    i aplikacja pokazywała działający nasłuch bez jednego pobrania w tle.
+    """
+    if not _running.is_set():
+        return False
+    return _thread is None or _thread.is_alive()
 
 
 def status() -> dict:
@@ -187,16 +194,50 @@ def handle_post(post: dict, params: dict):
 
 
 def _loop():
+    """Wątek nasłuchu. Cokolwiek się stanie, kończy się uczciwym stanem.
+
+    Osłona całości `try/finally` nie jest ostrożnością na wyrost. Wcześniej
+    rozgrzewka źródeł stała PRZED pętlą i poza jakimkolwiek zabezpieczeniem:
+    jeden wyjątek w `prime()` zabijał wątek, a `_running` zostawało ustawione —
+    czyli aplikacja pokazywała „bot nasłuchuje", podczas gdy nikt już niczego
+    nie pobierał. Awaria niewidoczna jest gorsza od awarii głośnej.
+    """
     global _last_edgar, _last_squawk, _last_gov, _last_truth, _last_gpw, _last_sitemap, _last_knf, _last_knf_ann, _last_outcomes
     log.info("Pętla bota wystartowała. Parametry: %s", load_params())
-    truth_social.prime()  # nie analizujemy postów sprzed startu
-    sec_edgar.prime()
-    squawk.prime()
-    gov_rss.prime()
-    gpw_espi.prime()
-    sitemap_monitor.prime()
-    knf_registry.prime()
-    knf_announcements.prime()
+    try:
+        _rozgrzej()
+        _petla_glowna()
+    except BaseException as e:  # noqa: BLE001 — wątek nie ma komu oddać wyjątku
+        log.exception("Pętla bota przerwana wyjątkiem")
+        _status["last_error"] = f"pętla przerwana: {type(e).__name__}: {e}"[:300]
+    finally:
+        # Stan MUSI przestać kłamać, nawet gdy wątek padł w połowie.
+        _running.clear()
+        _status["running"] = False
+        log.info("Pętla bota zatrzymana.")
+
+
+def _rozgrzej() -> None:
+    """Oznacza istniejący materiał jako widziany — nie analizujemy tego, co było.
+
+    Każde źródło osobno: nieudana rozgrzewka jednego oznacza tylko tyle, że przy
+    pierwszym pobraniu przyjdzie z niego trochę starszych pozycji. To znacznie
+    mniejszy kłopot niż nasłuch, który w ogóle nie wstał.
+    """
+    for nazwa, fn in (("truth", truth_social.prime), ("edgar", sec_edgar.prime),
+                      ("squawk", squawk.prime), ("gov", gov_rss.prime),
+                      ("gpw", gpw_espi.prime), ("sitemap", sitemap_monitor.prime),
+                      ("knf", knf_registry.prime), ("knf_ann", knf_announcements.prime)):
+        if not _running.is_set():
+            return
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Rozgrzewka źródła %s nieudana: %s", nazwa, e)
+
+
+def _petla_glowna():
+    global _last_edgar, _last_squawk, _last_gov, _last_truth, _last_gpw, _last_sitemap, _last_knf, _last_knf_ann, _last_outcomes
     while _running.is_set():
         params = load_params()
 
@@ -315,7 +356,6 @@ def _loop():
             if not _running.is_set():
                 break
             time.sleep(0.5)
-    log.info("Pętla bota zatrzymana.")
 
 
 def start(zapamietaj: bool = True) -> bool:
