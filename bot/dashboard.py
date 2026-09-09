@@ -897,8 +897,13 @@ def get_state():
     }
 
 
+# Parametry są WSPÓLNE dla całego serwera — jeden `params.json`, jeden nasłuch.
+# Bez `require_owner` dowolne zalogowane konto mogło wyłączyć wszystkie źródła
+# albo wcisnąć pauzę awaryjną WSZYSTKIM naraz, i z zewnątrz wyglądałoby to
+# dokładnie jak „bot sam się wyłączył". Ta sama zasada, dla której START/STOP
+# należy do właściciela — tylko że tutaj jej brakowało.
 @app.post("/api/params")
-def set_params(updates: dict):
+def set_params(updates: dict, _v=Depends(require_owner)):
     return save_params(updates)
 
 
