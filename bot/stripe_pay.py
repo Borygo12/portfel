@@ -259,8 +259,14 @@ def _zastosuj_subskrypcje(sub: dict) -> bool:
 
     pozycje = (sub.get("items") or {}).get("data") or []
     price_id = ((pozycje[0].get("price") or {}).get("id") or "") if pozycje else ""
-    plan = _plan_po_cenie(price_id) or str((sub.get("metadata") or {}).get("plan") or "")
-    if plan not in premium.PLAN_BY_ID:
+
+    # O TYM, CO KUPIONO, DECYDUJE WYŁĄCZNIE CENA. Metadane to nasza własna
+    # notatka doklejona przy tworzeniu kasy — nie dowód zakupu. Wcześniej stał tu
+    # odwrót do `metadata["plan"]`, gdy cena nie pasowała, i to była dziura:
+    # subskrypcja z CUDZĄ ceną (na koncie Stripe stoi też druga marka) nadawała
+    # premium, jeśli tylko miała w metadanych napis „yearly". Test to wyłapał.
+    plan = _plan_po_cenie(price_id)
+    if not plan:
         return False                                # nie nasz produkt — nie nasza sprawa
 
     user_id = str((sub.get("metadata") or {}).get("user_id") or "")
@@ -301,14 +307,25 @@ def _zastosuj_jednorazowa(sesja: dict) -> bool:
         return False
     meta = sesja.get("metadata") or {}
     user_id = str(meta.get("user_id") or "") or str(sesja.get("client_reference_id") or "")
-    plan = str(meta.get("plan") or "")
-    if not (user_id and plan in premium.PLAN_BY_ID):
+    plan_id = str(meta.get("plan") or "")
+    plan = premium.PLAN_BY_ID.get(plan_id)
+    if not (user_id and plan):
         return False
 
-    dni = 366 if plan == "yearly" else 31
+    # Tu ceny ze Stripe nie ma czym sprawdzić — BLIK-iem sprzedajemy kwotą podaną
+    # wprost (`price_data`), więc zamiast identyfikatora ceny porównujemy SAMĄ
+    # KWOTĘ i walutę. Bez tego cudza sesja jednorazowa z tego samego konta Stripe
+    # nadawałaby premium, gdyby trafiła w nasze nazwy pól w metadanych.
+    oczekiwana = round(float(plan["price"]) * 100)
+    if int(sesja.get("amount_total") or 0) != oczekiwana:
+        return False
+    if str(sesja.get("currency") or "").lower() != str(plan["currency"]).lower():
+        return False
+
+    dni = 366 if plan_id == "yearly" else 31
     expires = (datetime.now(timezone.utc) + timedelta(days=dni)).isoformat()
     return sa.set_entitlement(
-        user_id=user_id, plan=plan, source="stripe", expires_at=expires,
+        user_id=user_id, plan=plan_id, source="stripe", expires_at=expires,
         provider_ref=str(sesja.get("id") or ""),
         # płatność jednorazowa z definicji się nie odnawia — od razu wiadomo, że
         # dostęp ma termin, i ekran konta może o tym uprzedzić
