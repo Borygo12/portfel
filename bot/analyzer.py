@@ -212,12 +212,25 @@ def analyze_post(post_text: str, source: str = "truth_social") -> dict:
     """ETAP 1 — szybka decyzja. Optymalizacje pod długie teksty."""
     reject = pre_filter(post_text)
     if reject:
+        # `prefilter: True` to jedyny wiarygodny znacznik „nie pytaliśmy modelu".
+        # Wcześniej rozpoznawał to rachunek kosztów po przedrostku „[pre-filtr" —
+        # czyli po TREŚCI zdania pisanego dla człowieka. Wystarczyło je poprawić,
+        # żeby odsiane wpisy zaczęły się liczyć jako płatne wywołania.
         return {"tradable": False, "ticker": None, "direction": None, "targets": [],
-                "strength": 0, "reason": f"[pre-filtr] {reject}"}
+                "prefilter": True,
+                "strength": 0, "reason": f"Pominięte bez analizy: {reject}."}
 
     if source == "squawk" and not _squawk_noise_filter(post_text):
+        # Powód pisany po ludzku, bo trafia wprost na ekran użytkownika. „brak
+        # słowa-klucza, pomijam AI" opisywało implementację, a nie to, co się
+        # stało z wiadomością — i po takim wpisie nikt nie wiedział, czy bot coś
+        # przeoczył, czy świadomie odpuścił.
         return {"tradable": False, "ticker": None, "direction": None, "targets": [],
-                "strength": 0, "reason": "[pre-filtr squawk] brak słowa-klucza, pomijam AI"}
+                "prefilter": True,
+                "strength": 0,
+                "reason": "Zwykły komentarz rynkowy bez nowego faktu — nie ma tu "
+                          "przejęcia, wyników ani decyzji urzędu, więc odpuszczamy "
+                          "analizę AI."}
 
     if source == "gpw_espi":
         fast = fast_regex_filter(post_text)

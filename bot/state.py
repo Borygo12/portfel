@@ -14,7 +14,13 @@ _state_lock = threading.Lock()
 
 
 def log_signal(entry: dict):
+    # `ts` zostaje dla zgodności ze starymi wpisami, ale jest bezużyteczny do
+    # pokazywania godziny: to czas LOKALNY SERWERA, a serwer w chmurze stoi na
+    # UTC. Aplikacja wypisywała go wprost, więc w Polsce godziny były o dwie
+    # (latem) mniejsze niż w rzeczywistości. `ts_epoch` nie ma tego problemu —
+    # to punkt na osi czasu, a strefę dokłada dopiero urządzenie czytelnika.
     entry["ts"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    entry["ts_epoch"] = time.time()
     with _state_lock:
         with open(SIGNALS_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")

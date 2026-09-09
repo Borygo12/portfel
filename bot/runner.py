@@ -38,6 +38,16 @@ _last_knf = 0.0
 _last_knf_ann = 0.0
 _last_outcomes = 0.0
 
+# Zdrowie każdego źródła z osobna: kiedy ostatnio odpowiedziało, kiedy ostatnio
+# coś przyniosło i czym się wywróciło.
+#
+# Bez tego nie dało się odróżnić dwóch zupełnie różnych sytuacji, które w apce
+# wyglądały identycznie (pusto): „źródło działa, tylko akurat cisza" od „źródło
+# jest zepsute od tygodnia". Truth Social to skrajny przypadek — Trump pisze
+# kilka razy dziennie, więc cisza jest tam normalna i nie sposób na oko poznać,
+# czy pobieranie w ogóle jeszcze działa.
+_zrodla: dict[str, dict] = {}
+
 
 def is_running() -> bool:
     return _running.is_set()
@@ -45,6 +55,38 @@ def is_running() -> bool:
 
 def status() -> dict:
     return dict(_status)
+
+
+def zrodla_stan() -> dict:
+    """Kiedy które źródło ostatnio odpowiedziało i co przyniosło."""
+    return {k: dict(v) for k, v in _zrodla.items()}
+
+
+def _odpytaj(klucz: str, fn) -> list:
+    """Pobiera z jednego źródła, zapisując jego stan. Nigdy nie rzuca.
+
+    Izolacja per źródło jest tu istotna: wcześniej tylko Truth Social miał własny
+    `try`, a awaria SEC-a albo GPW wylatywała do wspólnego `except` i przerywała
+    CAŁY obieg — pozostałe źródła nie były w tym cyklu odpytane ani razu.
+    """
+    wpis = _zrodla.setdefault(klucz, {
+        "ok_ts": 0.0, "err": None, "err_ts": 0.0, "items": 0, "last_item_ts": 0.0,
+    })
+    try:
+        pozycje = list(fn() or [])
+    except Exception as e:  # noqa: BLE001 — jedno źródło nie może zabrać reszty
+        wpis["err"] = f"{type(e).__name__}: {e}"[:200]
+        wpis["err_ts"] = time.time()
+        # Poziom `warning`, nie `debug`: awaria źródła to rzecz, o której trzeba
+        # wiedzieć. Wcześniej Truth Social mógł nie działać tygodniami po cichu.
+        log.warning("Źródło %s zawiodło: %s", klucz, e)
+        return []
+    wpis["ok_ts"] = time.time()
+    wpis["err"] = None
+    if pozycje:
+        wpis["items"] += len(pozycje)
+        wpis["last_item_ts"] = time.time()
+    return pozycje
 
 
 def _blocked_by(signal: dict, params: dict, source: str = "truth_social") -> dict | None:
@@ -191,13 +233,11 @@ def _loop():
                 if params.get("truth_social_enabled", True) and \
                         time.time() - _last_truth >= truth_interval:
                     _last_truth = time.time()
-                    try:
-                        for post in truth_social.fetch_new_posts(params["max_post_age_minutes"]):
-                            if not _running.is_set():
-                                break
-                            _executor.submit(handle_post, post, params)
-                    except Exception as e:
-                        log.debug("Truth Social niedostępny: %s", e)
+                    for post in _odpytaj("truth", lambda: truth_social.fetch_new_posts(
+                            params["max_post_age_minutes"])):
+                        if not _running.is_set():
+                            break
+                        _executor.submit(handle_post, post, params)
                 # 2) SEC EDGAR (rzadszy interwał — feed i tak odświeża się ~co minutę)
                 if params.get("sec_edgar_enabled", True) and \
                         time.time() - _last_edgar >= params["sec_poll_seconds"]:
@@ -206,8 +246,8 @@ def _loop():
                     # Bez brokera przepuszczamy wszystko, co ma rozpoznany ticker.
                     forms = ["8-K"] + (["10-Q"] if params.get("sec_edgar_10q") else [])
                     for form in forms:
-                        for filing in sec_edgar.fetch_new_filings(
-                                params["max_filing_age_minutes"], form):
+                        for filing in _odpytaj("edgar", lambda f=form: sec_edgar.fetch_new_filings(
+                                params["max_filing_age_minutes"], f)):
                             if not _running.is_set():
                                 break
                             _executor.submit(handle_post, filing, params)
@@ -215,7 +255,8 @@ def _loop():
                 if params.get("squawk_enabled", True) and \
                         time.time() - _last_squawk >= params.get("squawk_poll_seconds", 5):
                     _last_squawk = time.time()
-                    for sq in squawk.fetch_new_squawks(params["max_post_age_minutes"]):
+                    for sq in _odpytaj("squawk", lambda: squawk.fetch_new_squawks(
+                            params["max_post_age_minutes"])):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, sq, params)
@@ -223,7 +264,8 @@ def _loop():
                 if params.get("gov_rss_enabled", True) and \
                         time.time() - _last_gov >= params.get("gov_rss_poll_seconds", 60):
                     _last_gov = time.time()
-                    for gov_news in gov_rss.fetch_new_gov_news(params["max_post_age_minutes"]):
+                    for gov_news in _odpytaj("gov", lambda: gov_rss.fetch_new_gov_news(
+                            params["max_post_age_minutes"])):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, gov_news, params)
@@ -231,7 +273,8 @@ def _loop():
                 if params.get("gpw_espi_enabled", True) and \
                         time.time() - _last_gpw >= params.get("gpw_espi_poll_seconds", 45):
                     _last_gpw = time.time()
-                    for report in gpw_espi.fetch_new_gpw_reports(params.get("max_gpw_age_minutes", 30)):
+                    for report in _odpytaj("gpw", lambda: gpw_espi.fetch_new_gpw_reports(
+                            params.get("max_gpw_age_minutes", 30))):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, report, params)
@@ -239,7 +282,7 @@ def _loop():
                 if params.get("sitemap_enabled", False) and \
                         time.time() - _last_sitemap >= params.get("sitemap_poll_seconds", 3600):
                     _last_sitemap = time.time()
-                    for ev in sitemap_monitor.fetch_new_sitemap_events():
+                    for ev in _odpytaj("sitemap", sitemap_monitor.fetch_new_sitemap_events):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, ev, params)
@@ -247,7 +290,8 @@ def _loop():
                 if params.get("knf_enabled", True) and \
                         time.time() - _last_knf >= params.get("knf_poll_seconds", 300):
                     _last_knf = time.time()
-                    for ev in knf_registry.fetch_new_knf_events(params.get("knf_max_age_minutes", 60)):
+                    for ev in _odpytaj("knf", lambda: knf_registry.fetch_new_knf_events(
+                            params.get("knf_max_age_minutes", 60))):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, ev, params)
@@ -255,7 +299,8 @@ def _loop():
                 if params.get("knf_ann_enabled", True) and \
                         time.time() - _last_knf_ann >= params.get("knf_ann_poll_seconds", 180):
                     _last_knf_ann = time.time()
-                    for ev in knf_announcements.fetch_new_knf_announcements(params.get("knf_ann_max_age_minutes", 120)):
+                    for ev in _odpytaj("knf_ann", lambda: knf_announcements.fetch_new_knf_announcements(
+                            params.get("knf_ann_max_age_minutes", 120))):
                         if not _running.is_set():
                             break
                         _executor.submit(handle_post, ev, params)
@@ -273,10 +318,20 @@ def _loop():
     log.info("Pętla bota zatrzymana.")
 
 
-def start() -> bool:
+def start(zapamietaj: bool = True) -> bool:
+    """Uruchamia nasłuch. `zapamietaj` zapisuje decyzję na dysku.
+
+    Zapis jest po to, żeby bot WRACAŁ po restarcie serwera. Każde wdrożenie
+    stawia kontener od nowa, a `autostart_monitoring` jest domyślnie wyłączone —
+    więc po każdej aktualizacji nasłuch po cichu przestawał chodzić i wyglądało
+    to, jakby bot „sam się wyłączył". Teraz gaśnie wyłącznie wtedy, gdy ktoś
+    naprawdę kliknie STOP (patrz `wznow_po_restarcie`).
+    """
     global _thread, _executor
     if _running.is_set():
         return False
+    if zapamietaj:
+        _zapamietaj_stan(True)
     _running.set()
     _executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="ai-worker")
     _status.update(running=True, started_at=time.time(), last_error=None)
@@ -285,10 +340,12 @@ def start() -> bool:
     return True
 
 
-def stop() -> bool:
+def stop(zapamietaj: bool = True) -> bool:
     global _executor
     if not _running.is_set():
         return False
+    if zapamietaj:
+        _zapamietaj_stan(False)
     _running.clear()
     if _executor:
         # cancel_futures=True: zadania JESZCZE NIE zaczęte (np. dziesiątki handle_post
@@ -298,3 +355,29 @@ def stop() -> bool:
         _executor = None
     _status["running"] = False
     return True
+
+
+def _zapamietaj_stan(chodzi: bool) -> None:
+    """Zapisuje w parametrach, czy nasłuch MA chodzić. Nigdy nie rzuca."""
+    try:
+        from config import save_params
+        save_params({"bot_should_run": bool(chodzi)})
+    except Exception as e:  # noqa: BLE001 — brak zapisu nie może zablokować włącznika
+        log.warning("Nie zapisano stanu nasłuchu: %s", e)
+
+
+def wznow_po_restarcie() -> bool:
+    """Wraca do nasłuchu, jeśli przed restartem był włączony.
+
+    Wołane przy starcie serwera. Świadomie NIE zapisuje stanu ponownie i szanuje
+    pauzę awaryjną: gdy ktoś zostawił wciśnięty kill switch, bot ma zostać
+    wyłączony niezależnie od tego, co działo się wcześniej.
+    """
+    params = load_params()
+    if not params.get("bot_should_run"):
+        return False
+    if params.get("kill_switch"):
+        log.info("Nasłuch był włączony, ale stoi pauza awaryjna — nie wznawiam")
+        return False
+    log.info("Nasłuch był włączony przed restartem — wznawiam")
+    return start(zapamietaj=False)

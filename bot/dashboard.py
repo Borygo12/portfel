@@ -482,6 +482,22 @@ def _zegar_powiadomien():
     except Exception:  # noqa: BLE001 — brak zegara nie może zatrzymać serwera
         log.exception("Nie udało się uruchomić zegara powiadomień")
 
+
+@app.on_event("startup")
+def _wznow_nasluch():
+    """Przywraca nasłuch, jeśli przed restartem był włączony.
+
+    Każde wdrożenie stawia kontener od nowa, a bot startował wyłącznie na
+    kliknięcie — więc po każdej aktualizacji nasłuch cicho przestawał chodzić
+    i z zewnątrz wyglądało to, jakby „sam się wyłączył". Teraz gaśnie tylko
+    wtedy, gdy ktoś naprawdę kliknie STOP albo zostawi pauzę awaryjną.
+    """
+    try:
+        if runner.wznow_po_restarcie():
+            log.info("Nasłuch wznowiony po restarcie serwera")
+    except Exception:  # noqa: BLE001 — nieudane wznowienie nie może zablokować startu
+        log.exception("Nie udało się wznowić nasłuchu po restarcie")
+
 # Typy MIME obrazków wpisane na sztywno, bo na Windowsie `mimetypes` czyta je
 # z rejestru — a tam potrafi ich po prostu nie być. Starlette bez trafienia
 # podaje plik jako `text/plain` i przeglądarka pokazuje krzaki zamiast obrazka.
@@ -872,6 +888,10 @@ def get_state():
         "params": load_params(),
         "bot_alive": runner.is_running(),  # źródło prawdy: pętla w tym procesie (START/STOP)
         "bot_status": runner.status(),
+        # Zdrowie każdego źródła osobno. Bez tego „pusto" w feedzie znaczyło
+        # jednocześnie „cisza w źródłach" i „źródło nie odpowiada" — a to są dwie
+        # zupełnie różne wiadomości dla patrzącego.
+        "sources_health": runner.zrodla_stan(),
         "signals": state.recent_signals(60),
         "outcomes": outcomes.stats(),
     }
@@ -937,10 +957,12 @@ def _statystyka_analiz() -> tuple[int, dict | None]:
     ile = 0
     ostatnia = None
     for wpis in state.recent_signals(1000):        # od najnowszego
-        try:
-            kiedy = time.mktime(time.strptime(str(wpis.get("ts", "")), "%Y-%m-%d %H:%M:%S"))
-        except (ValueError, TypeError):
-            continue
+        kiedy = wpis.get("ts_epoch")
+        if not kiedy:
+            try:
+                kiedy = time.mktime(time.strptime(str(wpis.get("ts", "")), "%Y-%m-%d %H:%M:%S"))
+            except (ValueError, TypeError):
+                continue
         if ostatnia is None:
             ostatnia = {"ago": max(0.0, teraz - kiedy), "source": wpis.get("source") or ""}
         if kiedy >= prog:
@@ -1040,7 +1062,9 @@ def _analizy_do_rachunku(limit: int = 4000) -> list[dict]:
             continue
         sig = wpis.get("signal") or {}
         model = str(sig.get("_model") or "")
-        if str(sig.get("reason", "")).startswith("[pre-filtr"):
+        # Flaga z analizatora; przedrostek w treści to zgodność ze wpisami
+        # sprzed jej wprowadzenia — te mają powód pisany starym stylem.
+        if sig.get("prefilter") or str(sig.get("reason", "")).startswith("[pre-filtr"):
             rodzaj = "prefiltr"                    # odsiane bez pytania AI — zero kosztu
         elif ":free" in model:
             rodzaj = "darmowy"

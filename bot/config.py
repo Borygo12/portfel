@@ -21,6 +21,10 @@ DEFAULTS = {
     # otwiera najpierw ekran wyboru: Portfel / Bot)
     "autostart_monitoring": False,
 
+    # Czy nasłuch MA chodzić. Ustawiane przyciskiem START/STOP i odczytywane przy
+    # starcie serwera — dzięki temu wdrożenie nie gasi bota po cichu.
+    "bot_should_run": False,
+
     # --- filtr sygnałów ---
     "min_signal_strength": 70,  # 0-100; poniżej progu post jest ignorowany
 
