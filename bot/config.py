@@ -24,6 +24,12 @@ DEFAULTS = {
     # --- filtr sygnałów ---
     "min_signal_strength": 70,  # 0-100; poniżej progu post jest ignorowany
 
+    # --- powiadomienia ---
+    # Próg dla tych, którzy wybrali „tak, ale tylko o dużej sile". Musi być
+    # WYRAŹNIE wyżej niż `min_signal_strength`, inaczej trzeci przycisk na
+    # ekranie powiadomień nie różniłby się niczym od drugiego.
+    "notify_strong_strength": 85,
+
     # --- weryfikacja etapu 2 (mocniejszy model sprawdza analizę) ---
     "verify_enabled": True,
 

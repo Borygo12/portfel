@@ -416,6 +416,10 @@ app.include_router(dividends_api.router)
 import wealth_api                                # noqa: E402
 app.include_router(wealth_api.router)
 
+# Powiadomienia: news o Twojej spółce, wyniki dnia, przegląd tygodnia.
+import notify_api                                # noqa: E402
+app.include_router(notify_api.router)
+
 
 @app.on_event("startup")
 def _rozgrzej_seo():
@@ -460,6 +464,23 @@ def _rozgrzej_seo():
                             + seo_reactions.rozgrzej_zadania())
     except Exception:  # noqa: BLE001 — rozgrzewka nie może zatrzymać startu
         log.exception("Nie udało się uruchomić rozgrzewania warstwy SEO")
+
+
+@app.on_event("startup")
+def _zegar_powiadomien():
+    """Uruchamia wysyłkę powiadomień o wynikach (rano i w poniedziałek).
+
+    Osobno od nasłuchu newsów, i to jest celowe: nasłuch kosztuje (każda analiza
+    to zapytanie do modelu), więc właściciel włącza go świadomie. Przypomnienie
+    o dacie publikacji wyników nie kosztuje nic poza zapytaniem do kalendarza,
+    a jest tym, na co ludzie czekają — nie ma powodu, żeby zależało od tego,
+    czy bot akurat chodzi.
+    """
+    try:
+        from notify import jobs as notify_jobs
+        notify_jobs.start()
+    except Exception:  # noqa: BLE001 — brak zegara nie może zatrzymać serwera
+        log.exception("Nie udało się uruchomić zegara powiadomień")
 
 # Typy MIME obrazków wpisane na sztywno, bo na Windowsie `mimetypes` czyta je
 # z rejestru — a tam potrafi ich po prostu nie być. Starlette bez trafienia
@@ -1836,7 +1857,7 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 8
+API_VERSION = 9
 
 
 @app.get("/api/version")
@@ -1844,7 +1865,7 @@ def api_version():
     return {
         "api": API_VERSION,
         "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact",
-                     "apple_iap"],
+                     "apple_iap", "notifications"],
         "started_at": _STARTED_AT,
     }
 

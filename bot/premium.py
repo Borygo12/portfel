@@ -173,6 +173,29 @@ FEATURES: list[dict] = [
         "free_hint": "Bez premium widzisz ostatnie analizy z opóźnieniem i bez uzasadnienia.",
     },
     {
+        "id": "bot.alerts",
+        "group": "bot",
+        "screen": "bot",
+        "status": "live",
+        "icon": "antena",
+        "title": "Powiadomienia o Twoich spółkach",
+        "tagline": "Telefon odezwie się wtedy, gdy dzieje się coś u Ciebie",
+        "pitch": (
+            "Bot czyta wszystkie źródła bez przerwy, ale odzywa się wyłącznie wtedy, gdy "
+            "wiadomość dotyczy spółki, którą masz w portfelu albo obserwujesz. Sam decydujesz, "
+            "jak głośno: wszystkie analizy, tylko te o dużej sile wydźwięku, albo wcale. "
+            "Do tego przypomnienie w dniu publikacji wyników Twoich spółek i poniedziałkowy "
+            "przegląd nadchodzącego tygodnia."
+        ),
+        "bullets": [
+            "Trzy poziomy: nic, wszystko, albo tylko mocne sygnały",
+            "Powiadomienie w dniu wyników Twojej spółki — z porą publikacji",
+            "Poniedziałkowy przegląd: co raportuje w tym tygodniu",
+            "Na telefon i e-mailem; wszystko czeka też w skrzynce w aplikacji",
+        ],
+        "free_hint": "Bez premium widzisz ustawienia, ale powiadomienia nie są wysyłane.",
+    },
+    {
         "id": "bot.brain",
         "group": "bot",
         "screen": "bot",

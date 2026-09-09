@@ -129,6 +129,20 @@ def handle_post(post: dict, params: dict):
 
     state.log_signal(entry)
 
+    # Powiadomienia idą PO zapisie do feedu i tylko dla analiz, które nie zostały
+    # odsiane. Kolejność ma znaczenie: gdyby wysyłka szła pierwsza, awaria Expo
+    # albo bazy zabierałaby analizę z feedu — a feed jest tym, co widać w aplikacji.
+    #
+    # Osobny `try`, bo tu wchodzi sieć (Expo, SMTP) i baza. Nieudane powiadomienie
+    # nie może przerwać nasłuchu; w najgorszym razie ktoś zobaczy analizę dopiero
+    # po wejściu do aplikacji.
+    if entry.get("result", {}).get("action") == "analyzed":
+        try:
+            from notify import news as notify_news
+            notify_news.rozeslij(signal, post.get("source", "truth_social"), params)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Nie rozesłano powiadomień o tym newsie: %s", e)
+
 
 def _loop():
     global _last_edgar, _last_squawk, _last_gov, _last_truth, _last_gpw, _last_sitemap, _last_knf, _last_knf_ann, _last_outcomes
