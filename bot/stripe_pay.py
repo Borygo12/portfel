@@ -59,6 +59,25 @@ def _klucz() -> str:
     return (os.environ.get("STRIPE_SECRET_KEY") or "").strip()
 
 
+def _slad(user_id: str, event: str, meta: dict | None = None) -> None:
+    """Ślad w lejku sprzedażowym (`premium_events`) — dla Kokpitu.
+
+    Aplikacja zapisuje sama, co widział i klikał użytkownik, ale wszystko po
+    naciśnięciu „Kupuję" dzieje się już poza nią: kasa, płatność, odnowienie,
+    zwrot. Bez tych wpisów lejek urywa się na `checkout_start`, a konwersja
+    wychodzi zero, choć pieniądze wpłynęły.
+
+    `platform="stripe"` odróżnia wpisy serwerowe od tych z telefonu i przeglądarki.
+    Cicho, jak cała analityka: sprzedaż nie może paść przez statystyki.
+    """
+    try:
+        import supabase_sync as sync
+        sync.log_event(user_id or None, event, feature="premium",
+                       platform="stripe", meta=meta or None)
+    except Exception as e:
+        print(f"[stripe] nie zapisałem śladu {event}: {e}")
+
+
 def configured() -> bool:
     """Czy da się w ogóle utworzyć kasę. Bez klucza nie udajemy płatności."""
     return bool(_klucz() and premium.stripe_price_id("monthly"))
@@ -170,6 +189,15 @@ def checkout_url(user_id: str, email: str, plan_id: str, metoda: str = "card") -
     sesja = _api("checkout/sessions", dane)
     if not sesja or not sesja.get("url"):
         return "", "Nie udało się otworzyć płatności. Spróbuj za chwilę."
+
+    # Osobne zdarzenie od `checkout_start` z aplikacji, a nie jego duplikat:
+    # tamto znaczy „nacisnął Kupuję", to znaczy „kasa naprawdę się otworzyła".
+    # Różnica między nimi to awarie po naszej stronie, a różnica między tym
+    # a `purchase` — porzucone koszyki.
+    _slad(user_id, "checkout_open", {
+        "plan": plan_id, "metoda": metoda, "sesja": sesja.get("id"),
+        "kwota": round(float(plan["price"]) * 100), "waluta": str(plan["currency"]).lower(),
+    })
     return sesja["url"], ""
 
 
@@ -246,6 +274,41 @@ def _plan_po_cenie(price_id: str) -> str:
     return ""
 
 
+def _plan_i_konto(sub: dict | None) -> tuple[str, str]:
+    """`(plan, user_id)` dla NASZEJ subskrypcji; `("", "")` gdy cudza albo brak.
+
+    Jedno miejsce, w którym odpowiadamy na pytanie „czy to zdarzenie w ogóle nas
+    dotyczy" — używa go i nadawanie premium, i analityka, żeby nie rozjechały się
+    w ocenie tego samego zdarzenia.
+    """
+    if not sub:
+        return "", ""
+    pozycje = (sub.get("items") or {}).get("data") or []
+    price_id = ((pozycje[0].get("price") or {}).get("id") or "") if pozycje else ""
+    plan = _plan_po_cenie(price_id)
+    if not plan:
+        return "", ""
+    user_id = (str((sub.get("metadata") or {}).get("user_id") or "")
+               or sa.user_for_provider_ref("stripe", str(sub.get("id") or "")))
+    return plan, user_id
+
+
+def _subskrypcja_z_faktury(faktura: dict) -> dict | None:
+    """Subskrypcja, której dotyczy faktura — dopytana u Stripe.
+
+    Pole wędrowało między wersjami API (`subscription` → `parent.
+    subscription_details.subscription`), więc czytamy oba miejsca. Faktura bez
+    subskrypcji (płatność jednorazowa) nie ma czego zwrócić.
+    """
+    sub_id = faktura.get("subscription")
+    if not sub_id:
+        rodzic = (faktura.get("parent") or {}).get("subscription_details") or {}
+        sub_id = rodzic.get("subscription")
+    if not sub_id:
+        return None
+    return _api(f"subscriptions/{sub_id}", metoda="GET")
+
+
 def _zastosuj_subskrypcje(sub: dict) -> bool:
     """Subskrypcja ze Stripe → wiersz nadania premium.
 
@@ -257,21 +320,14 @@ def _zastosuj_subskrypcje(sub: dict) -> bool:
     if not sub_id:
         return False
 
-    pozycje = (sub.get("items") or {}).get("data") or []
-    price_id = ((pozycje[0].get("price") or {}).get("id") or "") if pozycje else ""
-
     # O TYM, CO KUPIONO, DECYDUJE WYŁĄCZNIE CENA. Metadane to nasza własna
     # notatka doklejona przy tworzeniu kasy — nie dowód zakupu. Wcześniej stał tu
     # odwrót do `metadata["plan"]`, gdy cena nie pasowała, i to była dziura:
     # subskrypcja z CUDZĄ ceną (na koncie Stripe stoi też druga marka) nadawała
     # premium, jeśli tylko miała w metadanych napis „yearly". Test to wyłapał.
-    plan = _plan_po_cenie(price_id)
+    plan, user_id = _plan_i_konto(sub)
     if not plan:
         return False                                # nie nasz produkt — nie nasza sprawa
-
-    user_id = str((sub.get("metadata") or {}).get("user_id") or "")
-    if not user_id:
-        user_id = sa.user_for_provider_ref("stripe", sub_id)
     if not user_id:
         print(f"[stripe] subskrypcja {sub_id} bez konta — pomijam")
         return False
@@ -346,7 +402,17 @@ def handle_event(event: dict) -> bool:
 
     if typ == "checkout.session.completed":
         if str(obiekt.get("mode") or "") == "payment":
-            return _zastosuj_jednorazowa(obiekt)
+            zapisane = _zastosuj_jednorazowa(obiekt)
+            if zapisane:
+                # Zakup BLIK-iem nie tworzy faktury, więc `invoice.paid` po nim
+                # nie przyjdzie — ślad zakupu musi powstać tutaj.
+                meta = obiekt.get("metadata") or {}
+                _slad(str(meta.get("user_id") or ""), "purchase", {
+                    "plan": meta.get("plan"), "metoda": "blik",
+                    "kwota": obiekt.get("amount_total"), "waluta": obiekt.get("currency"),
+                    "sesja": obiekt.get("id"),
+                })
+            return zapisane
         sub_id = obiekt.get("subscription")
         if not sub_id:
             return False
@@ -358,6 +424,71 @@ def handle_event(event: dict) -> bool:
 
     if typ in ("customer.subscription.created", "customer.subscription.updated",
                "customer.subscription.deleted"):
-        return _zastosuj_subskrypcje(obiekt)
+        zapisane = _zastosuj_subskrypcje(obiekt)
+        if zapisane:
+            plan, user_id = _plan_i_konto(obiekt)
+            if typ == "customer.subscription.deleted":
+                _slad(user_id, "subscription_ended", {"plan": plan, "sub": obiekt.get("id")})
+            elif obiekt.get("cancel_at_period_end"):
+                # Rezygnacja ZAPOWIEDZIANA: dostęp trwa do końca opłaconego okresu.
+                # Najcenniejszy sygnał odpływu, bo jest jeszcze czas zareagować.
+                _slad(user_id, "cancel_scheduled", {
+                    "plan": plan, "sub": obiekt.get("id"),
+                    "do": _iso(obiekt["current_period_end"]) if obiekt.get("current_period_end") else None,
+                })
+        return zapisane
+
+    # ---------------------------------------------------------------- lejek
+    #
+    # Poniższe zdarzenia NIE nadają premium — od tego są te wyżej. Zapisują
+    # tylko ślad w `premium_events`, z którego Kokpit składa obraz sprzedaży.
+    # Każde najpierw sprawdza, czy dotyczy Portevo: na wspólnym koncie Stripe
+    # przychodzą tu również cudze faktury i sesje.
+
+    if typ == "checkout.session.expired":
+        # Porzucony koszyk: doszedł do kasy i nie zapłacił. Różnica między
+        # `checkout_open` a `purchase` — czyli to, gdzie realnie tracimy ludzi.
+        meta = obiekt.get("metadata") or {}
+        plan = str(meta.get("plan") or "")
+        if plan in premium.PLAN_BY_ID:
+            _slad(str(meta.get("user_id") or ""), "checkout_abandoned",
+                  {"plan": plan, "sesja": obiekt.get("id")})
+            return True
+        return False
+
+    if typ in ("invoice.paid", "invoice.payment_failed"):
+        plan, user_id = _plan_i_konto(_subskrypcja_z_faktury(obiekt))
+        if not plan:
+            return False
+        if typ == "invoice.payment_failed":
+            # Premium ZOSTAJE — Stripe kilka dni ponawia obciążenie. To sygnał
+            # dla Ciebie, nie kara dla klienta.
+            _slad(user_id, "payment_failed", {
+                "plan": plan, "kwota": obiekt.get("amount_due"),
+                "waluta": obiekt.get("currency"), "faktura": obiekt.get("id"),
+            })
+            return True
+        # Pierwsza płatność czy kolejna — Stripe mówi to wprost w `billing_reason`.
+        # Bez tego rozróżnienia nie da się oddzielić wzrostu od utrzymania.
+        powod = str(obiekt.get("billing_reason") or "")
+        _slad(user_id, "renewal" if powod == "subscription_cycle" else "purchase", {
+            "plan": plan, "kwota": obiekt.get("amount_paid"),
+            "waluta": obiekt.get("currency"), "powod": powod, "metoda": "card",
+        })
+        return True
+
+    if typ == "charge.refunded":
+        faktura_id = obiekt.get("invoice")
+        if not faktura_id:
+            return False
+        faktura = _api(f"invoices/{faktura_id}", metoda="GET")
+        plan, user_id = _plan_i_konto(_subskrypcja_z_faktury(faktura or {}))
+        if not plan:
+            return False
+        _slad(user_id, "refund", {
+            "plan": plan, "kwota": obiekt.get("amount_refunded"),
+            "waluta": obiekt.get("currency"), "oplata": obiekt.get("id"),
+        })
+        return True
 
     return False
