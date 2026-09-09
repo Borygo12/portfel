@@ -393,14 +393,23 @@ def _zastosuj_jednorazowa(sesja: dict) -> bool:
 def handle_event(event: dict) -> bool:
     """Powiadomienie ze Stripe → zmiana w nadaniach. `True` = coś zapisaliśmy.
 
-    Nasłuchujemy trzech rzeczy, bo tyle wystarczy: dopięcia kasy (zakup), zmiany
-    stanu subskrypcji (odnowienie, rezygnacja, nieudana płatność) i jej końca.
-    Reszty zdarzeń Stripe nie musimy nawet czytać.
+    Premium nadają tylko dwie pierwsze gałęzie: dopięcie kasy (zakup) i zmiana
+    stanu subskrypcji (odnowienie, rezygnacja, koniec). Reszta zapisuje wyłącznie
+    ślad w lejku sprzedaży. To samo powtarzalnie: kluczem wiersza nadania jest
+    identyfikator sesji albo subskrypcji, więc dwa zdarzenia o tym samym zakupie
+    aktualizują jeden wiersz, zamiast nadawać premium dwa razy.
     """
     typ = str(event.get("type") or "")
     obiekt = ((event.get("data") or {}).get("object")) or {}
 
-    if typ == "checkout.session.completed":
+    # `async_payment_succeeded` obsługujemy RAZEM z `completed`, bo BLIK płaci
+    # asynchronicznie: sesja domyka się w chwili, gdy klient zatwierdza kod w
+    # banku, a pieniądze potwierdzają się chwilę później. Gdy zatwierdzi szybko,
+    # `completed` przychodzi już z `payment_status="paid"` i wszystko dzieje się
+    # tutaj. Gdy zwleka — a ma na to dwie minuty — `completed` przychodzi jako
+    # `unpaid` i JEDYNYM zdarzeniem niosącym zapłatę jest to drugie. Bez niego
+    # taki klient zapłaciłby i nie dostał nic.
+    if typ in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if str(obiekt.get("mode") or "") == "payment":
             zapisane = _zastosuj_jednorazowa(obiekt)
             if zapisane:
