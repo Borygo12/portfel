@@ -137,9 +137,13 @@ def dopisz(user_id: str, kind: str, title: str, body: str,
     Zero to normalna odpowiedź, a nie błąd: ten sam news wpada czasem dwoma
     źródłami naraz. `on conflict do nothing` sprawia, że telefon dzwoni raz.
     """
+    # `%s::jsonb` zamiast gołego `%s`: sterownik wysyła słownik jako TEKST, a bez
+    # jawnego rzutowania Postgres nie wie, że ma z niego zrobić jsonb, i odmawia
+    # wstawienia. Rzutowanie w zapytaniu jest tu pewniejsze niż poleganie na tym,
+    # którą wersję adaptera akurat zainstalowano.
     rows = db.shared_query(
         "insert into notifications (user_id, kind, title, body, symbol, meta, dedup_key) "
-        "values (%s, %s, %s, %s, %s, %s, %s) "
+        "values (%s, %s, %s, %s, %s, %s::jsonb, %s) "
         "on conflict (user_id, dedup_key) do nothing returning id",
         (user_id, kind, title[:200], body[:1000], (symbol or "")[:40],
          json.dumps(meta or {}, ensure_ascii=False), dedup_key[:200]),
