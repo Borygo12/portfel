@@ -52,23 +52,63 @@ def _strip_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+#: Załącznik z komunikatem prasowym. To TAM są liczby.
+_EXHIBIT_RE = re.compile(r"(ex.?_?99|exhibit.?99)", re.I)
+
+
 def _fetch_filing_text(index_url: str) -> str:
-    """Z indeksu zgłoszenia wyciąga treść głównego dokumentu (body 8-K/10-Q)."""
+    """Z indeksu zgłoszenia wyciąga treść — z ZAŁĄCZNIKIEM, nie samą okładką.
+
+    PUŁAPKA, która psuła analizy: 8-K składa się z co najmniej dwóch plików.
+    Pierwszy (`f8k_….htm`) to strona tytułowa — nagłówek SEC, adres w Waszyngtonie,
+    numery CIK i nic poza tym. Właściwa wiadomość siedzi w załączniku `EX-99.1`,
+    czyli w komunikacie prasowym.
+
+    Dawna wersja brała PIERWSZY dokument z listy i oddawała modelowi 3,8 tys. znaków
+    formularza bez jednej liczby. Model nie miał czego oceniać, więc zgadywał —
+    raport CRMT z 9 września dostał „wydźwięk pozytywny, siła 70" wyłącznie na
+    podstawie tego, że spółka OGŁOSIŁA wyniki. Tego samego dnia kurs spadł o 40%,
+    bo w załączniku (30 tys. znaków, których bot nie przeczytał) stało, co to były
+    za wyniki.
+
+    Teraz bierzemy okładkę (są w niej numery punktów, np. „Item 2.02 Results of
+    Operations") ORAZ załącznik, a większość miejsca zostawiamy dla załącznika.
+    """
     try:
         r = requests.get(index_url, headers=UA, timeout=12)
         r.raise_for_status()
-        # w indeksie znajdź pierwszy dokument .htm, który jest właściwym raportem
-        docs = re.findall(r'href="([^"]+\.htm)"', r.text, re.I)
         base = index_url.rsplit("/", 1)[0]
-        for d in docs:
-            name = d.lower()
-            if "index" in name or name.endswith("-index.htm"):
+
+        # Nazwy plików bez powtórzeń, z zachowaniem kolejności z indeksu.
+        nazwy: list[str] = []
+        for d in re.findall(r'href="([^"]+\.htm)"', r.text, re.I):
+            n = d.lstrip("/").split("/")[-1]
+            if "index" in n.lower() or n in nazwy:
                 continue
-            doc_url = d if d.startswith("http") else f"{base}/{d.lstrip('/').split('/')[-1]}"
+            nazwy.append(n)
+
+        okladka, zalacznik = "", ""
+        for n in nazwy:
+            if okladka and zalacznik:
+                break
+            czy_zal = bool(_EXHIBIT_RE.search(n))
+            if (czy_zal and zalacznik) or (not czy_zal and okladka):
+                continue
             time.sleep(0.15)  # etykieta SEC: <10 req/s
-            rd = requests.get(doc_url, headers=UA, timeout=12)
-            if rd.ok and len(rd.text) > 200:
-                return _strip_html(rd.text)[:6000]
+            rd = requests.get(f"{base}/{n}", headers=UA, timeout=12)
+            if not (rd.ok and len(rd.text) > 200):
+                continue
+            tekst = _strip_html(rd.text)
+            if czy_zal:
+                zalacznik = tekst
+            else:
+                okladka = tekst
+
+        if zalacznik:
+            # Okładka skrócona do punktów formularza; reszta miejsca dla treści.
+            polaczone = (okladka[:800] + "\n\n" + zalacznik) if okladka else zalacznik
+            return polaczone[:9000]
+        return okladka[:6000]
     except Exception as e:
         log.warning("Nie udało się pobrać treści zgłoszenia %s: %s", index_url, e)
     return ""

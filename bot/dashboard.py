@@ -875,6 +875,40 @@ def bot_stop(_v=Depends(require_owner)):
     return {"stopped": runner.stop()}
 
 
+@app.get("/api/bot/quotes")
+def bot_quotes(tickers: str = ""):
+    """Notowania spółek z listy analiz: ile dziś zrobił kurs i czy trwa sesja.
+
+    Osobny adres, a nie pole w `/api/state`, i to jest celowe: feed analiz jest
+    odpytywany co 20 sekund, a notowania wymagają zapytania do Yahoo na każdą
+    spółkę. Wpięte w `/api/state` potrafiłyby dołożyć kilka sekund do KAŻDEGO
+    odświeżenia listy — łącznie z tymi, przy których nikt na notowania nie patrzy.
+
+    Tickery przychodzą w postaci z analizy („CRMT", „CDR"), a Yahoo chce swoich
+    („CRMT", „CDR.WA"), więc tłumaczymy je tutaj. Odpowiedź jest kluczowana
+    tickerem z analizy, żeby aplikacja nie musiała znać tego tłumaczenia.
+    """
+    # Import w środku, bo `pf_prices` wpina się do modułu kilkaset linii NIŻEJ
+    # niż ten endpoint — poleganie na kolejności wykonania pliku byłoby kruche.
+    import signal_quotes
+    from portfolio import prices as pf_prices
+
+    zadane = [t.strip().upper() for t in (tickers or "").split(",") if t.strip()][:40]
+    if not zadane:
+        return {"quotes": {}}
+
+    mapa = {}
+    for t in zadane:
+        try:
+            mapa[t] = (pf_prices.resolved_symbol(t) or t).upper()
+        except Exception:  # noqa: BLE001 — brak mapowania to nie powód do błędu
+            mapa[t] = t
+
+    notowania = signal_quotes.dla_symboli(list(mapa.values()))
+    return {"quotes": {t: notowania[sym] for t, sym in mapa.items() if sym in notowania},
+            "server_time": time.time()}
+
+
 @app.get("/api/outcomes")
 def outcomes_list():
     """Jak zachował się kurs po wcześniejszych analizach — fakty, nie zalecenia."""
