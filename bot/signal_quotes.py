@@ -90,6 +90,65 @@ def _pobierz(ysym: str) -> dict | None:
         return None
 
 
+def _warianty_nazwy(nazwa: str) -> list[str]:
+    """„SEVENET SA" -> ["SEVENET", "SEVENET-SA"] — tak Biznesradar nazywa strony."""
+    czysta = " ".join((nazwa or "").upper().replace("S.A.", "SA").split())
+    if not czysta:
+        return []
+    bez_sa = czysta[:-3].strip() if czysta.endswith(" SA") else czysta
+    warianty = [bez_sa.split(" ")[0], bez_sa.replace(" ", "-"), czysta.replace(" ", "-")]
+    return [w for w in dict.fromkeys(warianty) if w]
+
+
+def dla_gpw(ticker: str, nazwa: str = "") -> dict | None:
+    """Notowanie spółki z GPW / NewConnect — Yahoo, a gdy go nie ma, Biznesradar.
+
+    Osobna ścieżka, bo dwie rzeczy psuły kurs przy polskich komunikatach:
+
+    * **ticker bez giełdy.** Analiza ESPI oddaje „SVT", a to na Yahoo jest spółka
+      z USA. Wiemy, że news przyszedł z GPW, więc pytamy wprost o `SVT.WA`;
+    * **mikrospółek nie ma na Yahoo.** Biznesradar je zna, ale trzyma strony pod
+      NAZWĄ spółki (`/notowania/SEVENET` działa, `/notowania/SVT` to 404). Nazwę
+      bierzemy z tytułu komunikatu ESPI.
+
+    Wynik ma ten sam kształt, co `_pobierz`, więc aplikacja nie odróżnia źródeł.
+    """
+    t = (ticker or "").strip().upper()
+    if not t:
+        return None
+    klucz = f"GPW:{t}"
+    teraz = time.time()
+    with _lock:
+        wpis = _cache.get(klucz)
+        if wpis and teraz - wpis["fetched"] < TTL:
+            return wpis
+
+    wynik = _pobierz(t if t.endswith(".WA") else f"{t}.WA")
+
+    if not wynik:
+        from portfolio import prices as pf_prices
+        import strategy
+        for proba in [t.replace(".WA", "")] + _warianty_nazwy(nazwa):
+            q = pf_prices.fetch_biznesradar_quote(proba)
+            if not q or q.get("change_pct") is None:
+                continue
+            wynik = {
+                "symbol": f"{t}.WA",
+                "price": round(float(q["price"]), 4),
+                "change_pct": round(float(q["change_pct"]), 2),
+                "currency": "PLN",
+                "market_open": strategy.market_open_now(market="pl"),
+                "exchange": "GPW",
+                "fetched": teraz,
+            }
+            break
+
+    if wynik:
+        with _lock:
+            _cache[klucz] = wynik
+    return wynik
+
+
 def dla_symboli(symbole: list[str]) -> dict[str, dict]:
     """{symbol: notowanie} — z cache, brakujące dociągane równolegle."""
     czyste = [s.strip().upper() for s in dict.fromkeys(symbole) if s and s.strip()]

@@ -876,7 +876,7 @@ def bot_stop(_v=Depends(require_owner)):
 
 
 @app.get("/api/bot/quotes")
-def bot_quotes(tickers: str = ""):
+def bot_quotes(tickers: str = "", gpw: str = ""):
     """Notowania spółek z listy analiz: ile dziś zrobił kurs i czy trwa sesja.
 
     Osobny adres, a nie pole w `/api/state`, i to jest celowe: feed analiz jest
@@ -897,16 +897,38 @@ def bot_quotes(tickers: str = ""):
     if not zadane:
         return {"quotes": {}}
 
-    mapa = {}
-    for t in zadane:
-        try:
-            mapa[t] = (pf_prices.resolved_symbol(t) or t).upper()
-        except Exception:  # noqa: BLE001 — brak mapowania to nie powód do błędu
-            mapa[t] = t
+    # „SVT:SEVENET SA|CDR:CD PROJEKT SA" — tickery z polskich komunikatów z nazwą
+    # spółki. Bez tej podpowiedzi „SVT" trafiał do resolvera jako spółka z USA,
+    # a mikrospółki z NewConnect nie mają kursu na Yahoo w ogóle.
+    polskie: dict[str, str] = {}
+    for kawalek in (gpw or "").split("|"):
+        t, _, nazwa = kawalek.partition(":")
+        if t.strip():
+            polskie[t.strip().upper()] = nazwa.strip()
 
-    notowania = signal_quotes.dla_symboli(list(mapa.values()))
-    return {"quotes": {t: notowania[sym] for t, sym in mapa.items() if sym in notowania},
-            "server_time": time.time()}
+    wynik: dict[str, dict] = {}
+
+    reszta = [t for t in zadane if t not in polskie]
+    if reszta:
+        mapa = {}
+        for t in reszta:
+            try:
+                mapa[t] = (pf_prices.resolved_symbol(t) or t).upper()
+            except Exception:  # noqa: BLE001 — brak mapowania to nie powód do błędu
+                mapa[t] = t
+        notowania = signal_quotes.dla_symboli(list(mapa.values()))
+        wynik.update({t: notowania[sym] for t, sym in mapa.items() if sym in notowania})
+
+    gpw_zadane = [t for t in zadane if t in polskie]
+    if gpw_zadane:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for t, q in zip(gpw_zadane,
+                            ex.map(lambda x: signal_quotes.dla_gpw(x, polskie[x]), gpw_zadane)):
+                if q:
+                    wynik[t] = q
+
+    return {"quotes": wynik, "server_time": time.time()}
 
 
 @app.get("/api/outcomes")
