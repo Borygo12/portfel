@@ -185,7 +185,12 @@ def handle_post(post: dict, params: dict):
     # Osobny `try`, bo tu wchodzi sieć (Expo, SMTP) i baza. Nieudane powiadomienie
     # nie może przerwać nasłuchu; w najgorszym razie ktoś zobaczy analizę dopiero
     # po wejściu do aplikacji.
-    if entry.get("result", {}).get("action") == "analyzed":
+    #
+    # `after_hours` też dzwoni. Dla POMIARU kursu news spoza sesji jest bezwartościowy,
+    # ale dla właściciela spółki jest wręcz najcenniejszy: komunikat przed otwarciem
+    # to czas na decyzję, zanim rynek go wyceni. Pominięcie go (11.09.2026: 8-K OKLO
+    # o 7:37 czasu nowojorskiego) wyglądało jak „aplikacja nie powiadamia".
+    if entry.get("result", {}).get("action") in ("analyzed", "after_hours"):
         try:
             from notify import news as notify_news
             notify_news.rozeslij(signal, post.get("source", "truth_social"), params)
