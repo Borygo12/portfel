@@ -119,10 +119,15 @@ _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/
                  # Publiczne nie znaczy tu bezbronne: Stripe sprawdzamy podpisem
                  # `whsec_…`, a od Apple bierzemy wyłącznie identyfikator
                  # transakcji i sami pytamy o niego App Store Server API.
-                 "/api/stripe/webhook", "/api/apple/notifications"}
+                 "/api/stripe/webhook", "/api/apple/notifications",
+                 # Kod polecający sprawdza okno logowania — czyli ktoś, kto konta
+                 # jeszcze nie ma. Oddaje tylko nazwę twórcy, którą ten i tak mówi w filmie.
+                 "/api/referral/check"}
 # Pliki samej aplikacji (skrypty, czcionki, grafika) muszą być dostępne dla każdego —
 # inaczej bramka odsyła 401 na bundle i użytkownik widzi białą stronę zamiast apki.
-_PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/", "/api/legal/")
+_PUBLIC_PREFIXES = ("/static/", "/_expo/", "/assets/", "/api/legal/",
+                    # krótki link twórcy z bio na TikToku: /k/KOD → /?kod=KOD
+                    "/k/")
 
 # Dokumenty prawne MUSZĄ być publiczne. Adresy polityki prywatności i wsparcia
 # wpisuje się w formularzu App Store i Google Play, a recenzent otwiera je bez
@@ -1942,7 +1947,7 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 9
+API_VERSION = 10
 
 
 @app.get("/api/version")
@@ -1950,7 +1955,7 @@ def api_version():
     return {
         "api": API_VERSION,
         "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact",
-                     "apple_iap", "notifications"],
+                     "apple_iap", "notifications", "referral"],
         "started_at": _STARTED_AT,
     }
 

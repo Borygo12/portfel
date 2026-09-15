@@ -28,7 +28,7 @@ OWNER_NAME = os.environ.get("LEGAL_OWNER") or "[UZUPEŁNIJ: LEGAL_OWNER — imi�
 OWNER_MAIL = os.environ.get("LEGAL_EMAIL") or os.environ.get("OWNER_EMAIL") or "kontakt@portevo.pl"
 OWNER_ADDR = os.environ.get("LEGAL_ADDRESS") or ""
 SITE = (os.environ.get("PUBLIC_URL") or "https://portevo.pl").rstrip("/")
-UPDATED = "11 sierpnia 2026"
+UPDATED = "15 września 2026"
 
 _ADMIN = OWNER_NAME + (f", {OWNER_ADDR}" if OWNER_ADDR else "") + f" (kontakt: {OWNER_MAIL})"
 
@@ -64,6 +64,9 @@ PRIVACY = {
                 "w logach, potrzebne do bezpieczeństwa i diagnozowania awarii.",
                 "Zdarzenia produktowe: które funkcje premium klikasz — bez treści portfela, "
                 "żeby wiedzieć, co rozwijać.",
+                "Kod polecający, jeśli go wpiszesz: który twórca Cię polecił i kiedy. "
+                "Twórca dostaje od nas wyłącznie zbiorcze liczby (ile kont i płatności "
+                "przyszło z jego kodu) — nigdy Twojego adresu e-mail ani danych portfela.",
             ],
         ),
         _sec(
@@ -192,6 +195,17 @@ TERMS = {
                 "Niewykorzystanej części okresu nie zwracamy, gdy sam zrezygnujesz; wnioski "
                 "o zwrot rozpatruje Apple (reportaproblem.apple.com), nie my.",
             ],
+        ),
+        _sec(
+            "Kody polecające twórców",
+            "Przy zakładaniu konta, w zakładce „Więcej” albo przed zakupem premium możesz "
+            "wpisać kod twórcy, który Cię polecił. Kod przypisuje się do konta na stałe — "
+            "jedno konto może wspierać jednego twórcę, a kod dodaje się przed zakupem "
+            "subskrypcji. Kod nie zmienia ceny premium.",
+            "Twórca może mieć pulę darmowego premium na określoną liczbę dni dla pierwszych "
+            "osób z jego kodem. Pula jest ograniczona i decyduje kolejność; nagrodę odbiera "
+            "się na stronie portevo.pl, raz na konto. Po zakończeniu okresu premium wygasa "
+            "samo i niczego nie pobieramy.",
         ),
         _sec(
             "Umowa licencyjna (EULA)",
@@ -420,6 +434,9 @@ PRIVACY_EN = {
                 "for security and troubleshooting.",
                 "Product events: which Premium features you open — without portfolio contents, "
                 "so we know what to build next.",
+                "A referral code, if you enter one: which creator referred you and when. "
+                "The creator only receives aggregate numbers from us (how many accounts and "
+                "payments came from their code) — never your email address or portfolio data.",
             ],
         ),
         _sec(
@@ -550,6 +567,17 @@ TERMS_EN = {
                 "No refund is given for the unused part of a period if you cancel yourself; "
                 "refund requests are handled by Apple (reportaproblem.apple.com), not by us.",
             ],
+        ),
+        _sec(
+            "Creator referral codes",
+            "When creating an account, in the “More” tab or before buying Premium you can enter "
+            "the code of the creator who referred you. The code is linked to your account "
+            "permanently — one account supports one creator, and the code is added before "
+            "purchasing a subscription. The code does not change the Premium price.",
+            "A creator may have a pool of free Premium for a set number of days for the first "
+            "people using their code. The pool is limited and first come, first served; the "
+            "reward is claimed on portevo.pl, once per account. When the period ends Premium "
+            "simply expires and nothing is charged.",
         ),
         _sec(
             "End User License Agreement (EULA)",

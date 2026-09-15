@@ -217,6 +217,10 @@ def subscription(transaction_id: str) -> dict | None:
                 # użytkownik wyłączył odnawianie — dostęp trwa do końca okresu
                 "auto_renew": bool(renewal.get("autoRenewStatus")),
                 "environment": info.get("environment") or env,
+                # cena tej konkretnej płatności (tysięczne części waluty: 5990 = 5,99)
+                # — potrzebna do prowizji twórców z kodów polecających
+                "price_milli": info.get("price") or 0,
+                "currency": info.get("currency") or "",
             }
     return None
 

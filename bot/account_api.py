@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import apple_iap
+import polecenia
 import premium
 import stripe_pay
 import supabase_auth as sa
@@ -253,6 +254,8 @@ def _apple_apply(user_id: str, transaction_id: str) -> dict:
         cancelled_at=(None if info["auto_renew"] else sa._now_iso()),
         note=f"App Store · {info['environment']}",
     )
+    # bez tego zakupy z iPhone'a nie liczyłyby się do prowizji twórców
+    polecenia.zapisz_platnosc_apple(user_id, info)
     return {"ok": True, "premium": info["active"], "plan": plan,
             "expires_at": info["expires_at"], "status": info["status_label"]}
 
@@ -348,6 +351,64 @@ async def contact(request: Request, v: sa.Viewer = Depends(require_login)):
     sync.log_event(v.user_id or None, "contact_message", topic or "", "mobile",
                    {"delivered": delivered, "len": len(message)})
     return {"ok": True, "delivered": delivered}
+
+
+# ----------------------------------------------------------- kody polecające
+#
+# Logika i uzasadnienia są w `polecenia.py`. Tu tylko wejście: kto pyta i skąd.
+
+
+@router.get("/k/{kod}", include_in_schema=False)
+def referral_link(kod: str):
+    """Krótki link do bio na TikToku: portevo.pl/k/KASIA.
+
+    Odsyła do aplikacji z `?kod=`, a ona zapamiętuje kod na urządzeniu i przypisuje
+    go przy pierwszym zalogowaniu — także przez Google, gdzie nie ma pola na kod.
+    """
+    from fastapi.responses import RedirectResponse
+    czysty = polecenia.normalize(kod)
+    return RedirectResponse(f"/?kod={czysty}" if czysty else "/", status_code=302)
+
+
+@router.get("/api/referral/check")
+def referral_check(code: str = ""):
+    """Publiczne sprawdzenie kodu — okno logowania pyta, zanim powstanie konto."""
+    return polecenia.sprawdz(code)
+
+
+@router.get("/api/referral")
+def referral_mine(v: sa.Viewer = Depends(require_login)):
+    return polecenia.moj(v.user_id)
+
+
+@router.post("/api/referral/apply")
+async def referral_apply(request: Request, v: sa.Viewer = Depends(require_login)):
+    """Przypisanie kodu do konta. Zwraca `ok:false` z gotowym zdaniem zamiast błędu HTTP."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not v.user_id:
+        return {"ok": False, "error": "login",
+                "message": "Zaloguj się kontem Portevo, żeby przypisać kod."}
+    return polecenia.przypisz(v.user_id, str(body.get("code") or ""),
+                              str(body.get("source") or "more"),
+                              str(body.get("platform") or "web"))
+
+
+@router.get("/api/referral/admin")
+def referral_admin(month: str = "", v: sa.Viewer = Depends(require_owner)):
+    """Kody twórców ze statystykami za miesiąc i gotowymi mailami — tylko właściciel."""
+    return polecenia.raport(month)
+
+
+@router.post("/api/referral/admin/code")
+async def referral_admin_code(request: Request, v: sa.Viewer = Depends(require_owner)):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return polecenia.zapisz_kod(body if isinstance(body, dict) else {})
 
 
 @router.post("/api/premium/event")
