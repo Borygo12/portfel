@@ -62,9 +62,14 @@ Nie zgaduj brakujących pól — pomiń taką transakcję. Obligacji nie wypisuj
 def _modele() -> list[str]:
     try:
         import analyzer
-        return analyzer.free_models()[:3]
+        lista = analyzer.free_models()
     except Exception:  # noqa: BLE001
-        return []
+        lista = []
+    # Lista nasłuchu ma martwe pozycje (qwen3-next i llama-3.3 w wersji darmowej
+    # zniknęły — 404, gpt-oss przestał być darmowy), więc dokładamy żywe z
+    # katalogu OpenRoutera z 22.09.2026. Martwy model odpada w ułamku sekundy.
+    zapas = ["google/gemma-4-31b-it:free", "qwen/qwen3.8-27b:free"]
+    return (lista[:2] + [m for m in zapas if m not in lista[:2]])[:4]
 
 
 _META = re.compile(r"\b(the user|constraints?|i need|i will|let me|let's|we need|"
@@ -91,8 +96,12 @@ def _zapytaj(rodzaj: str, system: str, tekst: str, max_tokens: int, json_: bool,
     for model in _modele():
         uzycie: dict = {}
         try:
+            # Wszystkie dzisiejsze darmowe modele „myślą". Bez `reasoning.exclude`
+            # część z nich wpisuje rozważania do odpowiedzi; z nim Nemotron Ultra
+            # oddaje czysty tekst (sprawdzone 22.09.2026). Myślenie trwa — stąd 50 s.
             odp = analyzer._call(model, system, tekst, max_tokens=max_tokens,
-                                 req_timeout=25, parse_json=json_, usage_out=uzycie)
+                                 req_timeout=50, parse_json=json_, usage_out=uzycie,
+                                 extra={"reasoning": {"effort": "low", "exclude": True}})
         except Exception as e:  # noqa: BLE001 — następny model
             ostatni = e
             store.ai_log_add(rodzaj, model, ok=False, limit="429" in str(e) or "rate" in str(e).lower())
@@ -147,9 +156,9 @@ def podsumowanie(pid: str, nazwa: str, rola: str, transakcje: list[dict],
              f"(≈{int(statystyki.get('bought') or 0):,} $), sprzedaże {statystyki.get('sells', 0)} "
              f"(≈{int(statystyki.get('sold') or 0):,} $).\n"
              f"Transakcje (najnowsze najpierw):\n" + "\n".join(wiersze))
-    # 1200 tokenów, choć odpowiedź ma 420 znaków: model „myślący" zużywa część
+    # 2000 tokenów, choć odpowiedź ma 420 znaków: model „myślący" zużywa część
     # limitu na rozważania i przy 350 ucinało mu odpowiedź w połowie myśli
-    odp = _zapytaj("podsumowanie", SYSTEM_PODSUMOWANIE, tekst, 1200, json_=False,
+    odp = _zapytaj("podsumowanie", SYSTEM_PODSUMOWANIE, tekst, 2000, json_=False,
                    sprawdz=lambda o: _po_polsku(re.sub(r"\s+", " ", str(o))))
     if not isinstance(odp, str):
         return {**stare, "fresh": False} if stare else None   # stary tekst lepszy niż żaden

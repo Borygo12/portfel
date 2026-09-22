@@ -186,6 +186,51 @@ def _petla() -> None:
     log.info("Insiderzy: zegar zatrzymany")
 
 
+AI_ILU = 30                 # tyle najważniejszych person ma podsumowanie gotowe zawczasu
+AI_CO = 3 * 3600
+
+
+def podsumowania_zawczasu() -> dict:
+    """Podsumowania AI najważniejszych person piszemy w tle, zanim ktoś wejdzie
+    w profil. Darmowy model „myśli" do dwóch minut — nie może na to czekać
+    pierwszy odwiedzający. Tekst żyje dobę (`ai.WAZNE_S`), więc odświeżamy te,
+    które mają ponad 20 godzin: około 30 zapytań na dobę z limitu 1000."""
+    from . import ai, perf
+    n = pominiete = 0
+    for k in people.KATALOG[:AI_ILU]:
+        if _stop.is_set():
+            break
+        pid = k["id"]
+        stare = ai.zapisane(pid)
+        if stare and time.time() - float(stare.get("at") or 0) < 20 * 3600:
+            pominiete += 1
+            continue
+        trans = store.trades_for_person(pid, limit=60)
+        if not trans:
+            continue
+        w = store.people_rows([pid]).get(pid) or {}
+        rola = " · ".join(x for x in (w.get("role"), people.skroc_spolke(w.get("org") or "")) if x)
+        try:
+            if ai.podsumowanie(pid, k.get("name") or w.get("name") or pid, rola, trans,
+                               perf.statystyki(pid), ponownie=True):
+                n += 1
+        except Exception as e:  # noqa: BLE001
+            log.debug("Podsumowanie %s: %s", pid, e)
+    return {"napisane": n, "aktualne": pominiete}
+
+
+def _petla_ai() -> None:
+    # osobny wątek: kilkadziesiąt minut rozmyślań modeli nie może wstrzymać
+    # kanału bieżącego SEC w głównej pętli
+    _stop.wait(5 * 60)                      # po starcie najpierw dane, potem teksty
+    while not _stop.is_set():
+        try:
+            STAN["ostatnie"]["ai_zawczasu"] = {"at": time.time(), "wynik": podsumowania_zawczasu()}
+        except Exception as e:  # noqa: BLE001
+            _blad("ai_zawczasu", e)
+        _stop.wait(AI_CO)
+
+
 def start() -> bool:
     global _watek
     if not wlaczone():
@@ -196,6 +241,7 @@ def start() -> bool:
     _stop.clear()
     _watek = threading.Thread(target=_petla, name="insiders-clock", daemon=True)
     _watek.start()
+    threading.Thread(target=_petla_ai, name="insiders-ai", daemon=True).start()
     return True
 
 

@@ -137,9 +137,11 @@ def _parse_json(raw: str) -> dict:
 
 
 def _call(model: str, system: str, user: str, max_tokens: int = 900, req_timeout: int = 18,
-          parse_json: bool = True, usage_out: dict | None = None) -> dict | str:
+          parse_json: bool = True, usage_out: dict | None = None,
+          extra: dict | None = None) -> dict | str:
     """`usage_out` — słownik, do którego trafia pole `usage` z odpowiedzi OpenRoutera
-    (tokeny i koszt), dla wywołujących, którzy prowadzą własny rachunek."""
+    (tokeny i koszt), dla wywołujących, którzy prowadzą własny rachunek.
+    `extra` — dodatkowe pola zapytania (np. `reasoning`)."""
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise RuntimeError("brak klucza OPENROUTER_API_KEY w .env")
@@ -151,6 +153,7 @@ def _call(model: str, system: str, user: str, max_tokens: int = 900, req_timeout
                 "model": model, "max_tokens": max_tokens, "temperature": 0,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
+                **(extra or {}),
             },
             timeout=req_timeout,
         )
