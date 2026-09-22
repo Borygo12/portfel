@@ -98,9 +98,10 @@ def _zapytaj(rodzaj: str, system: str, tekst: str, max_tokens: int, json_: bool,
         try:
             # Wszystkie dzisiejsze darmowe modele „myślą". Bez `reasoning.exclude`
             # część z nich wpisuje rozważania do odpowiedzi; z nim Nemotron Ultra
-            # oddaje czysty tekst (sprawdzone 22.09.2026). Myślenie trwa — stąd 50 s.
+            # oddaje czysty tekst (sprawdzone 22.09.2026). Myślenie trwa: na 45
+            # transakcjach Pelosi 70 s — przy limicie 50 s nie udawało się nigdy.
             odp = analyzer._call(model, system, tekst, max_tokens=max_tokens,
-                                 req_timeout=50, parse_json=json_, usage_out=uzycie,
+                                 req_timeout=110, parse_json=json_, usage_out=uzycie,
                                  extra={"reasoning": {"effort": "low", "exclude": True}})
         except Exception as e:  # noqa: BLE001 — następny model
             ostatni = e
