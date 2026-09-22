@@ -149,6 +149,11 @@ _PUBLIC_PATHS |= seo_routes.PUBLICZNE_SCIEZKI
 # choć sama aplikacja jest dostępna dla gościa.
 _PUBLIC_PATHS |= set(seo_shell.SCIEZKI_APLIKACJI)
 _PUBLIC_PREFIXES += seo_routes.PUBLICZNE_PREFIKSY
+# Insajderzy: gość też ma zobaczyć twarze na wykresie spółki i ranking person
+# (w wersji zamazanej — redaguje sam endpoint, patrz `insiders_api`). Obserwowanie
+# leży celowo pod `/api/insider-follows`, poza tym przedrostkiem: potrzebuje
+# tożsamości w bazie, którą ta bramka ustawia tylko na ścieżkach niepublicznych.
+_PUBLIC_PREFIXES += ("/api/insiders/",)
 
 # Ścieżki działające bez tożsamości w bazie: sterowanie botem i wspólny feed
 # analiz. To są dane serwera, nie czyjeś prywatne — wymagają uprawnień właściciela
@@ -425,6 +430,11 @@ app.include_router(wealth_api.router)
 import notify_api                                # noqa: E402
 app.include_router(notify_api.router)
 
+# Insajderzy: transakcje prezesów (SEC), Kongresu i gabinetu USA, twarze na
+# wykresach spółek, profile person i powiadomienia o obserwowanych.
+import insiders_api                              # noqa: E402
+app.include_router(insiders_api.router)
+
 
 @app.on_event("startup")
 def _rozgrzej_seo():
@@ -486,6 +496,21 @@ def _zegar_powiadomien():
         notify_jobs.start()
     except Exception:  # noqa: BLE001 — brak zegara nie może zatrzymać serwera
         log.exception("Nie udało się uruchomić zegara powiadomień")
+
+
+@app.on_event("startup")
+def _zegar_insiderow():
+    """Wypełnia i odświeża bazę transakcji insiderów (patrz `insiders/jobs.py`).
+
+    Pierwsze wypełnienie po świeżym woluminie trwa około godziny, ale idzie w
+    wątku tła — serwer odpowiada od razu, a panel pokazuje to, co już jest.
+    Wyłączone na komputerze właściciela, chyba że ustawi `INSIDERS_INGEST=1`.
+    """
+    try:
+        from insiders import jobs as insiders_jobs
+        insiders_jobs.start()
+    except Exception:  # noqa: BLE001 — brak insiderów nie może zatrzymać serwera
+        log.exception("Nie udało się uruchomić zegara insiderów")
 
 
 @app.on_event("startup")
@@ -1947,7 +1972,7 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 10
+API_VERSION = 11
 
 
 @app.get("/api/version")
@@ -1955,7 +1980,7 @@ def api_version():
     return {
         "api": API_VERSION,
         "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact",
-                     "apple_iap", "notifications", "referral"],
+                     "apple_iap", "notifications", "referral", "insiders"],
         "started_at": _STARTED_AT,
     }
 

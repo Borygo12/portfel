@@ -149,6 +149,31 @@ FEATURES: list[dict] = [
         "free_hint": "Bez premium masz skaner z filtrami, kalendarz wypłat i kalkulator dochodu.",
     },
 
+    {
+        "id": "tools.insiders",
+        "group": "tools",
+        "screen": "tools",
+        "status": "live",
+        "icon": "insajder",
+        "title": "Insajderzy",
+        "tagline": "Zobacz, co kupują ludzie, którzy wiedzą więcej",
+        "pitch": (
+            "Kongresmeni, prezydent, członkowie rządu USA i prezesi spółek muszą ujawniać "
+            "swoje transakcje akcjami. Zbieramy te zgłoszenia prosto z oficjalnych rejestrów "
+            "i kładziemy je tam, gdzie mają znaczenie: na wykresie spółki, w miejscu, w którym "
+            "ktoś kupił albo sprzedał. Do tego profil każdej osoby — z wynikiem jej zakupów "
+            "za ostatni rok i tym, w co najchętniej wkłada pieniądze."
+        ),
+        "bullets": [
+            "Twarze insiderów na wykresie każdej spółki — kto, kiedy i za ile",
+            "Nancy Pelosi, Donald Trump, Kongres, gabinet i prezesi w jednym rankingu",
+            "Wynik zakupów każdej persony za ostatnie 12 miesięcy",
+            "Profil ze strukturą zakupów i podsumowaniem AI",
+            "Powiadomienie, gdy obserwowana osoba coś kupi albo sprzeda",
+        ],
+        "free_hint": "Bez premium widzisz ranking i znaczniki na wykresach — bez nazwisk i szczegółów.",
+    },
+
     # ------------------------------------------------------------ bot newsowy
     {
         "id": "bot.signals",

@@ -60,6 +60,8 @@ _pamiec: dict = {}
 SCIEZKI_APLIKACJI = (
     "/przeglad", "/alokacja", "/zamkniete", "/earnings", "/bot-newsow",
     "/narzedzia", "/artykuly", "/wiecej", "/aplikacja",
+    # panel insiderów — aplikacja otwiera go sama, gdy wejdzie się pod ten adres
+    "/insajderzy",
     # Panelu dewelopera nie ma już pod własnym adresem: rozwija się w „Więcej"
     # i widzi go wyłącznie właściciel. Dostęp i tak pilnuje `require_owner`
     # przy każdym endpointcie, nie routing.

@@ -8,6 +8,15 @@ feedparser>=6.0.10
 # import raportów maklerskich (.xlsx) — portfolio/importer.py
 openpyxl>=3.1
 
+# raporty transakcji Kongresu USA (PDF) — insiders/house.py. Czysty Python,
+# bez zależności systemowych; import stoi na górze modułu, więc brak paczki
+# wywróci zegar insiderów głośno w logu, a nie po cichu.
+pypdf>=5.0
+
+# portrety insiderów: kadrowanie i wersja rozmyta dla widoku bez premium
+# (insiders/photos.py). Wcześniej Pillow był tylko narzędziem lokalnym.
+Pillow>=10.0
+
 # --- subskrypcje z App Store (bot/apple_iap.py) ---
 # Podpisywanie ES256 tokenu do App Store Server API. Wariant [crypto] dociąga
 # `cryptography` — bez niego PyJWT zna tylko HS256 i klucz .p8 się nie podpisze.

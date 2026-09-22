@@ -39,3 +39,7 @@ data/
 
 # gotowy blok zmiennych do wklejenia w hostingu — zawiera klucze
 railway-variables.txt
+
+# baza transakcji insiderów — odtwarzalna ze źródeł (bot/insiders/jobs.py)
+bot/insiders.db
+bot/insiders.db-*

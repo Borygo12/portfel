@@ -1,0 +1,97 @@
+ZDJĘCIA INSAJDERÓW — co tu wrzucić
+
+Wrzuć do tego folderu zdjęcia osób (do których masz prawa). Nazwa pliku mówi, kto
+jest na zdjęciu: identyfikator z listy niżej (np. nancy-pelosi.jpg) ALBO po prostu
+imię i nazwisko (np. „Nancy Pelosi.png”). Format dowolny: jpg, png, webp, jfif.
+Najlepiej portret, twarz w górnej części kadru — skrypt tnie kwadrat od góry.
+
+Potem powiedz Claude'owi „wstaw zdjęcia insajderów” — uruchomi
+python bot/insiders/zdjecia.py i wypchnie je na produkcję (bez nowej wersji apki).
+Osoba bez zdjęcia ma w aplikacji kółko ze znakiem zapytania.
+
+Kongresmeni i senatorowie mają już automatycznie oficjalne portrety Kongresu
+(domena publiczna) — Twoje zdjęcie, jeśli je dodasz, ma pierwszeństwo.
+
+Kolejność = kolejność w rankingu (1–3 dostają złotą, srebrną i brązową ramkę).
+
+  1. nancy-pelosi                 Nancy Pelosi
+  2. donald-trump                 Donald Trump
+  3. elon-musk                    Elon Musk
+  4. warren-buffett               Warren Buffett
+  5. josh-gottheimer              Josh Gottheimer
+  6. mark-zuckerberg              Mark Zuckerberg
+  7. marjorie-taylor-greene       Marjorie Taylor Greene
+  8. jensen-huang                 Jensen Huang
+  9. ro-khanna                    Ro Khanna
+ 10. jeff-bezos                   Jeff Bezos
+ 11. michael-mccaul               Michael McCaul
+ 12. ryan-cohen                   Ryan Cohen
+ 13. dan-crenshaw                 Dan Crenshaw
+ 14. scott-bessent                Scott Bessent
+ 15. howard-lutnick               Howard Lutnick
+ 16. rob-bresnahan                Rob Bresnahan
+ 17. michael-saylor               Michael Saylor
+ 18. cleo-fields                  Cleo Fields
+ 19. bill-ackman                  Bill Ackman
+ 20. carl-icahn                   Carl Icahn
+ 21. jamie-dimon                  Jamie Dimon
+ 22. larry-ellison                Larry Ellison
+ 23. alex-karp                    Alex Karp
+ 24. peter-thiel                  Peter Thiel
+ 25. michael-dell                 Michael Dell
+ 26. tim-cook                     Tim Cook
+ 27. satya-nadella                Satya Nadella
+ 28. lisa-su                      Lisa Su
+ 29. sundar-pichai                Sundar Pichai
+ 30. andy-jassy                   Andy Jassy
+ 31. dara-khosrowshahi            Dara Khosrowshahi
+ 32. marc-benioff                 Marc Benioff
+ 33. nelson-peltz                 Nelson Peltz
+ 34. david-tepper                 David Tepper
+ 35. kelly-morrison               Kelly Morrison
+ 36. dave-taylor                  Dave Taylor
+ 37. suzan-delbene                Suzan DelBene
+ 38. tom-kean                     Tom Kean Jr.
+ 39. tim-moore                    Tim Moore
+ 40. gil-cisneros                 Gil Cisneros
+ 41. scott-peters                 Scott Peters
+ 42. byron-donalds                Byron Donalds
+ 43. jared-moskowitz              Jared Moskowitz
+ 44. debbie-wasserman-schultz     Debbie Wasserman Schultz
+ 45. kevin-hern                   Kevin Hern
+ 46. max-miller                   Max Miller
+ 47. april-mcclain-delaney        April McClain Delaney
+ 48. steve-cohen                  Steve Cohen
+ 49. rick-allen                   Rick Allen
+ 50. jonathan-jackson             Jonathan Jackson
+ 51. lloyd-doggett                Lloyd Doggett
+ 52. virginia-foxx                Virginia Foxx
+ 53. mike-kelly                   Mike Kelly
+ 54. julie-johnson                Julie Johnson
+ 55. tommy-tuberville             Tommy Tuberville
+ 56. dave-mccormick               Dave McCormick
+ 57. ron-wyden                    Ron Wyden
+ 58. rick-scott                   Rick Scott
+ 59. markwayne-mullin             Markwayne Mullin
+ 60. michael-burry                Michael Burry
+ 61. ray-dalio                    Ray Dalio
+ 62. stanley-druckenmiller        Stanley Druckenmiller
+ 63. cathie-wood                  Cathie Wood
+ 64. george-soros                 George Soros
+ 65. dan-loeb                     Dan Loeb
+ 66. seth-klarman                 Seth Klarman
+ 67. li-lu                        Li Lu
+ 68. bill-gates                   Bill Gates
+ 69. chase-coleman                Chase Coleman
+ 70. marcin-iwinski               Marcin Iwiński
+ 71. michal-kicinski              Michał Kiciński
+ 72. tomasz-biernacki             Tomasz Biernacki
+ 73. dariusz-milek                Dariusz Miłek
+ 74. adam-goral                   Adam Góral
+ 75. zygmunt-solorz               Zygmunt Solorz
+ 76. michal-solowow               Michał Sołowow
+ 77. leszek-czarnecki             Leszek Czarnecki
+ 78. kevin-warsh                  Kevin Warsh
+
+Pozostałe osoby (prezesi spółek, kongresmeni spoza listy, insiderzy GPW) też mogą mieć
+zdjęcie — wtedy nazwa pliku to ich identyfikator z aplikacji (np. sec-1184237.jpg, gpw-kowalski-jan.jpg).
