@@ -1185,6 +1185,48 @@ def _okno_kosztow(wpisy: list[dict], godziny: float, etykieta: str) -> dict:
     }
 
 
+#: Dzienny limit zapytań do darmowych modeli na koncie OpenRoutera (z doładowaniem
+#: ≥10 $). Wspólny dla nasłuchu newsów i insiderów — stąd licznik w rachunku.
+LIMIT_DARMOWYCH_DOBA = 1000
+
+
+def _rachunek_insiderow(wpisy_bota: list[dict]) -> dict:
+    """AI w narzędziu Insajderzy: podsumowania profili i awaryjny odczyt raportów
+    Kongresu. Same darmowe modele, więc dolary to zwykle zero — ale każde
+    zapytanie zjada wspólny dzienny limit darmowych, i to tu widać."""
+    try:
+        from insiders import store as ins_store
+        log_ai = ins_store.ai_log_od(time.time() - 7 * 86400)
+    except Exception:  # noqa: BLE001 — brak bazy insiderów nie psuje panelu
+        log_ai = []
+
+    def okno(godziny: float, etykieta: str) -> dict:
+        prog = time.time() - godziny * 3600
+        w = [x for x in log_ai if x["t"] >= prog]
+        pytania = [x for x in w if x["model"]]
+        return {
+            "label": etykieta, "hours": godziny,
+            "zapytan": len(pytania),
+            "udanych": sum(1 for x in pytania if x["ok"]),
+            "limit": sum(1 for x in pytania if x["limit_"]),
+            "bledow": sum(1 for x in pytania if not x["ok"] and not x["limit_"]),
+            "z_pamieci": sum(1 for x in w if not x["model"]),
+            "podsumowan": sum(1 for x in pytania if x["rodzaj"] == "podsumowanie"),
+            "raportow": sum(1 for x in pytania if x["rodzaj"] == "ptr"),
+            "tokeny": sum(x["tok_in"] + x["tok_out"] for x in pytania),
+            "usd": round(sum(x["usd"] for x in pytania), 4),
+        }
+
+    okna = [okno(24, "24 h"), okno(24 * 7, "7 dni")]
+    prog = time.time() - 86400
+    bot_24 = sum(1 for x in wpisy_bota if x["t"] >= prog and x["rodzaj"] == "darmowy")
+    return {
+        "okna": okna,
+        "limit_darmowych": {"na_dobe": LIMIT_DARMOWYCH_DOBA, "bot_24h": bot_24,
+                            "insiderzy_24h": okna[0]["zapytan"]},
+    }
+
+
 @app.get("/api/dev/status")
 def dev_status(_v=Depends(require_owner)):
     """Stan serwera i rachunek za AI — jedno miejsce do decyzji „włączać czy nie"."""
@@ -1231,6 +1273,7 @@ def dev_status(_v=Depends(require_owner)):
             "prognoza_30d_usd": prognoza,
             "platne_per_zrodlo": per_zrodlo,
             "stawki": {"analiza": STAWKA_ANALIZA_USD, "weryfikacja": STAWKA_WERYFIKACJA_USD},
+            "insiderzy": _rachunek_insiderow(wpisy),
         },
     }
 

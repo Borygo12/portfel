@@ -389,22 +389,35 @@ def person(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
 
 
 @router.get("/api/insiders/person/{pid}/ai")
-def person_ai(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
+def person_ai(pid: str, again: int = 0, v: sa.Viewer = Depends(require_premium(FEATURE))):
+    """Wspólne podsumowanie persony (24 h). `again=1` — przycisk „Zapytaj ponownie"."""
     from insiders import ai, perf
 
-    wiersz = store.people_rows([pid]).get(pid)
-    osoba = _osoba(pid, wiersz)
     trans = store.trades_for_person(pid, limit=60)
     if not trans:
         return {"text": None}
-    stat = perf.statystyki(pid)
-    rola = " · ".join(x for x in (osoba["role"], osoba["org"]) if x)
     try:
-        tekst = ai.podsumowanie(pid, osoba["name"], rola, trans, stat)
+        wynik = None
+        if not again:
+            # najczęstszy przypadek: tekst już jest — bez liczenia statystyk
+            stare = ai.zapisane(pid)
+            if stare and time.time() - float(stare.get("at") or 0) < ai.WAZNE_S:
+                store.ai_log_add("podsumowanie", ok=True)
+                wynik = {**stare, "fresh": False}
+        if wynik is None:
+            osoba = _osoba(pid, store.people_rows([pid]).get(pid))
+            rola = " · ".join(x for x in (osoba["role"], osoba["org"]) if x)
+            wynik = ai.podsumowanie(pid, osoba["name"], rola, trans, perf.statystyki(pid),
+                                    ponownie=bool(again))
     except Exception as e:  # noqa: BLE001 — podsumowanie to dodatek
         log.info("Podsumowanie AI %s: %s", pid, e)
-        tekst = None
-    return {"text": tekst}
+        wynik = None
+    if not wynik:
+        return {"text": None}
+    wiek = time.time() - float(wynik.get("at") or 0)
+    return {"text": wynik["text"], "at": wynik.get("at"), "fresh": bool(wynik.get("fresh")),
+            # przycisk ma sens dopiero, gdy serwer faktycznie napisze nowy tekst
+            "again_in": max(0, int(ai.PONOWNIE_CO - wiek))}
 
 
 # ------------------------------------------------------------- obserwowanie

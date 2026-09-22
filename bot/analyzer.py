@@ -136,7 +136,10 @@ def _parse_json(raw: str) -> dict:
     return {str(k).strip(): v for k, v in data.items()}
 
 
-def _call(model: str, system: str, user: str, max_tokens: int = 900, req_timeout: int = 18, parse_json: bool = True) -> dict | str:
+def _call(model: str, system: str, user: str, max_tokens: int = 900, req_timeout: int = 18,
+          parse_json: bool = True, usage_out: dict | None = None) -> dict | str:
+    """`usage_out` — słownik, do którego trafia pole `usage` z odpowiedzi OpenRoutera
+    (tokeny i koszt), dla wywołujących, którzy prowadzą własny rachunek."""
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise RuntimeError("brak klucza OPENROUTER_API_KEY w .env")
@@ -159,6 +162,8 @@ def _call(model: str, system: str, user: str, max_tokens: int = 900, req_timeout
     data = resp.json()
     if "error" in data:
         raise RuntimeError(data["error"])
+    if usage_out is not None and isinstance(data.get("usage"), dict):
+        usage_out.update(data["usage"])
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     if not content:
         raise RuntimeError(f"{model}: pusta odpowiedź AI")

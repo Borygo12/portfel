@@ -68,6 +68,18 @@ create table if not exists people(
 create table if not exists kv(key text primary key, value text not null, at real not null default 0);
 create table if not exists seen(key text primary key, at real not null default 0);
 create table if not exists stats(person text primary key, data text not null, at real not null);
+-- każde pytanie do modelu z insiderów (także nieudane) — do rachunku w panelu dev
+create table if not exists ai_log(
+  t       real not null,
+  rodzaj  text not null,            -- podsumowanie | ptr
+  model   text not null default '', -- pusty = odpowiedź z pamięci, bez pytania modelu
+  ok      integer not null default 0,
+  limit_  integer not null default 0,
+  tok_in  integer not null default 0,
+  tok_out integer not null default 0,
+  usd     real not null default 0
+);
+create index if not exists ai_log_t on ai_log(t);
 """
 
 
@@ -177,6 +189,25 @@ def kv_set(key: str, value) -> None:
                   "set value=excluded.value, at=excluded.at",
                   (key, json.dumps(value, ensure_ascii=False), time.time()))
         c.commit()
+
+
+def ai_log_add(rodzaj: str, model: str = "", ok: bool = False, limit: bool = False,
+               tok_in: int = 0, tok_out: int = 0, usd: float = 0.0) -> None:
+    try:
+        with _write:
+            c = conn()
+            c.execute("insert into ai_log values (?,?,?,?,?,?,?,?)",
+                      (time.time(), rodzaj, model, int(ok), int(limit), int(tok_in or 0),
+                       int(tok_out or 0), float(usd or 0)))
+            # rachunek potrzebuje tygodnia — starsze wpisy tylko puchną
+            c.execute("delete from ai_log where t < ?", (time.time() - 35 * 86400,))
+            c.commit()
+    except Exception:  # noqa: BLE001 — rachunek nie może zepsuć odpowiedzi
+        pass
+
+
+def ai_log_od(t: float) -> list[dict]:
+    return [dict(r) for r in conn().execute("select * from ai_log where t >= ?", (t,))]
 
 
 def seen_filter(keys: list[str]) -> set[str]:

@@ -11,17 +11,24 @@ Tylko DARMOWE modele (`analyzer.free_models`) i bez przejścia na płatne. To
 dodatek: gdy limit darmowych zapytań na dobę się skończy, profil pokazuje się
 bez podsumowania, a raport czeka do następnego przebiegu.
 
-Podsumowanie trzymamy dobę per persona — liczba zapytań rośnie z liczbą
-odwiedzanych profili, a nie z liczbą odwiedzin.
+Podsumowanie jest WSPÓLNE i żyje 24 godziny od napisania: pierwszy, kto
+otworzy profil, płaci za nie jednym zapytaniem, a każdy następny przez dobę
+dostaje gotowy tekst od razu. Nowe pisze się tylko wtedy, gdy ktoś wprost
+poprosi przyciskiem „Zapytaj ponownie" — i nie częściej niż raz na
+PONOWNIE_CO sekund na personę, żeby kilka kliknięć nie zjadło dziennego
+limitu darmowych modeli, dzielonego z nasłuchem newsów.
 """
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
 import re
+import time
 
 from . import store
+
+WAZNE_S = 24 * 3600
+PONOWNIE_CO = 10 * 60
 
 log = logging.getLogger("insiders.ai")
 
@@ -60,16 +67,44 @@ def _modele() -> list[str]:
         return []
 
 
-def _zapytaj(system: str, tekst: str, max_tokens: int, json_: bool):
+_META = re.compile(r"\b(the user|constraints?|i need|i will|let me|let's|we need|"
+                   r"the (task|request|prompt)|sentences?)\b", re.I)
+
+
+def _po_polsku(tekst) -> bool:
+    """Darmowe modele „myślące" potrafią oddać zamiast odpowiedzi własne rozważania
+    po angielsku („The user wants a 2-3 sentence summary…"), ucięte na limicie
+    tokenów. Takiego tekstu nie wolno pokazać — ani zapisać na dobę."""
+    if not isinstance(tekst, str) or len(tekst.strip()) < 40:
+        return False
+    if _META.search(tekst[:400]):
+        return False
+    return sum(tekst.count(z) for z in "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ") >= 3
+
+
+def _zapytaj(rodzaj: str, system: str, tekst: str, max_tokens: int, json_: bool,
+             sprawdz=None):
+    """Pyta kolejne darmowe modele. Każda próba trafia do `ai_log` — panel dev
+    liczy z niego rachunek i to, ile zjadamy ze wspólnego limitu darmowych."""
     import analyzer
     ostatni = None
     for model in _modele():
+        uzycie: dict = {}
         try:
-            return analyzer._call(model, system, tekst, max_tokens=max_tokens,
-                                  req_timeout=25, parse_json=json_)
+            odp = analyzer._call(model, system, tekst, max_tokens=max_tokens,
+                                 req_timeout=25, parse_json=json_, usage_out=uzycie)
         except Exception as e:  # noqa: BLE001 — następny model
             ostatni = e
+            store.ai_log_add(rodzaj, model, ok=False, limit="429" in str(e) or "rate" in str(e).lower())
             continue
+        dobra = sprawdz is None or sprawdz(odp)
+        store.ai_log_add(rodzaj, model, ok=dobra, tok_in=uzycie.get("prompt_tokens") or 0,
+                         tok_out=uzycie.get("completion_tokens") or 0,
+                         usd=uzycie.get("cost") or 0)
+        if not dobra:
+            ostatni = RuntimeError(f"{model}: odpowiedź nie przeszła sprawdzenia")
+            continue                                    # następny model
+        return odp
     if ostatni:
         log.info("Darmowe modele nie odpowiedziały: %s", ostatni)
     return None
@@ -83,12 +118,22 @@ def _kw(t: dict) -> str:
     return f"{int(v):,} $".replace(",", " ") if v else "?"
 
 
+def zapisane(pid: str) -> dict | None:
+    """{text, at} ostatniego podsumowania persony, bez względu na wiek."""
+    hit = store.kv_get(f"ai:{pid}")
+    return hit if isinstance(hit, dict) and _po_polsku(hit.get("text")) else None
+
+
 def podsumowanie(pid: str, nazwa: str, rola: str, transakcje: list[dict],
-                 statystyki: dict) -> str | None:
-    klucz = f"ai:{pid}:{dt.date.today().isoformat()}"
-    hit = store.kv_get(klucz)
-    if hit:
-        return hit
+                 statystyki: dict, ponownie: bool = False) -> dict | None:
+    """{text, at, fresh}. `ponownie` = prośba z przycisku o nowy tekst."""
+    stare = zapisane(pid)
+    teraz = time.time()
+    if stare:
+        wiek = teraz - float(stare.get("at") or 0)
+        if wiek < WAZNE_S and not (ponownie and wiek >= PONOWNIE_CO):
+            store.ai_log_add("podsumowanie", ok=True)          # z pamięci — bez modelu
+            return {**stare, "fresh": False}
     if not transakcje:
         return None
     wiersze = []
@@ -102,22 +147,30 @@ def podsumowanie(pid: str, nazwa: str, rola: str, transakcje: list[dict],
              f"(≈{int(statystyki.get('bought') or 0):,} $), sprzedaże {statystyki.get('sells', 0)} "
              f"(≈{int(statystyki.get('sold') or 0):,} $).\n"
              f"Transakcje (najnowsze najpierw):\n" + "\n".join(wiersze))
-    odp = _zapytaj(SYSTEM_PODSUMOWANIE, tekst, 350, json_=False)
+    # 1200 tokenów, choć odpowiedź ma 420 znaków: model „myślący" zużywa część
+    # limitu na rozważania i przy 350 ucinało mu odpowiedź w połowie myśli
+    odp = _zapytaj("podsumowanie", SYSTEM_PODSUMOWANIE, tekst, 1200, json_=False,
+                   sprawdz=lambda o: _po_polsku(re.sub(r"\s+", " ", str(o))))
     if not isinstance(odp, str):
-        return None
-    czysty = re.sub(r"\s+", " ", odp.replace("*", "")).strip()
-    if len(czysty) < 40:
-        return None
-    czysty = czysty[:600]
-    store.kv_set(klucz, czysty)
-    return czysty
+        return {**stare, "fresh": False} if stare else None   # stary tekst lepszy niż żaden
+    czysty = re.sub(r"\s+", " ", odp.replace("*", "")).strip()[:600]
+    # Model ucięty limitem tokenów kończy w pół zdania („Wyróżnia się") —
+    # zostawiamy tylko pełne zdania.
+    koniec = max(czysty.rfind(". "), czysty.rfind("! "), czysty.rfind("? "))
+    if not czysty.endswith((".", "!", "?")) and koniec > 0:
+        czysty = czysty[:koniec + 1]
+    if len(czysty) < 40 or not czysty.endswith((".", "!", "?")):
+        return {**stare, "fresh": False} if stare else None
+    wpis = {"text": czysty, "at": teraz}
+    store.kv_set(f"ai:{pid}", wpis)
+    return {**wpis, "fresh": True}
 
 
 def odczytaj_ptr(tekst: str) -> list[dict] | None:
     """Awaryjny odczyt raportu. Zwraca listę w formacie `house.czytaj`."""
     from .house import WLASCICIEL, _data_us
 
-    odp = _zapytaj(SYSTEM_PTR, (tekst or "").replace("\x00", "")[:14000], 1800, json_=True)
+    odp = _zapytaj("ptr", SYSTEM_PTR, (tekst or "").replace("\x00", "")[:14000], 1800, json_=True)
     if not isinstance(odp, dict):
         return None
     out = []
