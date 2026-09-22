@@ -19,6 +19,11 @@ WORKDIR /app
 
 # Zależności osobną warstwą: zmiana kodu nie unieważnia wtedy cache pip-a
 # i kolejne wdrożenia trwają sekundy zamiast minut.
+# Font dla obrazków podglądu linku (`seo/og.py`). Obraz `slim` nie ma żadnego,
+# a Pillow bez pliku TTF potrafi tylko rysować wbudowaną bitmapę wielkości 11 px.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY bot/requirements.txt bot/requirements.txt
 RUN pip install --no-cache-dir -r bot/requirements.txt
 

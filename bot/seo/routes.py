@@ -27,7 +27,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from . import (companies, company_page, dividends, etfs, features, glossary, guides,
-               insiders, reactions, season, sectors, site, tools)
+               indexnow, insiders, reactions, season, sectors, site, tools)
 
 router = APIRouter()
 
@@ -42,13 +42,13 @@ PUBLICZNE_SCIEZKI = {
     season.SCIEZKA,
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
-    "/api/seo/strony", insiders.BAZA, tools.SCIEZKA,
+    "/api/seo/strony", insiders.BAZA, tools.SCIEZKA, f"/{indexnow.klucz()}.txt",
 } | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy()) \
   | set(dividends.adresy()) | set(reactions.adresy())
 
 PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/", "/etf/",
                       "/dywidendy/", "/reakcja-kursu-po-wynikach/", insiders.BAZA + "/",
-                      "/zdjecia/insiderzy/")
+                      "/zdjecia/insiderzy/", "/og/insiderzy/")
 
 # Treść opisowa zmienia się rzadko, dane spółek co kilka godzin. Krótszy czas dla
 # spółek to nie kaprys: strona z nieaktualnym terminem publikacji wyników jest
@@ -224,6 +224,17 @@ def strona_insidera(slug: str, request: Request):
 @strona(tools.SCIEZKA)
 def kalkulator_belki(request: Request):
     return _odpowiedz(tools.zbuduj(), request)
+
+
+@strona("/og/insiderzy/{slug}.png")
+def obrazek_podgladu(slug: str):
+    """Karta osoby do podglądu linku — rysowana raz i trzymana na dysku danych."""
+    from fastapi.responses import FileResponse
+    sciezka = insiders.obrazek_podgladu(slug)
+    if not sciezka:
+        raise HTTPException(404, "Nie ma takiego obrazka")
+    return FileResponse(sciezka, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @strona("/zdjecia/insiderzy/{nazwa}")
@@ -548,6 +559,13 @@ ROBOTY_AI = [
 
 #: Adresy, których nie ma sensu indeksować: API, logowanie, zasoby prywatne.
 ZABLOKOWANE = ["/api/", "/account", "/static/premium", "/static/auth"]
+
+
+@strona(f"/{indexnow.klucz()}.txt")
+def indexnow_klucz():
+    """Dowód własności serwisu dla IndexNow — treścią pliku jest sam klucz."""
+    return Response(indexnow.klucz(), media_type="text/plain",
+                    headers={"Cache-Control": "public, max-age=86400"})
 
 
 @strona("/robots.txt")

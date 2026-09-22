@@ -37,7 +37,7 @@ import math
 import threading
 import time
 
-from . import charts, companies, jsonld, logos, render, site
+from . import charts, companies, jsonld, logos, og, render, site
 from . import dates
 from .render import esc
 
@@ -133,6 +133,37 @@ def _walor(nazwa: str) -> str:
 def zdjecie(adres: str) -> str:
     """Adres zdjęcia widoczny dla robotów (alias spoza zablokowanego `/api/`)."""
     return (adres or "").replace("/api/insiders/foto/", "/zdjecia/insiderzy/")
+
+
+def _plik_zdjecia(pid: str) -> str:
+    """Ścieżka pliku portretu na dysku (zdjęcie właściciela wygrywa) albo pusty napis."""
+    import os
+    people = _people()
+    wlasne = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "static", "insiders", f"{pid}.jpg")
+    if os.path.isfile(wlasne):
+        return wlasne
+    auto = people.plik_auto(f"{pid}.jpg")
+    return auto if os.path.isfile(auto) else ""
+
+
+def obrazek_podgladu(slug: str) -> str | None:
+    """Plik PNG 1200×630 z kartą osoby — do podglądu linku (`/og/insiderzy/…`)."""
+    pid = _mapa().get(slug)
+    if not pid:
+        return None
+    store = _store()
+    wiersz = store.people_rows([pid]).get(pid)
+    stat = store.stats_get(pid, 30 * 86400) or {}
+    o = _osoba(pid, wiersz, stat)
+    r = stat.get("ret_12m")
+    wynik = render.procent(r) if r is not None else None
+    ost = ostatnie_zgloszenie(pid)[:10]
+    dopisek = ("wynik zakupów z ostatnich 12 miesięcy" if wynik
+               else "transakcje akcjami z oficjalnych zgłoszeń")
+    return og.plik(slug, f"{o['name']}|{wynik}|{ost}",
+                   lambda: og.zbuduj(o["name"], _opis_roli(o), wynik,
+                                     _plik_zdjecia(pid), dopisek))
 
 
 def _mapa() -> dict[str, str]:
@@ -896,7 +927,7 @@ def _profil(slug: str) -> str | None:
         aktualizacja=data_pl(ostatnie_zgloszenie(pid)[:10]),
         akcje=[(f"{APLIKACJA}?osoba={pid}", "🔔 Obserwuj i dostawaj powiadomienia"),
                (BAZA, "Ranking insiderów")],
-        bloki=bloki, obrazek=foto,
+        bloki=bloki, obrazek=f"/og/insiderzy/{slug}.png", obrazek_szeroki=True,
         jsonld=[profil_ld, jsonld.okruchy(okruchy), jsonld.pytania(pary)])
 
 

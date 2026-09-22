@@ -499,6 +499,20 @@ def _zegar_powiadomien():
 
 
 @app.on_event("startup")
+def _zegar_indexnow():
+    """Zgłasza nowe i zmienione adresy do IndexNow (Bing, Yandex, Seznam, Naver).
+
+    Google wycofał pingowanie sitemapy, więc dla niego zostaje mapa serwisu.
+    Reszta wyszukiwarek — i przez Binga część odpowiedzi AI — bierze adresy
+    z IndexNow w kilkanaście minut zamiast tygodni."""
+    try:
+        from seo import indexnow
+        indexnow.zegar()
+    except Exception:  # noqa: BLE001 — zgłaszanie adresów to dodatek
+        log.exception("Nie udało się uruchomić zegara IndexNow")
+
+
+@app.on_event("startup")
 def _zegar_insiderow():
     """Wypełnia i odświeża bazę transakcji insiderów (patrz `insiders/jobs.py`).
 

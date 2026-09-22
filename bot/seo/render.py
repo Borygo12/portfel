@@ -727,7 +727,7 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
            bloki, nadtytul: str = "", okruchy=None, jsonld=None,
            akcje=None, aktualizacja: str = "", szeroki_naglowek: bool = False,
            noindex: bool = False, przed_h1: str = "", wizual: str = "",
-           obrazek: str = "", pokaz: bool = True) -> str:
+           obrazek: str = "", obrazek_szeroki: bool = False, pokaz: bool = True) -> str:
     """Gotowy dokument HTML jednej podstrony.
 
     `tytul` to `<title>` i og:title — do 60 znaków, bo dłuższe Google ucina.
@@ -738,10 +738,13 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
     # własny obrazek strony (np. zdjęcie osoby) wygrywa z grafiką serwisu
     wlasny = bool(obrazek)
     obrazek = site.absolute(obrazek.split("?")[0]) if obrazek else site.absolute(site.OG_IMAGE)
-    wymiary = ("" if wlasny else
-               f'<meta property="og:image:width" content="{site.OG_IMAGE_W}">\n'
-               f'<meta property="og:image:height" content="{site.OG_IMAGE_H}">')
-    karta = "summary" if wlasny else "summary_large_image"
+    if obrazek_szeroki or not wlasny:
+        w, h = (1200, 630) if obrazek_szeroki else (site.OG_IMAGE_W, site.OG_IMAGE_H)
+        wymiary = (f'<meta property="og:image:width" content="{w}">\n'
+                   f'<meta property="og:image:height" content="{h}">')
+    else:
+        wymiary = ""
+    karta = "summary" if (wlasny and not obrazek_szeroki) else "summary_large_image"
 
     dane = ""
     if jsonld:
