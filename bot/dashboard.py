@@ -1241,6 +1241,17 @@ def _rachunek_insiderow(wpisy_bota: list[dict]) -> dict:
     }
 
 
+def _stan_seo() -> dict:
+    """Co warstwa SEO zgłosiła wyszukiwarkom — plik klucza IndexNow i ostatnia wysyłka."""
+    try:
+        from seo import indexnow
+        stan = indexnow._stan()
+        return {"indexnow_plik": f"/{indexnow.klucz()}.txt",
+                "indexnow_ostatnie": stan.get("ostatnie"), "indexnow_ile": stan.get("ile")}
+    except Exception as e:  # noqa: BLE001
+        return {"blad": str(e)[:200]}
+
+
 @app.get("/api/dev/status")
 def dev_status(_v=Depends(require_owner)):
     """Stan serwera i rachunek za AI — jedno miejsce do decyzji „włączać czy nie"."""
@@ -1289,6 +1300,7 @@ def dev_status(_v=Depends(require_owner)):
             "stawki": {"analiza": STAWKA_ANALIZA_USD, "weryfikacja": STAWKA_WERYFIKACJA_USD},
             "insiderzy": _rachunek_insiderow(wpisy),
         },
+        "seo": _stan_seo(),
     }
 
 
