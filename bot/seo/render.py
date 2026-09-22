@@ -396,6 +396,7 @@ FOOTER = (
         ("/etf/zloto-i-surowce", "ETF na złoto i surowce"),
     )),
     ("Wiedza", (
+        ("/kalkulator-podatku-belki", "Kalkulator podatku Belki"),
         ("/poradniki", "Poradniki"),
         ("/slownik", "Słownik giełdowy"),
     )),
@@ -634,8 +635,8 @@ def arkusz() -> str:
     """
     global _arkusz_cache
     if not _arkusz_cache:
-        from . import charts, insiders, logos
-        _arkusz_cache = CSS + charts.CSS + logos.CSS + insiders.CSS
+        from . import charts, insiders, logos, tools
+        _arkusz_cache = CSS + charts.CSS + logos.CSS + insiders.CSS + tools.CSS
     return _arkusz_cache
 
 

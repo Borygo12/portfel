@@ -27,7 +27,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from . import (companies, company_page, dividends, etfs, features, glossary, guides,
-               insiders, reactions, season, sectors, site)
+               insiders, reactions, season, sectors, site, tools)
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ PUBLICZNE_SCIEZKI = {
     season.SCIEZKA,
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
-    "/api/seo/strony", insiders.BAZA,
+    "/api/seo/strony", insiders.BAZA, tools.SCIEZKA,
 } | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy()) \
   | set(dividends.adresy()) | set(reactions.adresy())
 
@@ -221,6 +221,11 @@ def strona_insidera(slug: str, request: Request):
     return _odpowiedz(html, request, CACHE_SPOLKA)
 
 
+@strona(tools.SCIEZKA)
+def kalkulator_belki(request: Request):
+    return _odpowiedz(tools.zbuduj(), request)
+
+
 @strona("/zdjecia/insiderzy/{nazwa}")
 def zdjecie_insidera(nazwa: str):
     """Portret spoza `/api/` — ten jest zablokowany w robots.txt, więc Google nie
@@ -299,6 +304,7 @@ def _wpisy() -> list[tuple[str, str, str, str]]:
         ("/wyniki-finansowe/gpw", "daily", "0.8", zywe),
         ("/wyniki-finansowe/usa", "daily", "0.8", zywe),
         ("/funkcje", "monthly", "0.7", features.ZMIENIONO),
+        (tools.SCIEZKA, "monthly", "0.9", tools.ZMIENIONO),
         ("/poradniki", "monthly", "0.7", guides.ZMIENIONO),
         ("/slownik", "monthly", "0.7", glossary.ZMIENIONO),
     ]
@@ -375,6 +381,12 @@ def _grupy_stron() -> list[dict]:
         "opis": features.STRONY[s]["opis"],
         "tag": features.STRONY[s].get("nadtytul", ""),
     } for s in features.STRONY]
+    funkcje.insert(0, {
+        "adres": tools.SCIEZKA,
+        "tytul": "Kalkulator podatku Belki",
+        "opis": "Podatek od sprzedaży akcji, dywidend z Polski i USA oraz odsetek — z przykładami.",
+        "tag": "Kalkulator",
+    })
     funkcje.insert(1, {
         "adres": season.SCIEZKA,
         "tytul": "Sezon wyników",
@@ -601,6 +613,8 @@ def llms(request: Request):
         "prezesów spółek z USA (SEC Form 4) i insiderów z GPW (MAR art. 19) — z wynikiem "
         "portfela odtworzonego z zakupów; jedyne takie zestawienie po polsku. Profile osób "
         f"pod {a(insiders.BAZA)}/<osoba>, np. {a(insiders.BAZA + '/nancy-pelosi')}",
+        f"- [Kalkulator podatku Belki]({a(tools.SCIEZKA)}): 19% od zysku ze sprzedaży akcji "
+        "i ETF, dywidendy z Polski i USA (W-8BEN), odsetki; odliczanie straty, PIT-38",
         f"- [Dywidendy spółek]({a('/dywidendy')}): stopa dywidendy, kwota na akcję, "
         "wskaźnik wypłaty i dzień bez dywidendy dla spółek z GPW i z USA; "
         f"kalendarz najbliższych dat pod {a('/dywidendy/kalendarz')}",
