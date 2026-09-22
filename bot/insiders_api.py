@@ -27,14 +27,19 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 import logging
+import os
 import re
+import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import supabase_auth as sa
 from account_api import require_login, require_owner, require_premium, viewer
 from insiders import follow, jobs, people, store
+import paths
 
 log = logging.getLogger("insiders_api")
 
@@ -245,14 +250,53 @@ def _zbuduj_panel() -> dict:
     }
 
 
+# Panel jest WSPÓLNY dla wszystkich — ranking i świeże zgłoszenia nie zależą od
+# tego, kto pyta. Liczymy go więc raz, w tle, i trzymamy gotowy: w pamięci i w
+# pliku na woluminie (po restarcie serwera pierwszy użytkownik nie czeka na
+# przeliczenie). Żądanie użytkownika NIGDY nie buduje panelu, jeśli jakaś wersja
+# już istnieje — dostaje ją od razu, a przeliczenie rusza w tle, gdy wersja ma
+# ponad PANEL_WIEK sekund. Nowe zgłoszenia pojawiają się więc najpóźniej po
+# kilku minutach od wczytania ich przez zegar insiderów.
+PANEL_WIEK = 120
+_panel_zamek = threading.Lock()
+_PANEL_PLIK = paths.data_path("insiders_panel.json")
+
+
+def _przelicz_panel() -> None:
+    if not _panel_zamek.acquire(blocking=False):
+        return                                  # już ktoś liczy
+    try:
+        dane = _zbuduj_panel()
+        _panel_cache["data"], _panel_cache["at"] = dane, time.time()
+        try:
+            tmp = _PANEL_PLIK + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"at": _panel_cache["at"], "data": dane}, f, ensure_ascii=False)
+            os.replace(tmp, _PANEL_PLIK)
+        except OSError as e:
+            log.info("Zapis panelu insiderów: %s", e)
+    except Exception:  # noqa: BLE001 — stara wersja zostaje, spróbujemy za chwilę
+        log.exception("Przeliczenie panelu insiderów")
+    finally:
+        _panel_zamek.release()
+
+
+def _wspolny_panel() -> dict:
+    if not _panel_cache["data"]:
+        try:
+            with open(_PANEL_PLIK, encoding="utf-8") as f:
+                z = json.load(f)
+            _panel_cache["data"], _panel_cache["at"] = z["data"], float(z["at"])
+        except (OSError, ValueError, KeyError):
+            _przelicz_panel()                   # pierwszy raz w życiu woluminu
+    if time.time() - _panel_cache["at"] > PANEL_WIEK:
+        threading.Thread(target=_przelicz_panel, daemon=True, name="insiders-panel").start()
+    return _panel_cache["data"] or {}
+
+
 @router.get("/api/insiders/panel")
 def panel(v: sa.Viewer = Depends(viewer)):
-    import time
-    now = time.time()
-    if not _panel_cache["data"] or now - _panel_cache["at"] > 180:
-        _panel_cache["data"] = _zbuduj_panel()
-        _panel_cache["at"] = now
-    data = dict(_panel_cache["data"])
+    data = dict(_wspolny_panel())
     uid = _uid_konta(v) if v.premium else ""
     data["follows"] = follow.moje(uid) if uid else []
     data["premium"] = bool(v.premium)
