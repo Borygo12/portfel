@@ -484,6 +484,77 @@ def _sekcja_kalendarz(spolka: dict, d: dict) -> str:
             wiecej=("/kalendarz-wynikow-spolek", "Zobacz pełny kalendarz wyników")))
 
 
+def _ostatni_raport(d: dict) -> dict | None:
+    """Liczby z ostatniego opublikowanego kwartału: EPS wobec prognozy, przychody,
+    zysk i reakcja kursu. Składane z dwóch źródeł, bo Yahoo trzyma zaskoczenia
+    (`history`) i sprawozdanie (`margins.quarterly`) osobno — łączy je data."""
+    historia = d.get("history") or []
+    if not historia:
+        return None
+    ost = historia[-1]
+    if not ost.get("quarter"):
+        return None
+    kw = next((q for q in ((d.get("margins") or {}).get("quarterly") or [])
+               if q.get("date") == ost["quarter"]), {})
+    # ze sprawozdania bierzemy TYLKO to, czego nie ma w historii zaskoczeń.
+    # `eps` musi zostać ten z `history`, bo to on jest porównywany z prognozą —
+    # sprawozdanie podaje inne rozwodnienie i zdanie rozjeżdżało się z liczbą
+    # zaskoczenia obok („2,46 USD wobec 2,09 prognozy, powyżej o 6,16%").
+    ze_sprawozdania = ("revenue", "net_income", "net_margin", "gross_margin", "operating_margin")
+    return {**ost, **{k: v for k, v in kw.items() if k in ze_sprawozdania}}
+
+
+def _sekcja_ostatni_raport(spolka: dict, d: dict) -> str:
+    """Co spółka POKAZAŁA w ostatnim raporcie — a nie tylko kiedy pokaże następny.
+
+    Pod frazą „wyniki <spółka>" człowiek szuka liczb z ostatniego kwartału.
+    Bez tej sekcji strona odpowiadała wyłącznie na „kiedy będzie raport",
+    czyli na węższe pytanie niż to, które ludzie zadają najczęściej."""
+    o = _ostatni_raport(d)
+    if not o:
+        return ""
+    nazwa = spolka["name"]
+    waluta = d.get("currency") or spolka.get("currency") or ""
+    kafle = []
+    if o.get("revenue"):
+        kafle.append(("Przychody", render.duza(o["revenue"], waluta), "w kwartale"))
+    if o.get("net_income"):
+        kafle.append(("Zysk netto", render.duza(o["net_income"], waluta), "w kwartale"))
+    if o.get("eps") is not None:
+        nota = (f"prognoza {render.liczba(o['estimate'])}" if o.get("estimate") is not None else "")
+        kafle.append(("Zysk na akcję", f"{render.liczba(o['eps'])} {waluta}".strip(), nota))
+    if o.get("surprise_pct") is not None:
+        kafle.append(("Zaskoczenie", render.procent(o["surprise_pct"]), "wobec konsensusu",
+                      "up" if o["surprise_pct"] >= 0 else "down"))
+    if o.get("reaction_pct") is not None:
+        kafle.append(("Kurs po publikacji", render.procent(o["reaction_pct"]), "na najbliższej sesji",
+                      "up" if o["reaction_pct"] >= 0 else "down"))
+    if o.get("net_margin") is not None:
+        kafle.append(("Marża netto", render.procent(o["net_margin"], False), "zysk do przychodów"))
+    if not kafle:
+        return ""
+
+    zdania = [f"Ostatni opublikowany raport {nazwa} obejmuje kwartał zakończony "
+              f"<strong>{render.esc(data_pl(o['quarter']))}</strong>."]
+    if o.get("revenue"):
+        zdania.append(f"Przychody wyniosły <strong>{render.duza(o['revenue'], waluta)}</strong>"
+                      + (f", a zysk netto {render.duza(o['net_income'], waluta)}"
+                         if o.get("net_income") else "") + ".")
+    if o.get("eps") is not None and o.get("estimate") is not None:
+        lepiej = o["eps"] >= o["estimate"]
+        zdania.append(f"Zysk na akcję sięgnął {render.liczba(o['eps'])} {waluta} wobec "
+                      f"{render.liczba(o['estimate'])} {waluta} prognozy analityków — "
+                      f"{'powyżej' if lepiej else 'poniżej'} oczekiwań"
+                      + (f" o {render.liczba(abs(o['surprise_pct']))}%"
+                         if o.get("surprise_pct") is not None else "") + ".")
+    if o.get("reaction_pct") is not None:
+        zdania.append(f"Na pierwszej sesji po publikacji kurs zmienił się o "
+                      f"{render.procent(o['reaction_pct'])}.")
+    return render.sekcja(f"Ostatni raport {nazwa}: co pokazały liczby",
+                         " ".join(zdania), kotwica="ostatni-raport",
+                         html_dodatkowy=render.statystyki(kafle))
+
+
 def _sekcja_insiderzy(spolka: dict, d: dict) -> str:
     """Kto z insiderów kupował tę spółkę — dane z bazy insiderów (`seo/insiders.py`)."""
     from . import insiders
@@ -510,6 +581,21 @@ def _pytania(spolka: dict, d: dict) -> list:
             "Termin najbliższej publikacji nie został jeszcze ogłoszony. "
             "Kalendarz wyników w Portevo aktualizuje się automatycznie, gdy spółka "
             "poda datę."))
+
+    o = _ostatni_raport(d)
+    if o and (o.get("revenue") or o.get("eps") is not None):
+        czesci = []
+        if o.get("revenue"):
+            czesci.append(f"przychody {render.duza(o['revenue'], waluta)}")
+        if o.get("net_income"):
+            czesci.append(f"zysk netto {render.duza(o['net_income'], waluta)}")
+        if o.get("eps") is not None:
+            czesci.append(f"zysk na akcję {render.liczba(o['eps'])} {waluta}".rstrip())
+        pary.append((
+            f"Jakie wyniki pokazał {nazwa} w ostatnim kwartale?",
+            f"W kwartale zakończonym {data_pl(o['quarter'])}: " + ", ".join(czesci) + "."
+            + (f" To {render.procent(o['surprise_pct'])} wobec prognozy analityków."
+               if o.get("surprise_pct") is not None else "")))
 
     pary.append((
         f"Jaki jest ticker spółki {nazwa}?",
@@ -552,6 +638,54 @@ def _pytania(spolka: dict, d: dict) -> list:
 # --------------------------------------------------------------- cała strona
 
 
+def _tytul_i_opis(spolka: dict, d: dict, nazwa: str, tick: str) -> tuple[str, str]:
+    """Tytuł i opis pod to, na co ta strona NAPRAWDĘ odpowiada.
+
+    Wcześniej tytuł brzmiał „Wyniki finansowe KGHM — terminy i prognozy" i stawał
+    w szranki z BiznesRadarem, Bankierem i stroną samej spółki o frazę „wyniki
+    finansowe KGHM". Pod tą frazą człowiek szuka tabeli przychodów i zysku, a nie
+    terminu — więc nawet wysokie miejsce dawałoby wejścia, które zaraz wracają.
+    Młoda domena bez linków tej walki nie wygra i nie ma po co jej toczyć.
+
+    Strona odpowiada na coś innego i mniej obleganego: KIEDY jest raport, jaki jest
+    konsensus, o ile rusza się kurs po publikacji i kto z insiderów kupował. Tytuł
+    mówi to wprost, a opis podaje KONKRETNĄ DATĘ — wynik w Google odpowiada wtedy
+    na pytanie od razu, co widać po klikalności. Data zmienia się sama razem
+    z danymi, więc opis nie zestarzeje się jak ręcznie wpisany tekst.
+    """
+    rok = dt.date.today().year
+    nast = d.get("next") or {}
+    st = d.get("stats") or {}
+
+    tytul = f"{nazwa} ({tick}) wyniki {rok} — termin raportu i prognozy"
+    if len(tytul) > 50:
+        tytul = f"{nazwa} wyniki {rok} — termin raportu i prognozy"
+    if len(tytul) > 50:
+        tytul = f"{nazwa} ({tick}) — wyniki i termin raportu"
+    if len(tytul) > 50:
+        tytul = f"{nazwa} — wyniki i termin raportu"
+
+    czesci = []
+    if nast.get("date"):
+        czesci.append(f"Najbliższy raport {nazwa}: {data_pl(nast['date'])}"
+                      + (" (termin szacowany)" if nast.get("estimate") else "") + ".")
+    else:
+        czesci.append(f"Terminy raportów kwartalnych {nazwa} ({tick}).")
+    if nast.get("eps") is not None:
+        czesci.append(f"Konsensus analityków: {render.liczba(nast['eps'])} "
+                      f"{d.get('currency') or ''} na akcję.".replace("  ", " "))
+    if st.get("beat_rate") is not None:
+        czesci.append(f"Wyniki powyżej prognoz w {st['beat_rate']}% ostatnich kwartałów.")
+    if st.get("avg_move_pct") is not None:
+        czesci.append(f"Kurs rusza się średnio o {render.liczba(st['avg_move_pct'])}% "
+                      f"na sesji po publikacji.")
+    czesci.append("Po polsku, za darmo.")
+    opis = " ".join(czesci)
+    if len(opis) > 165:                       # dłuższe Google i tak utnie
+        opis = " ".join(czesci[:-2] + czesci[-1:])
+    return tytul, opis[:300]
+
+
 def zbuduj(slug: str) -> tuple[str, bool] | None:
     """(HTML, czy_indeksowalna) albo None, gdy takiej spółki nie ma w katalogu."""
     spolka = companies.po_slugu(slug)
@@ -568,12 +702,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
     ma_tresc = bool(d.get("price") is not None or d.get("history")
                     or (d.get("next") or {}).get("date") or d.get("trend"))
 
-    tytul = f"Wyniki finansowe {nazwa} ({tick}) — terminy i prognozy"
-    if len(tytul) > 62:
-        tytul = f"Wyniki finansowe {nazwa} ({tick})"
-    opis = (f"Kiedy {nazwa} publikuje wyniki kwartalne, prognozy analityków, "
-            f"historia zaskoczeń i reakcja kursu po poprzednich raportach. "
-            f"Ticker {tick}, {companies.gielda_pl(spolka)}.")[:300]
+    tytul, opis = _tytul_i_opis(spolka, d, nazwa, tick)
 
     lead = (f"Terminy publikacji raportów, konsensus analityków i to, co kurs "
             f"{render.esc(nazwa)} robił po poprzednich wynikach — zebrane w jednym "
@@ -594,7 +723,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
             "stronę za chwilę albo otwórz kartę spółki w aplikacji — tam dane "
             "dociągają się w tle."))
 
-    for buduj in (_sekcja_termin, _sekcja_insiderzy, _sekcja_historia, _sekcja_zmiennosc,
+    for buduj in (_sekcja_termin, _sekcja_ostatni_raport, _sekcja_insiderzy, _sekcja_historia, _sekcja_zmiennosc,
                   _sekcja_prognozy, _sekcja_marze, _sekcja_dywidenda,
                   _sekcja_kalendarz, _sekcja_o_spolce):
         kawalek = buduj(spolka, d)
