@@ -27,7 +27,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from . import (companies, company_page, dividends, etfs, features, glossary, guides,
-               reactions, season, sectors, site)
+               insiders, reactions, season, sectors, site)
 
 router = APIRouter()
 
@@ -42,12 +42,13 @@ PUBLICZNE_SCIEZKI = {
     season.SCIEZKA,
     "/sitemap.xml", "/robots.txt", "/llms.txt", "/manifest.webmanifest",
     "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
-    "/api/seo/strony",
+    "/api/seo/strony", insiders.BAZA,
 } | set(features.STRONY) | set(sectors.adresy()) | set(etfs.adresy()) \
   | set(dividends.adresy()) | set(reactions.adresy())
 
 PUBLICZNE_PREFIKSY = ("/wyniki-finansowe/", "/poradniki/", "/slownik/", "/etf/",
-                      "/dywidendy/", "/reakcja-kursu-po-wynikach/")
+                      "/dywidendy/", "/reakcja-kursu-po-wynikach/", insiders.BAZA + "/",
+                      "/zdjecia/insiderzy/")
 
 # Treść opisowa zmienia się rzadko, dane spółek co kilka godzin. Krótszy czas dla
 # spółek to nie kaprys: strona z nieaktualnym terminem publikacji wyników jest
@@ -201,6 +202,35 @@ def strona_reakcji(slug: str, request: Request):
     return _odpowiedz(html, request, CACHE_SPOLKA)
 
 
+# --------------------------------------------------------------- insiderzy
+
+
+@strona(insiders.BAZA)
+def strona_insiderow(request: Request):
+    html = insiders.zbuduj("")
+    if html is None:
+        raise HTTPException(503, "Dane insiderów chwilowo niedostępne")
+    return _odpowiedz(html, request, CACHE_SPOLKA)
+
+
+@strona(insiders.BAZA + "/{slug}")
+def strona_insidera(slug: str, request: Request):
+    html = insiders.zbuduj(slug)
+    if html is None:
+        raise HTTPException(404, "Nie ma takiej strony")
+    return _odpowiedz(html, request, CACHE_SPOLKA)
+
+
+@strona("/zdjecia/insiderzy/{nazwa}")
+def zdjecie_insidera(nazwa: str):
+    """Portret spoza `/api/` — ten jest zablokowany w robots.txt, więc Google nie
+    pobrałby zdjęcia ani do wyników grafiki, ani do podglądu linku."""
+    import insiders_api
+    odp = insiders_api.foto(nazwa)
+    odp.headers["Cache-Control"] = "public, max-age=604800"
+    return odp
+
+
 # --------------------------------------------------------------- poradniki i słownik
 
 
@@ -284,6 +314,10 @@ def _wpisy() -> list[tuple[str, str, str, str]]:
             for a in dividends.adresy()]
     poz += [(a, "daily", "0.9" if a == reactions.BAZA else "0.8", zywe)
             for a in reactions.adresy()]
+    try:
+        poz += insiders.wpisy_sitemapy()
+    except Exception:  # noqa: BLE001 — baza insiderów nie może położyć sitemapy
+        pass
     poz += [(a, "daily", "0.7", zywe) for a in companies.adresy()]
     poz += [(f"/poradniki/{s}", "yearly", "0.6", guides.ZMIENIONO)
             for s in guides.KOLEJNOSC]
@@ -391,6 +425,21 @@ def _grupy_stron() -> list[dict]:
         "tag": f"{ile} spółek",
     } for adres, nazwa, ile in sectors.spis()]
 
+    try:
+        mapa = insiders._mapa()
+        wiersze = insiders._store().people_rows(list(mapa.values()))
+    except Exception:  # noqa: BLE001
+        mapa, wiersze = {}, {}
+    insiderzy = [{"adres": insiders.BAZA, "tytul": "Transakcje insiderów",
+                  "opis": "Co kupują Pelosi, Trump, kongresmeni i prezesi — na żywo",
+                  "tag": "Nowość"}] + [{
+        "adres": f"{insiders.BAZA}/{k}", "tytul": cfg["nadtytul"], "opis": cfg["opis"],
+        "tag": "Ranking"} for k, cfg in insiders.KLASY_STRON.items()] + [{
+        "adres": f"{insiders.BAZA}/{slug}",
+        "tytul": (wiersze.get(pid) or {}).get("name") or slug.replace("-", " ").title(),
+        "opis": "Transakcje akcjami, wynik zakupów i struktura portfela",
+        "tag": "Osoba"} for slug, pid in mapa.items()]
+
     spolki = [{
         "adres": companies.adres(s),
         "tytul": s["name"],
@@ -402,6 +451,9 @@ def _grupy_stron() -> list[dict]:
     return [
         {"id": "funkcje", "tytul": "Funkcje", "opis": "Podstrony opisujące narzędzia aplikacji",
          "strony": funkcje, "spis": "/funkcje"},
+        {"id": "insiderzy", "tytul": "Transakcje insiderów",
+         "opis": "Pelosi, Trump, Kongres, prezesi i zarządy z GPW",
+         "strony": insiderzy, "spis": insiders.BAZA},
         {"id": "poradniki", "tytul": "Poradniki", "opis": "Teksty odpowiadające na pytania inwestorów",
          "strony": poradniki, "spis": "/poradniki"},
         {"id": "slownik", "tytul": "Słownik giełdowy", "opis": "Pojęcia z definicją i przykładem liczbowym",
@@ -544,6 +596,11 @@ def llms(request: Request):
         f"({gpw} z GPW, {usa} z USA)",
         f"- [Portfel inwestycyjny]({a('/portfel-inwestycyjny')}): import raportu "
         "maklerskiego, wycena w PLN, stopa zwrotu odporna na wpłaty, koszty",
+        f"- [Transakcje insiderów]({a(insiders.BAZA)}): bieżące transakcje akcjami "
+        "Nancy Pelosi, Donalda Trumpa, członków Kongresu i rządu USA (STOCK Act, OGE), "
+        "prezesów spółek z USA (SEC Form 4) i insiderów z GPW (MAR art. 19) — z wynikiem "
+        "portfela odtworzonego z zakupów; jedyne takie zestawienie po polsku. Profile osób "
+        f"pod {a(insiders.BAZA)}/<osoba>, np. {a(insiders.BAZA + '/nancy-pelosi')}",
         f"- [Dywidendy spółek]({a('/dywidendy')}): stopa dywidendy, kwota na akcję, "
         "wskaźnik wypłaty i dzień bez dywidendy dla spółek z GPW i z USA; "
         f"kalendarz najbliższych dat pod {a('/dywidendy/kalendarz')}",

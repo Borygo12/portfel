@@ -484,6 +484,12 @@ def _sekcja_kalendarz(spolka: dict, d: dict) -> str:
             wiecej=("/kalendarz-wynikow-spolek", "Zobacz pełny kalendarz wyników")))
 
 
+def _sekcja_insiderzy(spolka: dict, d: dict) -> str:
+    """Kto z insiderów kupował tę spółkę — dane z bazy insiderów (`seo/insiders.py`)."""
+    from . import insiders
+    return insiders.sekcja_spolki(spolka["symbol"], spolka["name"])
+
+
 def _pytania(spolka: dict, d: dict) -> list:
     nazwa = spolka["name"]
     tick = companies.ticker(spolka)
@@ -588,7 +594,7 @@ def zbuduj(slug: str) -> tuple[str, bool] | None:
             "stronę za chwilę albo otwórz kartę spółki w aplikacji — tam dane "
             "dociągają się w tle."))
 
-    for buduj in (_sekcja_termin, _sekcja_historia, _sekcja_zmiennosc,
+    for buduj in (_sekcja_termin, _sekcja_insiderzy, _sekcja_historia, _sekcja_zmiennosc,
                   _sekcja_prognozy, _sekcja_marze, _sekcja_dywidenda,
                   _sekcja_kalendarz, _sekcja_o_spolce):
         kawalek = buduj(spolka, d)

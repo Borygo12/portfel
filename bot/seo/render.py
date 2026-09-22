@@ -112,7 +112,10 @@ header.top{
 .brand img{width:28px;height:28px;border-radius:7px}
 .brand b{font-size:18px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
 .brand span{color:var(--orange)}
-nav.main{display:flex;gap:20px;flex:1;flex-wrap:wrap;font-size:14.5px}
+nav.main{display:flex;gap:18px;flex:1;flex-wrap:wrap;font-size:14.5px}
+@media (max-width:1440px) and (min-width:721px){
+  .top .wrap{gap:18px}nav.main{gap:14px;font-size:14px}.top .acts .ghost{display:none}}
+@media (max-width:980px) and (min-width:721px){nav.main a:nth-child(n+6){display:none}}
 nav.main a{color:var(--muted);font-weight:500}
 nav.main a:hover,nav.main a[aria-current]{color:var(--text);text-decoration:none}
 .btn{
@@ -280,6 +283,51 @@ footer.bottom{margin-top:72px;border-top:1px solid var(--border);
   color:var(--dim);font-size:12.5px;display:flex;justify-content:space-between;
   gap:16px;flex-wrap:wrap}
 
+/* ---------- nagłówek z wizualem (tekst + obraz obok) ---------- */
+.hero.split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:44px;align-items:center}
+.hero.split .hl{min-width:0}
+@media (max-width:900px){.hero.split{grid-template-columns:minmax(0,1fr);gap:28px}}
+.hero.split>*{min-width:0}
+.nav-new{font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;
+  background:var(--green);color:#06120c;border-radius:6px;padding:2px 5px;margin-left:5px;
+  vertical-align:2px}
+.top .acts{display:flex;gap:8px;flex:0 0 auto}
+/* ---------- pokaz aplikacji ---------- */
+.showcase{margin-top:52px;border:1px solid var(--border-2);border-radius:22px;overflow:hidden;
+  background:radial-gradient(1200px 400px at 10% -20%,rgba(47,212,138,.16),transparent 60%),
+             radial-gradient(900px 400px at 110% 120%,rgba(79,155,255,.14),transparent 60%),var(--elev);
+  display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:24px;align-items:center;padding:34px}
+.showcase h2{font-size:clamp(22px,3vw,30px);font-weight:800;letter-spacing:-.8px;line-height:1.15}
+.showcase p{color:var(--muted);margin-top:12px;max-width:48ch}
+.showcase ul{list-style:none;margin-top:16px;display:grid;gap:9px}
+.showcase li{color:var(--text);font-size:15px;padding-left:26px;position:relative}
+.showcase li::before{content:"\2713";position:absolute;left:0;color:var(--green);font-weight:800}
+.phones{display:flex;gap:12px;justify-content:center;align-items:flex-end}
+.phones img{width:calc(25% - 9px);max-width:170px;height:auto;border-radius:18px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);border:1px solid var(--border-2)}
+.phones img:nth-child(2),.phones img:nth-child(3){transform:translateY(-14px)}
+.showcase .small{font-size:12.5px;color:var(--dim);margin-top:12px}
+@media (max-width:900px){.showcase{grid-template-columns:1fr;padding:24px}
+  .phones img{width:calc(33% - 8px)}.phones img:nth-child(4){display:none}}
+/* ---------- pasek na telefonie ---------- */
+.dock{display:none}
+@media (max-width:720px){
+  .dock{display:flex;position:fixed;left:10px;right:10px;bottom:10px;z-index:60;align-items:center;
+    gap:10px;padding:10px 10px 10px 14px;border-radius:16px;background:rgba(20,25,38,.94);
+    backdrop-filter:blur(14px);border:1px solid var(--border-2);box-shadow:0 12px 40px rgba(0,0,0,.55)}
+  .dock span{flex:1;font-size:13px;line-height:1.3;color:var(--muted)}
+  .dock span b{display:block;color:var(--text);font-size:14px}
+  footer.bottom{padding-bottom:96px}
+  .top .acts .ghost{display:none}
+}
+@media (max-width:900px){.hero.split:has(.pcard) .hr{order:-1}}
+@media (max-width:720px){
+  nav.main{flex:0 0 100%;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;padding-bottom:2px}
+  nav.main::-webkit-scrollbar{display:none}
+  .actions .btn{flex:1 1 auto;text-align:center}
+  .pcard{padding:18px 16px 16px}.pcard .av{--av:104px!important}
+}
 @media (max-width:720px){
   .top .wrap{height:auto;padding-top:12px;padding-bottom:12px;flex-wrap:wrap;gap:12px}
   nav.main{order:3;width:100%;gap:14px;font-size:13.5px}
@@ -298,12 +346,12 @@ footer.bottom{margin-top:72px;border-top:1px solid var(--border);
 #: bo to on ma sprzedawać produkt (patrz keywords.py).
 NAV = (
     ("/kalendarz-wynikow-spolek", "Kalendarz wyników"),
+    ("/transakcje-insiderow", "Insiderzy"),
     ("/wyniki-finansowe", "Wyniki spółek"),
     ("/dywidendy", "Dywidendy"),
     ("/portfel-inwestycyjny", "Portfel"),
     ("/etf", "ETF"),
     ("/poradniki", "Poradniki"),
-    ("/slownik", "Słownik"),
 )
 
 FOOTER = (
@@ -324,6 +372,14 @@ FOOTER = (
         ("/wyniki-finansowe/usa", "Spółki z USA"),
         ("/wyniki-finansowe/sektor/technologia", "Spółki technologiczne"),
         ("/wyniki-finansowe/sektor/finanse", "Banki i finanse"),
+    )),
+    ("Insiderzy", (
+        ("/transakcje-insiderow", "Transakcje insiderów"),
+        ("/transakcje-insiderow/nancy-pelosi", "Nancy Pelosi — akcje"),
+        ("/transakcje-insiderow/donald-trump", "Donald Trump — akcje"),
+        ("/transakcje-insiderow/kongres-usa", "Transakcje Kongresu USA"),
+        ("/transakcje-insiderow/spolki-usa", "Zakupy prezesów w USA"),
+        ("/transakcje-insiderow/gpw", "Insiderzy na GPW"),
     )),
     ("Dywidendy", (
         ("/dywidendy", "Dywidendy spółek"),
@@ -578,8 +634,8 @@ def arkusz() -> str:
     """
     global _arkusz_cache
     if not _arkusz_cache:
-        from . import charts, logos
-        _arkusz_cache = CSS + charts.CSS + logos.CSS
+        from . import charts, insiders, logos
+        _arkusz_cache = CSS + charts.CSS + logos.CSS + insiders.CSS
     return _arkusz_cache
 
 
@@ -596,15 +652,59 @@ def _naglowek(aktywny: str) -> str:
     linki = []
     for adres, tekst in NAV:
         biezacy = ' aria-current="page"' if aktywny.startswith(adres) else ""
-        linki.append(f'<a href="{esc(adres)}"{biezacy}>{esc(tekst)}</a>')
+        nowe = '<span class="nav-new">nowe</span>' if adres in NOWE else ""
+        linki.append(f'<a href="{esc(adres)}"{biezacy}>{esc(tekst)}{nowe}</a>')
     return (
         '<header class="top"><div class="wrap">'
         f'<a class="brand" href="/"><img src="{LOGO}" alt="" width="28" height="28">'
         "<b>Port<span>evo</span></b></a>"
         '<nav class="main" aria-label="Główna">' + "".join(linki) + "</nav>"
-        '<a class="btn" href="/">Otwórz aplikację</a>'
+        '<div class="acts"><a class="btn ghost" href="/?zaloguj=1" rel="nofollow">Załóż konto</a>'
+        '<a class="btn" href="/">Otwórz aplikację</a></div>'
         "</div></header>"
     )
+
+
+#: Sekcje oznaczone w menu plakietką „nowe".
+NOWE = {"/transakcje-insiderow"}
+
+#: Zrzuty aplikacji (App Store, zmniejszone do WebP ~15 kB) — `bot/static/seo/app/`.
+ZRZUTY = (
+    ("portfel", "Portfel Portevo: wartość, wynik po kosztach i wykres"),
+    ("kalendarz", "Kalendarz wyników spółek w aplikacji Portevo"),
+    ("wydajnosc", "Karta funduszu ETF z notowaniami w Portevo"),
+    ("historia", "Historia transakcji i śledzenie portfela w Portevo"),
+)
+
+
+def pokaz_aplikacji() -> str:
+    """Blok „tak wygląda aplikacja" przed stopką KAŻDEJ strony.
+
+    Czytelnik z Google przyszedł po jedną informację; ten blok ma go przenieść
+    do produktu, zanim zamknie kartę. Obrazki leniwe — nie ruszają LCP."""
+    obrazy = "".join(
+        f'<img src="/static/seo/app/{n}.webp" alt="{esc(a)}" width="360" height="779" '
+        f'loading="lazy" decoding="async">' for n, a in ZRZUTY)
+    return (
+        '<section class="showcase" aria-label="Aplikacja Portevo"><div>'
+        '<span class="eyebrow">Aplikacja Portevo</span>'
+        '<h2>Cały portfel, wyniki spółek i insiderzy w jednym miejscu</h2>'
+        '<p>Wgraj raport z XTB albo dodaj spółki ręcznie — Portevo policzy wynik po '
+        'kosztach, pokaże terminy wyników Twoich spółek i twarze insiderów na wykresach.</p>'
+        '<ul><li>Portfel z wynikiem po kosztach</li>'
+        '<li>Kalendarz wyników Twoich spółek</li>'
+        '<li>Transakcje Pelosi, Trumpa i prezesów na wykresie</li>'
+        '<li>Działa w przeglądarce i na iPhonie</li></ul>'
+        '<div class="actions"><a class="btn big" href="/">Otwórz za darmo</a>'
+        '<a class="btn ghost big" href="/?zaloguj=1" rel="nofollow">Załóż konto</a></div>'
+        '<p class="small">Bez karty. Portfel pokazowy od razu, własny po wgraniu raportu.</p>'
+        f'</div><div class="phones">{obrazy}</div></section>')
+
+
+def _dok() -> str:
+    """Stały pasek na dole ekranu telefonu — przycisk zawsze pod kciukiem."""
+    return ('<div class="dock"><span><b>Portevo — za darmo</b>portfel, wyniki i insiderzy</span>'
+            '<a class="btn" href="/">Otwórz aplikację</a></div>')
 
 
 def _stopka() -> str:
@@ -625,7 +725,8 @@ def _stopka() -> str:
 def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
            bloki, nadtytul: str = "", okruchy=None, jsonld=None,
            akcje=None, aktualizacja: str = "", szeroki_naglowek: bool = False,
-           noindex: bool = False, przed_h1: str = "") -> str:
+           noindex: bool = False, przed_h1: str = "", wizual: str = "",
+           obrazek: str = "", pokaz: bool = True) -> str:
     """Gotowy dokument HTML jednej podstrony.
 
     `tytul` to `<title>` i og:title — do 60 znaków, bo dłuższe Google ucina.
@@ -633,7 +734,13 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
     ale decyduje, czy ktoś kliknie wynik, więc pisze się go jak obietnicę.
     """
     kanoniczny = site.absolute(sciezka)
-    obrazek = site.absolute(site.OG_IMAGE)
+    # własny obrazek strony (np. zdjęcie osoby) wygrywa z grafiką serwisu
+    wlasny = bool(obrazek)
+    obrazek = site.absolute(obrazek.split("?")[0]) if obrazek else site.absolute(site.OG_IMAGE)
+    wymiary = ("" if wlasny else
+               f'<meta property="og:image:width" content="{site.OG_IMAGE_W}">\n'
+               f'<meta property="og:image:height" content="{site.OG_IMAGE_H}">')
+    karta = "summary" if wlasny else "summary_large_image"
 
     dane = ""
     if jsonld:
@@ -649,7 +756,7 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
         czesci = []
         for i, (adres, etykieta) in enumerate(akcje):
             klasa = "btn big" if i == 0 else "btn ghost big"
-            czesci.append(f'<a class="{klasa}" href="{esc(adres)}">{esc(etykieta)}</a>')
+            czesci.append(f'<a class="{klasa}" href="{esc(adres)}"{_rel(adres)}>{esc(etykieta)}</a>')
         przyciski = '<div class="actions">' + "".join(czesci) + "</div>"
 
     return f"""<!DOCTYPE html>
@@ -669,9 +776,8 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
 <meta property="og:description" content="{esc(opis)}">
 <meta property="og:url" content="{esc(kanoniczny)}">
 <meta property="og:image" content="{esc(obrazek)}">
-<meta property="og:image:width" content="{site.OG_IMAGE_W}">
-<meta property="og:image:height" content="{site.OG_IMAGE_H}">
-<meta name="twitter:card" content="summary_large_image">
+{wymiary}
+<meta name="twitter:card" content="{karta}">
 <meta name="twitter:title" content="{esc(tytul)}">
 <meta name="twitter:description" content="{esc(opis)}">
 <meta name="twitter:image" content="{esc(obrazek)}">
@@ -690,17 +796,21 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
 <main id="tresc">
 <div class="wrap">
 {_okruchy(okruchy)}
-<div class="hero{' wide' if szeroki_naglowek else ''}">
+<div class="hero{' wide' if szeroki_naglowek else ''}{' split' if wizual else ''}">
+{'<div class="hl">' if wizual else ''}
 {f'<span class="eyebrow">{esc(nadtytul)}</span>' if nadtytul else ''}
 {przed_h1}
 <h1>{esc(h1)}</h1>
 <p class="lead">{lead}</p>
 {f'<p class="meta">Aktualizacja: {esc(aktualizacja)}</p>' if aktualizacja else ''}
 {przyciski}
+{f'</div><div class="hr">{wizual}</div>' if wizual else ''}
 </div>
 {''.join(bloki)}
+{pokaz_aplikacji() if pokaz else ''}
 </div>
 </main>
 {_stopka()}
+{_dok()}
 </body>
 </html>"""
