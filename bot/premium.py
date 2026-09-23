@@ -37,8 +37,8 @@ PLANS = [
         "id": "monthly",
         "label": "Miesięcznie",
         # cena w promocji; `price_original` to kwota przekreślona (cena zwykła)
-        "price": 5.99,
-        "price_original": 10.99,
+        "price": 9.99,
+        "price_original": 16.99,
         "currency": "PLN",
         "period": "mies.",
         "note": "Odnawia się co miesiąc · rezygnujesz kiedy chcesz",
@@ -48,6 +48,13 @@ PLANS = [
             "Rezygnujesz jednym kliknięciem, bez zobowiązań",
         ],
         "price_id_env": "STRIPE_PRICE_MONTHLY",
+        # cena w Stripe zapisana w kodzie, bo wygrywa ze zmienną na hostingu —
+        # przy podwyżce nie trzeba pamiętać o Railway Variables
+        "stripe_price": "price_1UIlfIK7ZeLeEmobI7FXCK23",
+        # ceny sprzed podwyżki 23.09.2026: obecni subskrybenci zostają na nich,
+        # a ich odnowienia nadal muszą nadawać premium
+        "stripe_price_legacy": ["price_1UDgbzK7ZeLeEmobwAVtaHVY"],
+        "price_legacy": [5.99],
         # identyfikator produktu w App Store Connect — na iPhonie sprzedaje Apple,
         # nie Stripe (wytyczna 3.1.1). Cenę pokazuje wtedy StoreKit, nie ta tabela.
         "apple_id": "pl.borygo.portevo.sub.monthly",
@@ -55,21 +62,24 @@ PLANS = [
     {
         "id": "yearly",
         "label": "Rocznie",
-        "price": 29.99,
-        # gdybyś płacił co miesiąc: 12 × 5,99 zł = 71,88 zł
-        "price_original": 71.88,
+        "price": 43.99,
+        # gdybyś płacił co miesiąc: 12 × 9,99 zł = 119,88 zł
+        "price_original": 119.88,
         "currency": "PLN",
         "period": "rok",
-        "note": "≈ 2,50 zł miesięcznie · jedna płatność w roku",
+        "note": "≈ 3,67 zł miesięcznie · jedna płatność w roku",
         "badge": "Najkorzystniej",
         "highlight": True,
-        "save_label": "Oszczędzasz 58%",
+        "save_label": "Oszczędzasz 63%",
         "perks": [
             "Wszystko z planu miesięcznego",
             "Ponad połowa taniej niż płacąc co miesiąc",
             "Cena zamrożona na cały rok",
         ],
         "price_id_env": "STRIPE_PRICE_YEARLY",
+        "stripe_price": "price_1UIlfJK7ZeLeEmobIGHZHEJ5",
+        "stripe_price_legacy": ["price_1UDgcbK7ZeLeEmobd6KFz2Ke"],
+        "price_legacy": [29.99],
         "apple_id": "pl.borygo.portevo.premium.yearly",
     },
 ]
@@ -544,7 +554,25 @@ def stripe_price_id(plan_id: str) -> str:
     plan = PLAN_BY_ID.get(plan_id)
     if not plan:
         return ""
-    return (os.environ.get(plan.get("price_id_env", "")) or "").strip()
+    return (plan.get("stripe_price")
+            or (os.environ.get(plan.get("price_id_env", "")) or "").strip())
+
+
+def stripe_price_ids(plan_id: str) -> set[str]:
+    """Wszystkie ceny Stripe, które nadają ten plan — bieżąca, ze zmiennej i sprzed podwyżek.
+
+    Sprzedajemy tylko po `stripe_price_id`, ale rozpoznawać trzeba też stare:
+    subskrypcja założona przed podwyżką odnawia się po swojej dawnej cenie.
+    """
+    import os
+
+    plan = PLAN_BY_ID.get(plan_id)
+    if not plan:
+        return set()
+    ids = {stripe_price_id(plan_id),
+           (os.environ.get(plan.get("price_id_env", "")) or "").strip(),
+           *plan.get("stripe_price_legacy", [])}
+    return {i for i in ids if i}
 
 
 APPLE_PRODUCTS = {p["apple_id"]: p["id"] for p in PLANS if p.get("apple_id")}

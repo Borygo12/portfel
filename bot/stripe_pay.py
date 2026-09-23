@@ -269,7 +269,7 @@ def _plan_po_cenie(price_id: str) -> str:
     koncie Stripe) nie nada nikomu premium w Portevo.
     """
     for p in premium.PLANS:
-        if price_id and premium.stripe_price_id(p["id"]) == price_id:
+        if price_id and price_id in premium.stripe_price_ids(p["id"]):
             return p["id"]
     return ""
 
@@ -372,8 +372,9 @@ def _zastosuj_jednorazowa(sesja: dict) -> bool:
     # wprost (`price_data`), więc zamiast identyfikatora ceny porównujemy SAMĄ
     # KWOTĘ i walutę. Bez tego cudza sesja jednorazowa z tego samego konta Stripe
     # nadawałaby premium, gdyby trafiła w nasze nazwy pól w metadanych.
-    oczekiwana = round(float(plan["price"]) * 100)
-    if int(sesja.get("amount_total") or 0) != oczekiwana:
+    # kwoty sprzed podwyżki też: kasa otwarta tuż przed zmianą cennika
+    oczekiwane = {round(float(c) * 100) for c in [plan["price"], *plan.get("price_legacy", [])]}
+    if int(sesja.get("amount_total") or 0) not in oczekiwane:
         return False
     if str(sesja.get("currency") or "").lower() != str(plan["currency"]).lower():
         return False
