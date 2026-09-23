@@ -24,12 +24,13 @@ import os
 import threading
 import time
 
-from . import follow, people, store
+from . import follow, moje_spolki, people, store
 
 log = logging.getLogger("insiders.jobs")
 
 CO_BIEZACE = 10 * 60
-CO_GPW = 20 * 60
+CO_GPW = 5 * 60              # w godzinach publikacji ESPI; poza nimi `_co_gpw`
+CO_GPW_NOC = 30 * 60
 CO_IZBA = 3 * 3600
 CO_OGE = 12 * 3600
 CO_DOBA = 24 * 3600
@@ -44,6 +45,19 @@ def wlaczone() -> bool:
     if v is not None:
         return v.strip().lower() not in ("0", "false", "no", "off", "")
     return bool(os.environ.get("PORTEVO_CLOUD"))
+
+
+def _co_gpw() -> int:
+    """Spółki z GPW publikują powiadomienia MAR w dni robocze, zwykle 7–22.
+    Wtedy sprawdzamy co 5 minut (jedna strona Bankiera), w nocy i weekend
+    rzadko — GPW to rdzeń aplikacji, zakup prezesa ma przyjść tego samego dnia."""
+    import datetime as dt
+    try:
+        from zoneinfo import ZoneInfo
+        teraz = dt.datetime.now(ZoneInfo("Europe/Warsaw"))
+    except Exception:  # noqa: BLE001 — brak bazy stref czasowych: licz jak w dzień
+        return CO_GPW
+    return CO_GPW if teraz.weekday() < 5 and 7 <= teraz.hour < 22 else CO_GPW_NOC
 
 
 def _blad(gdzie: str, e: Exception) -> None:
@@ -67,9 +81,18 @@ def _po_przyroscie(uidy: list[str]) -> None:
         return
     try:
         wiersze = store.trades_by_uids(uidy)
-        follow.powiadom(wiersze, _nazwy({t["person"] for t in wiersze}))
+        nazwy = _nazwy({t["person"] for t in wiersze})
     except Exception as e:  # noqa: BLE001
         _blad("powiadomienia", e)
+        return
+    # najpierw obserwowane osoby, potem spółki z portfela — wspólny klucz
+    # `insider:{uid}` sprawia, że kto ma jedno i drugie, dostaje jedno powiadomienie
+    for nazwa, funkcja in (("powiadomienia", follow.powiadom),
+                           ("powiadomienia_spolki", moje_spolki.powiadom)):
+        try:
+            funkcja(wiersze, nazwy)
+        except Exception as e:  # noqa: BLE001
+            _blad(nazwa, e)
 
 
 def _zrob(nazwa: str, funkcja):
@@ -155,7 +178,7 @@ def _petla() -> None:
         if teraz - ost["biezace"] >= CO_BIEZACE:
             ost["biezace"] = teraz
             _zrob("sec_biezace", sec.biezace)
-        if teraz - ost["gpw"] >= CO_GPW:
+        if teraz - ost["gpw"] >= _co_gpw():
             ost["gpw"] = teraz
             _zrob("gpw_biezace", gpw.biezace)
         if teraz - ost["izba"] >= CO_IZBA:

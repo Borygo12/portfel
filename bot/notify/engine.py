@@ -45,6 +45,10 @@ def powiadom(user_id: str, kind: str, title: str, body: str,
         return True                       # w skrzynce jest, i tyle
 
     dane = {"kind": kind, "symbol": symbol or "", "id": wpis}
+    if (meta or {}).get("locked"):
+        # zapowiedź dla konta bez premium — dotknięcie otwiera stronę sprzedażową
+        dane["locked"] = True
+        dane["feature"] = meta.get("feature") or ""
 
     if ust["push_enabled"]:
         push.wyslij_do(user_id, title, body, dane)

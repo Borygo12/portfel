@@ -74,20 +74,30 @@ def obserwujacy(pids: list[str]) -> dict[str, list[str]]:
 # ----------------------------------------------------------- powiadomienia
 
 
+def _liczba_txt(v: float) -> str:
+    for prog, slowo in ((1e9, "mld"), (1e6, "mln"), (1e3, "tys.")):
+        if v >= prog:
+            x = f"{v / prog:.1f}".rstrip("0").rstrip(".").replace(".", ",")
+            return f"{x} {slowo}"
+    return f"{v:.0f}"
+
+
+def _waluta(t: dict) -> str:
+    # pusta kolumna `cur` = dolary (SEC, Kongres, OGE, 13F); GPW ma „PLN"
+    return {"PLN": "zł", "EUR": "€", "": "$", "USD": "$"}.get(t.get("cur") or "", t.get("cur") or "$")
+
+
 def _kwota_txt(t: dict) -> str:
     lo, hi = t.get("amt_lo"), t.get("amt_hi")
-
-    def f(v: float) -> str:
-        for prog, slowo in ((1e9, "mld"), (1e6, "mln"), (1e3, "tys.")):
-            if v >= prog:
-                x = f"{v / prog:.1f}".rstrip("0").rstrip(".").replace(".", ",")
-                return f"{x} {slowo}"
-        return f"{v:.0f}"
-
+    w = _waluta(t)
     if lo and hi and abs(hi - lo) > 1:
-        return f"{f(lo)}–{f(hi)} $"
+        return f"{_liczba_txt(lo)}–{_liczba_txt(hi)} {w}"
     v = lo or hi
-    return f"{f(v)} $" if v else ""
+    return f"{_liczba_txt(v)} {w}" if v else ""
+
+
+def _et(ticker: str) -> str:
+    return ticker[:-3] if (ticker or "").upper().endswith(".WA") else ticker
 
 
 def _data_pl(iso: str) -> str:
@@ -126,7 +136,7 @@ def powiadom(nowe: list[dict], nazwy: dict[str, str]) -> int:
         trans.sort(key=lambda t: (t.get("amt_hi") or t.get("amt_lo") or 0), reverse=True)
         if len(trans) > MAX_W_PACZCE:
             kupna = sum(1 for t in trans if t["side"] == "buy")
-            tickery = ", ".join(dict.fromkeys(t["ticker"] for t in trans))
+            tickery = ", ".join(dict.fromkeys(_et(t["ticker"]) for t in trans))
             paczki = [{
                 "title": f"{nazwa}: {len(trans)} nowych transakcji",
                 "body": (f"{kupna} kupna, {len(trans) - kupna} sprzedaży · {tickery[:120]}"),
@@ -140,7 +150,7 @@ def powiadom(nowe: list[dict], nazwy: dict[str, str]) -> int:
                 szczegoly = [x for x in (_kwota_txt(t), "opcje" if t.get("options") else "",
                                          f"transakcja z {_data_pl(t['date'])}") if x]
                 paczki.append({
-                    "title": f"{nazwa}: {co} {t['ticker']}",
+                    "title": f"{nazwa}: {co} {_et(t['ticker'])}",
                     "body": " · ".join(szczegoly),
                     "symbol": t["ticker"],
                     "dedup": f"insider:{t['uid']}"[:200],

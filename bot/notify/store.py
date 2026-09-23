@@ -28,6 +28,7 @@ DOMYSLNE = {
     "push_enabled": True,
     "email_enabled": False,
     "email_asked": False,
+    "insider_holdings": True,
 }
 
 TRYBY = ("off", "all", "strong")
@@ -43,6 +44,8 @@ def _wiersz_na_ustawienia(r: dict | None) -> dict:
         "push_enabled": bool(r.get("push_enabled")),
         "email_enabled": bool(r.get("email_enabled")),
         "email_asked": r.get("email_asked_at") is not None,
+        # kolumna z migracji 0008 — przed nią wiersz jej nie ma, a domyślnie włączone
+        "insider_holdings": bool(r.get("insider_holdings", True)),
     }
 
 
@@ -65,7 +68,7 @@ def zapisz_moje(zmiany: dict) -> dict:
     """Zapisuje zmienione pola zalogowanego. Nieznane klucze pomijamy."""
     pola, wartosci = [], []
     for klucz in ("news_mode", "earnings_daily", "earnings_weekly",
-                  "push_enabled", "email_enabled"):
+                  "push_enabled", "email_enabled", "insider_holdings"):
         if klucz in zmiany:
             pola.append(klucz)
             wartosci.append(zmiany[klucz])
@@ -232,6 +235,24 @@ def konta_z_powiadomieniami(pole: str) -> list[str]:
         f"where coalesce(p.{pole}, true)"
     )
     return [str(r["user_id"]) for r in rows]
+
+
+def bez_insiderow(user_ids: list[str]) -> set[str]:
+    """Konta, które WYŁĄCZYŁY powiadomienia o insiderach w swoich spółkach.
+
+    Odwrotnie niż zwykle, bo domyślnie jest włączone: kto nigdy nie dotknął
+    ustawień, nie ma wiersza, a powiadomienie i tak ma dostać."""
+    czyste = [u for u in {str(u) for u in user_ids} if u]
+    if not czyste:
+        return set()
+    try:
+        rows = db.shared_query(
+            "select user_id from notification_prefs "
+            "where user_id = any(%s) and not insider_holdings", (czyste,))
+    except Exception as e:  # noqa: BLE001 — brak kolumny (migracja 0008) = nikt nie wyłączył
+        log.info("insider_holdings niedostępne: %s", e)
+        return set()
+    return {str(r["user_id"]) for r in rows}
 
 
 def adres_email(user_id: str) -> str:

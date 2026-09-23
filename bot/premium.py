@@ -171,20 +171,23 @@ FEATURES: list[dict] = [
         "title": "Insajderzy",
         "tagline": "Zobacz, co kupują ludzie, którzy wiedzą więcej",
         "pitch": (
-            "Kongresmeni, prezydent, członkowie rządu USA i prezesi spółek muszą ujawniać "
-            "swoje transakcje akcjami. Zbieramy te zgłoszenia prosto z oficjalnych rejestrów "
+            "Prezesi, zarządy i rady nadzorcze spółek z GPW, a w USA kongresmeni, prezydent "
+            "i członkowie rządu muszą ujawniać swoje transakcje akcjami. Zbieramy te zgłoszenia "
+            "z raportów ESPI i oficjalnych rejestrów "
             "i kładziemy je tam, gdzie mają znaczenie: na wykresie spółki, w miejscu, w którym "
             "ktoś kupił albo sprzedał. Do tego profil każdej osoby — z wynikiem jej zakupów "
             "za ostatni rok i tym, w co najchętniej wkłada pieniądze."
         ),
         "bullets": [
+            "Powiadomienie, gdy insider kupi lub sprzeda spółkę z Twojego portfela — GPW i USA",
             "Twarze insiderów na wykresie każdej spółki — kto, kiedy i za ile",
-            "Nancy Pelosi, Donald Trump, Kongres, gabinet i prezesi w jednym rankingu",
+            "Zarządy spółek z GPW, Nancy Pelosi, Donald Trump, Kongres i prezesi w jednym rankingu",
             "Wynik zakupów każdej persony za ostatnie 12 miesięcy",
             "Profil ze strukturą zakupów i podsumowaniem AI",
             "Powiadomienie, gdy obserwowana osoba coś kupi albo sprzeda",
         ],
-        "free_hint": "Bez premium widzisz ranking i znaczniki na wykresach — bez nazwisk i szczegółów.",
+        "free_hint": ("Bez premium widzisz ranking i znaczniki na wykresach, a o transakcjach "
+                      "w swoich spółkach dostajesz zapowiedź — bez nazwisk i kwot."),
     },
 
     # ------------------------------------------------------------ bot newsowy
