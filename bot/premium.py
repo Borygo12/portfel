@@ -28,8 +28,10 @@ from __future__ import annotations
 # `active` wyłącza całą oprawę promocyjną (przekreślone ceny, baner) jednym flagiem.
 PROMO = {
     "active": True,
-    "label": "Promocja obowiązuje tylko przez najbliższy miesiąc",
-    "sub": "Ceny wracają do zwykłych po zakończeniu promocji.",
+    # Pilność zostaje, ale bez straszenia podwyżką: kto kupi w promocji, zatrzymuje
+    # tę cenę przy odnowieniach (tak działa i Stripe, i App Store — patrz regulamin).
+    "label": "Promocja tylko przez najbliższy miesiąc · kupisz teraz, ta cena zostaje z Tobą",
+    "sub": "Subskrypcja kupiona w promocji odnawia się po cenie promocyjnej, dopóki jej nie wyłączysz.",
 }
 
 PLANS = [
@@ -45,6 +47,7 @@ PLANS = [
         "perks": [
             "Pełny dostęp do wszystkich funkcji premium",
             "Aplikacja na telefon i panel na komputerze",
+            "Cena 9,99 zł zostaje z Tobą przy każdym odnowieniu",
             "Rezygnujesz jednym kliknięciem, bez zobowiązań",
         ],
         "price_id_env": "STRIPE_PRICE_MONTHLY",
@@ -74,7 +77,7 @@ PLANS = [
         "perks": [
             "Wszystko z planu miesięcznego",
             "Ponad połowa taniej niż płacąc co miesiąc",
-            "Cena zamrożona na cały rok",
+            "Cena 43,99 zł zostaje z Tobą przy każdym odnowieniu",
         ],
         "price_id_env": "STRIPE_PRICE_YEARLY",
         "stripe_price": "price_1UIlfJK7ZeLeEmobIGHZHEJ5",

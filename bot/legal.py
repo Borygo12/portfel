@@ -28,7 +28,7 @@ OWNER_NAME = os.environ.get("LEGAL_OWNER") or "[UZUPEŁNIJ: LEGAL_OWNER — imi�
 OWNER_MAIL = os.environ.get("LEGAL_EMAIL") or os.environ.get("OWNER_EMAIL") or "kontakt@portevo.pl"
 OWNER_ADDR = os.environ.get("LEGAL_ADDRESS") or ""
 SITE = (os.environ.get("PUBLIC_URL") or "https://portevo.pl").rstrip("/")
-UPDATED = "15 września 2026"
+UPDATED = "23 września 2026"
 
 _ADMIN = OWNER_NAME + (f", {OWNER_ADDR}" if OWNER_ADDR else "") + f" (kontakt: {OWNER_MAIL})"
 
@@ -175,6 +175,10 @@ TERMS = {
             "(12 miesięcy). Oba są subskrypcjami odnawialnymi automatycznie: po zakończeniu "
             "okresu przedłużają się na kolejny taki sam okres i pobierana jest kolejna opłata, "
             "dopóki nie wyłączysz odnawiania.",
+            "Gwarancja ceny: cena subskrypcji nie rośnie przy kolejnych odnowieniach, dopóki "
+            "subskrypcja trwa bez przerwy — także wtedy, gdy cennik dla nowych osób się zmieni. "
+            "Po wyłączeniu odnawiania i ponownym zakupie obowiązuje cena aktualna w chwili tego "
+            "zakupu. Gwarancja nie dotyczy jednorazowych płatności BLIK, które się nie odnawiają.",
             "Jeśli jesteś konsumentem, masz 14 dni na odstąpienie od umowy. Rozpoczynając "
             "korzystanie z treści cyfrowych od razu, zgadzasz się na wykonanie usługi przed "
             "upływem tego terminu, co — zgodnie z przepisami — wyłącza prawo odstąpienia w "
@@ -545,6 +549,10 @@ TERMS_EN = {
             "are auto-renewable subscriptions: at the end of a period they renew for another "
             "period of the same length and a further charge is made, until you turn off "
             "automatic renewal.",
+            "Price guarantee: the subscription price does not increase on later renewals for as "
+            "long as the subscription continues without interruption — even if the price list for "
+            "new customers changes. If you turn off renewal and buy again, the price current at "
+            "that time applies. The guarantee does not cover one-off BLIK payments, which do not renew.",
             "If you are a consumer you have 14 days to withdraw from the agreement. By starting "
             "to use the digital content immediately you agree to performance before that period "
             "ends, which — under applicable law — excludes the right of withdrawal to the "
