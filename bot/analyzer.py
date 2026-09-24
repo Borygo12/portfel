@@ -2,9 +2,20 @@
 
 ETAP 1 (SZYBKI, decyzja): analyze_post()
   Liczy się czas. Kolejność prób:
-    1. darmowe modele :free (2 rundy, fallback po 429/przeciążeniu)
+    1. darmowe modele :free, jedna runda, z pominięciem modeli „na karze"
     2. gdy wszystkie darmowe padną -> szybki PŁATNY model (kredyty) — żeby nigdy
        nie przegapić sygnału tylko dlatego, że darmowy provider był zajęty.
+  Długie teksty (SEC, długie ESPI): darmowe streszczenie -> DARMOWA analiza
+  streszczenia -> płatny dopiero, gdy darmowe zawiodą.
+
+  Zmierzone 24.09.2026 na prawdziwych newsach (ten sam prompt co bot):
+  * wszystkie darmowe modele „myślą" przed odpowiedzią (500–1400 tokenów).
+    Przy limicie 900 odpowiedź ucinała się w połowie JSON-a, a streszczenie
+    z limitem 250 wychodziło puste — i każda taka porażka kończyła się płatnym
+    modelem. Z `reasoning.enabled = false` te same modele odpowiadają w 2–5 s
+    zamiast 12–45 s i bez uciętych odpowiedzi;
+  * 3 z 6 modeli z listy nie miały już darmowej wersji (gpt-oss-120b,
+    qwen3-next-80b, llama-3.3-70b) — tylko traciły czas.
 
 ETAP 2 (WERYFIKACJA, jakość): verify_signal()
   Uruchamiany PO otwarciu pozycji (nie blokuje wejścia). Mocny płatny model
@@ -48,6 +59,88 @@ def verify_model() -> str:
 
 # Prompty (etap 1, weryfikator, streszczanie) mieszkają w prompts.py i są
 # edytowalne na żywo z panelu /brain — tutaj tylko je składamy per źródło.
+
+
+# ------------------------------------------- darmowe modele: kara i statystyki
+# Model, który właśnie odpowiedział 429/503 albo przekroczył czas, dostaje krótką
+# karę — kolejne newsy go omijają zamiast odbijać się od niego co kilka sekund.
+# Przekroczenie czasu zjada dzienny limit darmowych zapytań, a nic nie daje.
+KARA_S = 90
+_kara: dict[str, float] = {}
+#: Liczniki per model za bieżącą dobę (UTC — tak liczy limit OpenRouter).
+#: Panel dev pokazuje z nich, który model naprawdę pracuje, a który tylko zawodzi.
+_stat: dict = {"dzien": "", "modele": {}, "sciezki": {}}
+
+
+def _licz(model: str, wynik: str, sek: float = 0.0) -> None:
+    dzien = time.strftime("%Y-%m-%d", time.gmtime())
+    if _stat["dzien"] != dzien:
+        _stat["dzien"], _stat["modele"], _stat["sciezki"] = dzien, {}, {}
+    m = _stat["modele"].setdefault(model, {"ok": 0, "czas_ok_s": 0.0})
+    m[wynik] = m.get(wynik, 0) + 1
+    if wynik == "ok":
+        m["czas_ok_s"] = round(m["czas_ok_s"] + sek, 1)
+
+
+def _sciezka(nazwa: str) -> None:
+    """Czym skończyła się analiza: darmowy / płatny / płatny po streszczeniu itd."""
+    _licz("_", "_")                       # przełączenie doby, jeśli trzeba
+    _stat["modele"].pop("_", None)
+    _stat["sciezki"][nazwa] = _stat["sciezki"].get(nazwa, 0) + 1
+
+
+def statystyki_modeli() -> dict:
+    teraz = time.time()
+    return {"dzien_utc": _stat["dzien"], "modele": _stat["modele"], "sciezki": _stat["sciezki"],
+            "na_karze": {m: int(t - teraz) for m, t in _kara.items() if t > teraz}}
+
+
+def _rodzaj_bledu(e: Exception) -> str:
+    s = str(e).lower()
+    if "timeout" in s:
+        return "timeout"
+    if "404" in s or "unavailable for free" in s:
+        return "nie_istnieje_404"
+    if "429" in s or "rate" in s:
+        return "limit_429"
+    if "503" in s or "overload" in s or "502" in s:
+        return "przeciazony_503"
+    if "json" in s or "pusta" in s:
+        return "zla_odpowiedz"
+    return "inny"
+
+
+def _free_try(model: str, system: str, user: str, max_tokens: int, req_timeout: int,
+              parse_json: bool = True):
+    """Jedno podejście do darmowego modelu: bez „myślenia", z liczeniem i karą."""
+    t0 = time.time()
+    try:
+        out = _call(model, system, user, max_tokens=max_tokens, req_timeout=req_timeout,
+                    parse_json=parse_json, extra={"reasoning": {"enabled": False}})
+    except Exception as e:
+        rodzaj = _rodzaj_bledu(e)
+        _licz(model, rodzaj)
+        if rodzaj in ("timeout", "limit_429", "przeciazony_503", "nie_istnieje_404"):
+            _kara[model] = time.time() + (6 * 3600 if rodzaj == "nie_istnieje_404" else KARA_S)
+        raise
+    _licz(model, "ok", time.time() - t0)
+    return out
+
+
+def _free_round(system: str, user: str, max_tokens: int = 1200, req_timeout: int = 15,
+                parse_json: bool = True):
+    """Jedna runda po darmowych modelach, które nie są na karze. None = żaden nie dał rady."""
+    teraz = time.time()
+    kolejka = [m for m in free_models() if _kara.get(m, 0) <= teraz]
+    if not kolejka:
+        # wszystkie na karze — spróbuj chociaż tego, któremu kara kończy się najszybciej
+        kolejka = sorted(free_models(), key=lambda m: _kara.get(m, 0))[:1]
+    for model in kolejka:
+        try:
+            return _free_try(model, system, user, max_tokens, req_timeout, parse_json)
+        except Exception as e:
+            log.warning("[free] %s zawiódł (%s)", model, str(e)[:160])
+    return None
 
 
 def pre_filter(text: str) -> str | None:
@@ -206,14 +299,14 @@ def _normalize(out: dict) -> dict:
 
 
 def _summarize_long_text(text: str) -> str:
-    """Tylko darmowe AI. Agresywny timeout (8s), zwraca czysty tekst."""
+    """Tylko darmowe AI, bez „myślenia" — wtedy mieści się w kilku sekundach.
+    Dawniej limit 250 tokenów zjadało samo „myślenie" i streszczenie wychodziło puste."""
     user = f"RAPORT DO STRESZCZENIA:\n{text}"
-    for model in free_models():
-        try:
-            return _call(model, prompts.summary_system(), user, max_tokens=250, req_timeout=8, parse_json=False)
-        except Exception as e:
-            log.debug("Summary failed on %s: %s", model, e)
-    raise RuntimeError("Wszystkie darmowe modele zawiodły przy streszczaniu.")
+    out = _free_round(prompts.summary_system(), user, max_tokens=500, req_timeout=20,
+                      parse_json=False)
+    if not out or len(str(out).strip()) < 40:
+        raise RuntimeError("Wszystkie darmowe modele zawiodły przy streszczaniu.")
+    return str(out)
 
 
 def analyze_post(post_text: str, source: str = "truth_social") -> dict:
@@ -257,41 +350,52 @@ def analyze_post(post_text: str, source: str = "truth_social") -> dict:
             log.info("Tekst długi (%d znaków). Próba streszczenia darmowym AI...", len(post_text))
             summary = _summarize_long_text(post_text)
             log.info("Udało się streścić tekst.")
-            # Przekazujemy streszczony tekst bezpośrednio do szybkiego PŁATNEGO modelu, żeby nie męczyć znowu darmowych JSON-em
+            # Streszczenie jest krótkie — najpierw analizują je DARMOWE modele.
+            # Wcześniej szło od razu do płatnego i to była większość rachunku
+            # (SEC + długie ESPI); płatny został tylko jako zapas.
             user = f"ŹRÓDŁO: {source}\n\nSTRESZCZENIE RAPORTU (oryginał miał {len(post_text)} znaków):\n{summary}"
+            free = _free_round(system, user)
+            if free is not None:
+                out = _normalize(free)
+                out["_summarized"] = True
+                _sciezka("darmowy_po_streszczeniu")
+                return out
             out = _normalize(_call(paid_fast_model(), system, user, req_timeout=18))
             out["_paid_fallback"] = True
             out["_summarized"] = True
+            _sciezka("platny_po_streszczeniu")
             return out
         except Exception as e:
-            log.warning("Streszczanie przerwane (%s). Wysyłam pełny raport od razu do mocnego AI.", e)
-            # Fallback bez streszczania prosto do Paid (bo free wyraźnie wisi/ma limity)
+            log.warning("Streszczanie przerwane (%s). Pełny raport: najpierw darmowe, potem płatny.", e)
             user = f"ŹRÓDŁO: {source}\n\nNEWS:\n{post_text}"
+            free = _free_round(system, user, req_timeout=25)
+            if free is not None:
+                _sciezka("darmowy_pelny_raport")
+                return _normalize(free)
             try:
                 out = _normalize(_call(paid_fast_model(), system, user, req_timeout=25))
                 out["_paid_fallback"] = True
+                _sciezka("platny_pelny_raport")
                 return out
             except Exception as e2:
                 raise RuntimeError(f"Analiza długiego tekstu całkowicie padła (Paid error: {e2})")
 
     # Klasyczna ścieżka dla krótkich tekstów (Truth Social)
     user = f"ŹRÓDŁO: {source}\n\nNEWS:\n{post_text}"
-    last_err = None
-    for attempt in (1, 2):
-        for model in free_models():
-            try:
-                return _normalize(_call(model, system, user, req_timeout=15))
-            except Exception as e:
-                last_err = e
-                log.warning("[free] %s zawiódł (%s)", model, e)
-                time.sleep(1)
-        if attempt == 1:
-            time.sleep(2)
+    # Jedna runda. Dawniej były dwie po całej liście z przerwami — druga trafiała
+    # w te same przeciążone modele, a każda próba z odpowiedzią (także złą)
+    # zjadała dzienny limit. Model, który właśnie zawiódł, i tak siedzi na karze.
+    free = _free_round(system, user)
+    if free is not None:
+        _sciezka("darmowy")
+        return _normalize(free)
+    last_err = "wszystkie darmowe modele zawiodły albo są na karze"
 
     try:
         log.warning("Darmowe modele niedostępne — przełączam na płatny %s", paid_fast_model())
         out = _normalize(_call(paid_fast_model(), system, user, req_timeout=15))
         out["_paid_fallback"] = True
+        _sciezka("platny_krotki")
         return out
     except Exception as e:
         raise RuntimeError(f"analiza nieudana (free: {last_err}; paid: {e})")

@@ -297,12 +297,14 @@ DEFAULT_AUTHORITY = {
 DEFAULT_MODELS = {
     # darmowe (kolejność = priorytet). Wpisz ID modelu z OpenRoutera (z sufiksem :free).
     "free": [
-        "nvidia/nemotron-3-ultra-550b-a55b:free",   # 550B: najwięcej wiedzy o świecie/spółkach — najlepszy do typów ekonomicznych
-        "nvidia/nemotron-3-super-120b-a12b:free",   # 120B: pewny workhorse, GPQA 80%/IFBench 71.5%, realnie odpowiada
-        "openai/gpt-oss-120b:free",                 # mocny, dobre instrukcje — ale często 429
-        "qwen/qwen3-next-80b-a3b-instruct:free",    # szybki fallback
-        "google/gemma-4-31b-it:free",               # 31B: wysoka ogólna jakość (do testów; mniejsza wiedza o tickerach)
-        "meta-llama/llama-3.3-70b-instruct:free",   # ostatni ratunek
+        # Kolejność z pomiaru 24.09.2026 (8 prawdziwych newsów, bez „myślenia"):
+        "nvidia/nemotron-3-super-120b-a12b:free",   # 6/8 w ~3 s, zgodny z płatnym Gemini; czasem 503
+        "nvidia/nemotron-3-ultra-550b-a55b:free",   # najwięcej wiedzy, ~5 s; ten sam dostawca, częściej 503
+        "inclusionai/ling-3.0-flash-fin:free",      # 8/8 w ~2 s, model finansowy; częściej widzi sygnał niż Gemini
+        "google/gemma-4-31b-it:free",               # w pomiarze tylko 429 (przeciążony), zostaje jako zapas
+        "qwen/qwen3.8-27b:free",                    # jw., 1/8 — ostatni zapas
+        # Usunięte 24.09.2026 — nie mają już darmowej wersji (404): openai/gpt-oss-120b,
+        # qwen/qwen3-next-80b-a3b-instruct, meta-llama/llama-3.3-70b-instruct.
     ],
     # płatny fallback, gdy wszystkie darmowe padną (żeby nie przegapić sygnału)
     "paid_fast": "google/gemini-2.5-flash",

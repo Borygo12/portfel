@@ -1204,6 +1204,33 @@ def _okno_kosztow(wpisy: list[dict], godziny: float, etykieta: str) -> dict:
 LIMIT_DARMOWYCH_DOBA = 1000
 
 
+_limit_or: dict = {"at": 0.0, "dane": None}
+
+
+def _modele_darmowe() -> dict:
+    """Liczniki z analizatora + PRAWDZIWY licznik dziennego limitu z OpenRoutera
+    (`/api/v1/key` → free_model_daily_requests; zeruje się o północy UTC)."""
+    try:
+        import analyzer
+        out = analyzer.statystyki_modeli()
+    except Exception:  # noqa: BLE001 — statystyka nie może zepsuć panelu
+        out = {}
+    if time.time() - _limit_or["at"] > 60:
+        _limit_or["at"] = time.time()
+        try:
+            import requests
+            r = requests.get("https://openrouter.ai/api/v1/key", timeout=6,
+                             headers={"Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}"})
+            d = r.json().get("data") or {}
+            _limit_or["dane"] = {"darmowe_dzis": d.get("free_model_daily_requests"),
+                                 "usd_dzis": d.get("usage_daily"), "usd_tydzien": d.get("usage_weekly"),
+                                 "usd_miesiac": d.get("usage_monthly")}
+        except Exception:  # noqa: BLE001
+            pass
+    out["openrouter"] = _limit_or["dane"]
+    return out
+
+
 def _rachunek_insiderow(wpisy_bota: list[dict]) -> dict:
     """AI w narzędziu Insajderzy: podsumowania profili i awaryjny odczyt raportów
     Kongresu. Same darmowe modele, więc dolary to zwykle zero — ale każde
@@ -1299,6 +1326,9 @@ def dev_status(_v=Depends(require_owner)):
             "platne_per_zrodlo": per_zrodlo,
             "stawki": {"analiza": STAWKA_ANALIZA_USD, "weryfikacja": STAWKA_WERYFIKACJA_USD},
             "insiderzy": _rachunek_insiderow(wpisy),
+            # które darmowe modele dziś naprawdę pracują, a które tylko zawodzą,
+            # i czym kończą się analizy (darmowy / płatny) — od ostatniego restartu
+            "modele_darmowe": _modele_darmowe(),
         },
         "seo": _stan_seo(),
     }
