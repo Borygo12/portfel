@@ -240,6 +240,44 @@ def do_tekstu(dane: bytes, nazwa: str) -> str:
     nie ma powodu wozić drugiej biblioteki tylko po to, żeby zamienić xlsx na tekst.
     """
     niska = (nazwa or "").lower()
+    # XTB i kilku innych brokerów wysyła raport spakowany — w środku arkusz
+    # albo kilka CSV. Rozpoznajemy po sygnaturze, nie po nazwie: telefon potrafi
+    # oddać plik bez rozszerzenia. xlsx też jest zipem, więc odróżniamy go po
+    # obecności `[Content_Types].xml`.
+    if dane[:4] == b"PK\x03\x04" and not niska.endswith((".xlsx", ".xlsm")):
+        import io
+        import zipfile
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(dane))
+        except zipfile.BadZipFile as e:
+            raise RuntimeError(f"Uszkodzone archiwum: {e}")
+        if "[Content_Types].xml" not in zf.namelist():
+            czesci = []
+            for info in zf.infolist():
+                n = info.filename
+                if info.is_dir() or n.startswith("__MACOSX") or n.split("/")[-1].startswith("."):
+                    continue
+                if not n.lower().endswith((".csv", ".txt", ".tsv", ".xlsx", ".xlsm", ".pdf")):
+                    continue
+                try:
+                    czesci.append(f"### Plik: {n}\n" + do_tekstu(zf.read(info), n))
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Pomijam %s z archiwum: %s", n, e)
+            if not czesci:
+                raise RuntimeError("W archiwum nie ma pliku, który umiemy odczytać "
+                                   "(CSV, XLSX, PDF)")
+            return "\n\n".join(czesci)
+
+    if niska.endswith(".pdf") or dane[:5] == b"%PDF-":
+        import io
+
+        from pypdf import PdfReader
+        try:
+            strony = [s.extract_text() or "" for s in PdfReader(io.BytesIO(dane)).pages]
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"Nie udało się otworzyć PDF: {e}")
+        return "\n".join(strony)
+
     if niska.endswith((".csv", ".txt", ".tsv")):
         for kod in ("utf-8-sig", "utf-8", "cp1250", "latin-1"):
             try:
