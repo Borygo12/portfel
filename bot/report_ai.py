@@ -244,6 +244,153 @@ def czytaj(tekst: str) -> dict:
         + (proby[-1]["blad"] if proby else "Brak szczegółów."))
 
 
+def rodzaj_obrazu(dane: bytes) -> str | None:
+    """Typ MIME zdjęcia po sygnaturze pliku, None gdy to nie obraz.
+
+    HEIC (domyślny format zdjęć iPhone'a) rozpoznajemy osobno, bo modele go nie
+    przyjmują — lepiej powiedzieć to wprost niż odesłać „nie udało się odczytać"."""
+    if dane[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if dane[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if dane[:4] == b"RIFF" and dane[8:12] == b"WEBP":
+        return "image/webp"
+    if dane[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1", b"ftyphevc"):
+        return "image/heic"
+    return None
+
+
+def czytaj_obraz(dane: bytes, mime: str) -> dict:
+    """Zrzut ekranu z aplikacji brokera albo giełdy krypto (Revolut, Binance…).
+
+    Zdjęcie czyta od razu płatny model z obsługą obrazu — darmowe modele z listy
+    obrazów nie przyjmują albo są przeciążone. Koszt to ułamek centa za zdjęcie.
+    Dalej wszystko jak przy pliku: te same zasady, ten sam kształt odpowiedzi,
+    nic nie wchodzi do portfela bez potwierdzenia."""
+    import base64
+    import os
+
+    import analyzer
+    import requests
+
+    if mime == "image/heic":
+        raise RuntimeError("Zdjęcie w formacie HEIC — zrób zrzut ekranu (PNG) albo zapisz "
+                           "zdjęcie jako JPG i wgraj jeszcze raz")
+    if len(dane) > 12 * 1024 * 1024:
+        raise RuntimeError("Zdjęcie jest za duże (ponad 12 MB)")
+    model = analyzer.paid_fast_model()
+    tresc = [
+        {"type": "text", "text": "Na zdjęciu jest zrzut ekranu z aplikacji brokera, banku albo "
+                                 "giełdy kryptowalut. Wypisz pozycje, które na nim widać — "
+                                 "jak z pliku. Ilość to liczba sztuk/monet, nie wartość."},
+        {"type": "image_url",
+         "image_url": {"url": f"data:{mime};base64,{base64.b64encode(dane).decode()}"}},
+    ]
+    r = requests.post(
+        analyzer.OR_URL, timeout=90,
+        headers={"Authorization": f"Bearer {os.environ.get('OPENROUTER_API_KEY', '')}"},
+        json={"model": model, "max_tokens": 8000, "temperature": 0,
+              "messages": [{"role": "system", "content": SYSTEM},
+                           {"role": "user", "content": tresc}]})
+    r.raise_for_status()
+    j = r.json()
+    if "error" in j:
+        raise RuntimeError(str(j["error"])[:200])
+    tekst = (j.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+    surowe = analyzer._parse_json(tekst)
+    surowe["_model"] = model
+    wynik = _uporzadkuj(surowe)
+    if not wynik["pozycje"] and not wynik["gotowka"]:
+        raise RuntimeError(wynik["uwagi"] or "Na zdjęciu nie widać żadnych pozycji")
+    wynik["proby"] = []
+    wynik["trudnosc"] = {"znakow": 0, "linii": 0, "trudny": False, "opis": "odczyt ze zdjęcia"}
+    wynik["obciete"] = False
+    return wynik
+
+
+# ------------------------------------------------ porównanie i dodawanie
+
+def _rdzen(sym: str) -> str:
+    """Wspólny rdzeń tickera z różnych źródeł: „CDR.PL", „CDR.WA", „CDR" → „CDR";
+    „BTC-USD", „BTC" → „BTC"; „AAPL.US" → „AAPL"."""
+    s = (sym or "").strip().upper()
+    s = re.split(r"[.\s:]", s)[0]
+    return s.split("-")[0]
+
+
+def zbierz(pozycje: list[dict]) -> list[dict]:
+    """Transakcje tego samego waloru zliczone w jedną pozycję netto.
+
+    Model wypisuje z historii każde kupno osobno — a do portfela ma trafić
+    „masz 12 akcji CDR po średniej 110 zł", nie dwanaście wierszy. Średnia cena
+    liczona tylko z kupien, bo sprzedaż nie zmienia ceny zakupu tego, co zostało."""
+    grupy: dict[str, dict] = {}
+    for p in pozycje:
+        klucz = _rdzen(p.get("ticker") or p.get("walor") or "")
+        if not klucz:
+            continue
+        g = grupy.setdefault(klucz, {
+            "klucz": klucz, "walor": p.get("walor") or klucz, "ticker": p.get("ticker"),
+            "typ": p.get("typ") or "inne", "waluta": p.get("waluta"), "ilosc": 0.0,
+            "_kup_il": 0.0, "_kup_kw": 0.0, "data": p.get("data"), "transakcji": 0})
+        g["transakcji"] += 1
+        il = float(p.get("ilosc") or 0)
+        if p.get("kierunek") == "sprzedaz":
+            g["ilosc"] -= il
+        else:
+            g["ilosc"] += il
+            if p.get("cena"):
+                g["_kup_il"] += il
+                g["_kup_kw"] += il * float(p["cena"])
+            if p.get("data") and (not g["data"] or p["data"] < g["data"]):
+                g["data"] = p["data"]
+        g["waluta"] = g["waluta"] or p.get("waluta")
+        g["ticker"] = g["ticker"] or p.get("ticker")
+    out = []
+    for g in grupy.values():
+        g["cena"] = round(g["_kup_kw"] / g["_kup_il"], 6) if g["_kup_il"] else None
+        g.pop("_kup_il"); g.pop("_kup_kw")
+        g["ilosc"] = round(g["ilosc"], 8)
+        out.append(g)
+    return out
+
+
+def symbol_rynkowy(poz: dict) -> str:
+    """Symbol notowań (Yahoo) dla odczytanej pozycji — albo pusty, gdy nie wiadomo.
+
+    Wyszukiwarka sama bywa zawodna („CDR" zwraca Microna z Toronto), więc najpierw
+    reguły, które znamy: waluta PLN = GPW (.WA), krypto = para do dolara. Każdy
+    kandydat musi mieć notowanie — symbol bez kursu wyceniałby pozycję na zero."""
+    from portfolio import market as pf_market
+    from portfolio import prices as pf_prices
+
+    rdzen = _rdzen(poz.get("ticker") or poz.get("walor") or "")
+    if not rdzen:
+        return ""
+    kandydaci: list[str] = []
+    if poz.get("typ") == "krypto":
+        kandydaci.append(f"{rdzen}-USD")
+    if (poz.get("waluta") or "").upper() == "PLN":
+        kandydaci.append(f"{rdzen}.WA")
+    kandydaci.append(rdzen)
+    try:
+        for it in pf_market.search(poz.get("ticker") or poz.get("walor") or rdzen, 8):
+            if _rdzen(it["symbol"]) == rdzen:
+                kandydaci.append(it["symbol"])
+    except Exception:  # noqa: BLE001
+        pass
+    kandydaci = list(dict.fromkeys(kandydaci))
+    try:
+        kursy = pf_prices._quotes_for(kandydaci) or {}
+    except Exception:  # noqa: BLE001
+        kursy = {}
+    for k in kandydaci:
+        q = kursy.get(k) or {}
+        if q.get("price"):
+            return k
+    return ""
+
+
 def do_tekstu(dane: bytes, nazwa: str) -> str:
     """Wyciąga tekst z pliku dowolnego formatu, żeby dało się go pokazać modelowi.
 

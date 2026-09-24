@@ -222,22 +222,123 @@ def ai_limit(v=Depends(require_login)):
             "zostalo": max(0, DARMOWE_ODCZYTY - zuzyte)}
 
 
-@router.post("/api/wealth/ai-report")
-async def ai_report(request: Request, v=Depends(require_login)):
-    """Odczytuje raport z nieznanego brokera modelem językowym.
-
-    **Limit zużywa się dopiero po udanym odczycie.** Nieudana próba nie może go
-    zjadać: człowiek nie dostał nic w zamian, a pierwszy raport ucięty przez
-    timeout zamykałby drogę na zawsze i zostawiał wrażenie oszustwa.
-
-    Zwracamy pozycje DO ZATWIERDZENIA, a nie wrzucamy ich do portfela. To jest
-    odczyt maszynowy z niepewnego źródła — wpuszczenie go prosto do liczb, na
-    których ktoś opiera decyzje, byłoby proszeniem się o cichy błąd.
-    """
+def _wczytaj_wejscie(body: dict) -> dict:
+    """Z ciała żądania: {"tekst": …} albo {"obraz": bytes, "mime": …}. Rzuca 400."""
     import base64
 
-    import db
     import report_ai
+
+    nazwa = (body.get("nazwa") or "raport").strip()
+    surowe = body.get("plik_b64") or ""
+    tekst = body.get("tekst") or ""
+    if surowe:
+        try:
+            dane = base64.b64decode(surowe)
+        except Exception:  # noqa: BLE001
+            raise HTTPException(400, "Plik przyszedł uszkodzony")
+        mime = report_ai.rodzaj_obrazu(dane)
+        if mime:
+            return {"obraz": dane, "mime": mime}
+        try:
+            tekst = report_ai.do_tekstu(dane, nazwa)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, str(e))
+    if not tekst.strip():
+        raise HTTPException(400, "Pusty plik — nie ma czego odczytywać")
+    return {"tekst": tekst}
+
+
+def _odczytaj(wejscie: dict) -> dict:
+    import report_ai
+    if "obraz" in wejscie:
+        return report_ai.czytaj_obraz(wejscie["obraz"], wejscie["mime"])
+    return report_ai.czytaj(wejscie["tekst"])
+
+
+def _zapisz_zuzycie(wynik: dict) -> None:
+    import db
+    try:
+        db.execute(
+            "INSERT INTO ai_report_usage (model, positions) VALUES (%s, %s)",
+            (wynik.get("model") or "", len(wynik.get("pozycje") or [])))
+    except Exception as e:  # noqa: BLE001
+        log.warning("Zapis zużycia odczytu AI: %s", e)
+
+
+def _porownaj(wynik: dict) -> list[dict]:
+    """Odczytane pozycje zliczone netto i porównane z tym, co konto już ma.
+
+    `stan`: „nowa" (nie masz tego waloru), „masz" (ta sama liczba sztuk),
+    „inna_ilosc" (masz, ale inną liczbę), „sprzedana" (w raporcie netto zero).
+    Porównujemy z pozycjami z raportów brokera ORAZ z majątkiem dodanym ręcznie —
+    inaczej drugi odczyt tego samego pliku zdublowałby wszystko jako nowe."""
+    import report_ai
+
+    posiadane: dict[str, float] = {}
+    try:
+        from portfolio import engine as pf_engine
+        d = pf_engine.compute()
+        for p in (d.get("positions") or []) if not d.get("empty") else []:
+            k = report_ai._rdzen(p.get("ticker") or "")
+            posiadane[k] = posiadane.get(k, 0.0) + float(p.get("shares") or 0)
+    except Exception as e:  # noqa: BLE001
+        log.info("Porównanie z portfelem: %s", e)
+    try:
+        for a in wealth.aktywa():
+            if a.get("symbol"):
+                k = report_ai._rdzen(a["symbol"])
+                posiadane[k] = posiadane.get(k, 0.0) + float(a.get("ilosc") or 0)
+    except Exception as e:  # noqa: BLE001
+        log.info("Porównanie z majątkiem: %s", e)
+
+    out = []
+    for g in report_ai.zbierz(wynik.get("pozycje") or []):
+        mam = posiadane.get(g["klucz"])
+        if g["ilosc"] <= 1e-9:
+            stan = "sprzedana"
+        elif mam is None:
+            stan = "nowa"
+        elif abs(mam - g["ilosc"]) <= max(1e-6, g["ilosc"] * 0.001):
+            stan = "masz"
+        else:
+            stan = "inna_ilosc"
+        out.append({**g, "stan": stan, "mam": mam})
+    return out
+
+
+# Zadania odczytu w tle. Odczyt trwa do dwóch minut, a telefon w tym czasie
+# potrafi wygasić ekran — iOS zrywa wtedy połączenie i długie żądanie kończyło
+# się „network error", choć serwer dalej czytał. Teraz żądanie od razu zwraca
+# numer zadania, model pracuje w wątku, a aplikacja co kilka sekund pyta
+# o wynik; zerwane pytanie po prostu się ponawia. Jeden proces serwera, więc
+# słownik w pamięci wystarcza; po restarcie aplikacja dostaje „nie ma zadania".
+_ZADANIA: dict[str, dict] = {}
+_ZADANIA_ZYJA_S = 3600
+
+
+def _sprzataj_zadania() -> None:
+    import time
+    granica = time.time() - _ZADANIA_ZYJA_S
+    for k in [k for k, z in _ZADANIA.items() if z["t"] < granica]:
+        _ZADANIA.pop(k, None)
+
+
+@router.post("/api/wealth/ai-report")
+async def ai_report(request: Request, v=Depends(require_login)):
+    """Odczytuje raport (plik albo zdjęcie) z nieznanego brokera modelem językowym.
+
+    `w_tle: true` (nowa aplikacja) — zwraca od razu {zadanie}, wynik pod
+    `/api/wealth/ai-report/zadanie/{id}`. Bez tego pola — stara, synchroniczna
+    droga dla aplikacji, które jeszcze nie dostały aktualizacji.
+
+    **Limit zużywa się dopiero po udanym odczycie.** Nieudana próba nie może go
+    zjadać: człowiek nie dostał nic w zamian.
+
+    Zwracamy pozycje DO ZATWIERDZENIA, a nie wrzucamy ich do portfela.
+    """
+    import threading
+    import time
+    import uuid
 
     premium = bool(getattr(v, "premium", False))
     if not premium and _zuzyte_odczyty() >= DARMOWE_ODCZYTY:
@@ -246,33 +347,112 @@ async def ai_report(request: Request, v=Depends(require_login)):
             "message": "Darmowy odczyt AI został już wykorzystany"})
 
     body = await request.json()
-    nazwa = (body.get("nazwa") or "raport").strip()
-    surowe = body.get("plik_b64") or ""
-    tekst = body.get("tekst") or ""
+    wejscie = _wczytaj_wejscie(body)
 
-    if surowe:
-        try:
-            tekst = report_ai.do_tekstu(base64.b64decode(surowe), nazwa)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(400, str(e))
-    if not tekst.strip():
-        raise HTTPException(400, "Pusty plik — nie ma czego odczytywać")
+    if body.get("w_tle"):
+        _sprzataj_zadania()
+        jid = uuid.uuid4().hex
+        zad = {"uid": getattr(v, "user_id", "") or "", "stan": "liczy", "t": time.time(),
+               "wynik": None, "blad": "", "zapisane": False, "premium": premium}
+        _ZADANIA[jid] = zad
+
+        def praca():
+            try:
+                zad["wynik"] = _odczytaj(wejscie)
+                zad["stan"] = "gotowe"
+            except Exception as e:  # noqa: BLE001
+                zad["blad"] = str(e)[:400]
+                zad["stan"] = "blad"
+
+        threading.Thread(target=praca, daemon=True, name="ai-report").start()
+        return {"zadanie": jid}
 
     try:
-        wynik = report_ai.czytaj(tekst)
+        wynik = _odczytaj(wejscie)
     except Exception as e:  # noqa: BLE001
-        # Świadomie 503, a nie 500: to nie jest błąd naszego kodu, tylko brak
-        # odpowiedzi od modelu. Front pokazuje wtedy „spróbuj jeszcze raz",
-        # a nie „coś się zepsuło".
+        # 503, nie 500: to brak odpowiedzi od modelu, a nie błąd naszego kodu.
         raise HTTPException(503, str(e))
-
-    try:
-        db.execute(
-            "INSERT INTO ai_report_usage (model, positions) VALUES (%s, %s)",
-            (wynik.get("model") or "", len(wynik.get("pozycje") or [])))
-    except Exception as e:  # noqa: BLE001
-        log.warning("Zapis zużycia odczytu AI: %s", e)
-
+    _zapisz_zuzycie(wynik)
     wynik["premium"] = premium
     wynik["zostalo"] = None if premium else max(0, DARMOWE_ODCZYTY - _zuzyte_odczyty())
+    wynik["zbiorczo"] = _porownaj(wynik)
     return wynik
+
+
+@router.get("/api/wealth/ai-report/zadanie/{jid}")
+def ai_report_zadanie(jid: str, v=Depends(require_login)):
+    """Stan zadania odczytu. Zużycie limitu i porównanie z portfelem liczymy TU,
+    a nie w wątku: tylko w żądaniu wiadomo, czyje to konto (baza z RLS)."""
+    zad = _ZADANIA.get(jid)
+    if not zad or zad["uid"] != (getattr(v, "user_id", "") or ""):
+        raise HTTPException(404, "Nie ma takiego odczytu — mógł wygasnąć po restarcie serwera. "
+                                 "Wgraj plik jeszcze raz.")
+    if zad["stan"] == "liczy":
+        import time
+        return {"stan": "liczy", "sekund": int(time.time() - zad["t"])}
+    if zad["stan"] == "blad":
+        return {"stan": "blad", "blad": zad["blad"]}
+    wynik = dict(zad["wynik"])
+    if not zad["zapisane"]:
+        zad["zapisane"] = True
+        _zapisz_zuzycie(wynik)
+    wynik["premium"] = zad["premium"]
+    wynik["zostalo"] = None if zad["premium"] else max(0, DARMOWE_ODCZYTY - _zuzyte_odczyty())
+    # porównanie z portfelem przelicza cały portfel — raz na zadanie wystarczy,
+    # a kolejne pytania (np. po zerwanym połączeniu) dostają gotową listę
+    if zad.get("zbiorczo") is None:
+        zad["zbiorczo"] = _porownaj(wynik)
+    wynik["zbiorczo"] = zad["zbiorczo"]
+    return {"stan": "gotowe", "wynik": wynik}
+
+
+@router.post("/api/wealth/ai-report/symbol")
+async def ai_report_symbol(request: Request, _v=Depends(require_login)):
+    """Symbole notowań dla odczytanych pozycji — osobno, bo to kilka zapytań
+    do Yahoo na pozycję, a lista potrafi mieć sto walorów."""
+    import concurrent.futures as cf
+
+    import report_ai
+
+    pozycje = ((await request.json()) or {}).get("pozycje") or []
+    pozycje = pozycje[:150]
+    with cf.ThreadPoolExecutor(8) as ex:
+        symbole = list(ex.map(report_ai.symbol_rynkowy, pozycje))
+    return {"symbole": symbole}
+
+
+@router.post("/api/wealth/ai-report/dodaj")
+async def ai_report_dodaj(request: Request, _v=Depends(require_login)):
+    """Dodaje zatwierdzone pozycje do majątku — jedną albo sto naraz.
+
+    Każda pozycja z symbolem staje się aktywem wycenianym z rynku (ilość × kurs,
+    jak złoto czy krypto), z kosztem zakupu = ilość × średnia cena z raportu.
+    Pozycja bez symbolu nie ma skąd wziąć kursu, więc trafia jako wycena ręczna
+    po cenie zakupu — lepsze to niż zero."""
+    body = (await request.json()) or {}
+    dodane, bledy = [], []
+    for p in (body.get("pozycje") or [])[:200]:
+        try:
+            ilosc = float(p.get("ilosc") or 0)
+            if ilosc <= 0:
+                raise ValueError("liczba sztuk musi być większa od zera")
+            typ = p.get("typ") or "inne"
+            kategoria = typ if typ in ("akcje", "etf", "krypto", "obligacje") else "inne"
+            symbol = (p.get("symbol") or "").strip().upper()
+            cena = float(p.get("cena") or 0)
+            waluta = (p.get("waluta") or "PLN").upper()
+            dane = {
+                "nazwa": (p.get("walor") or symbol or "Pozycja z raportu")[:80],
+                "kategoria": kategoria, "portfel_id": body.get("portfel_id") or None,
+                "wycena": "auto" if symbol else "manual", "symbol": symbol,
+                "ilosc": ilosc, "waluta": waluta,
+                "koszt": round(ilosc * cena, 2) if cena else 0,
+                "koszt_data": (p.get("data") or "")[:10],
+                "notatka": "z odczytu raportu przez AI",
+            }
+            if not symbol and cena:
+                dane["wartosc"] = round(ilosc * cena, 2)
+            dodane.append(wealth.dodaj_aktywo(dane)["id"])
+        except Exception as e:  # noqa: BLE001
+            bledy.append({"walor": p.get("walor"), "blad": str(e)[:160]})
+    return {"dodane": len(dodane), "bledy": bledy}
