@@ -390,25 +390,27 @@ def person(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
 
 @router.get("/api/insiders/person/{pid}/ai")
 def person_ai(pid: str, again: int = 0, v: sa.Viewer = Depends(require_premium(FEATURE))):
-    """Wspólne podsumowanie persony (24 h). `again=1` — przycisk „Zapytaj ponownie"."""
+    """Wspólne podsumowanie persony. Samo otwarcie profilu (`again=0`) tylko CZYTA
+    zapisany tekst — nigdy nie pyta modelu. Model pisze tło (raz na dobę, osoby
+    z rankingu) albo przycisk w profilu (`again=1`)."""
     from insiders import ai, perf
+
+    if not again:
+        stare = ai.zapisane(pid)
+        if not stare:
+            return {"text": None, "can_ask": True}
+        wiek = time.time() - float(stare.get("at") or 0)
+        return {"text": stare["text"], "at": stare.get("at"), "fresh": False,
+                "again_in": max(0, int(ai.PONOWNIE_CO - wiek))}
 
     trans = store.trades_for_person(pid, limit=60)
     if not trans:
         return {"text": None}
     try:
-        wynik = None
-        if not again:
-            # najczęstszy przypadek: tekst już jest — bez liczenia statystyk
-            stare = ai.zapisane(pid)
-            if stare and time.time() - float(stare.get("at") or 0) < ai.WAZNE_S:
-                store.ai_log_add("podsumowanie", ok=True)
-                wynik = {**stare, "fresh": False}
-        if wynik is None:
-            osoba = _osoba(pid, store.people_rows([pid]).get(pid))
-            rola = " · ".join(x for x in (osoba["role"], osoba["org"]) if x)
-            wynik = ai.podsumowanie(pid, osoba["name"], rola, trans, perf.statystyki(pid),
-                                    ponownie=bool(again))
+        osoba = _osoba(pid, store.people_rows([pid]).get(pid))
+        rola = " · ".join(x for x in (osoba["role"], osoba["org"]) if x)
+        wynik = ai.podsumowanie(pid, osoba["name"], rola, trans, perf.statystyki(pid),
+                                ponownie=True)
     except Exception as e:  # noqa: BLE001 — podsumowanie to dodatek
         log.info("Podsumowanie AI %s: %s", pid, e)
         wynik = None

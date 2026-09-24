@@ -11,12 +11,14 @@ Tylko DARMOWE modele (`analyzer.free_models`) i bez przejścia na płatne. To
 dodatek: gdy limit darmowych zapytań na dobę się skończy, profil pokazuje się
 bez podsumowania, a raport czeka do następnego przebiegu.
 
-Podsumowanie jest WSPÓLNE i żyje 24 godziny od napisania: pierwszy, kto
-otworzy profil, płaci za nie jednym zapytaniem, a każdy następny przez dobę
-dostaje gotowy tekst od razu. Nowe pisze się tylko wtedy, gdy ktoś wprost
-poprosi przyciskiem „Zapytaj ponownie" — i nie częściej niż raz na
-PONOWNIE_CO sekund na personę, żeby kilka kliknięć nie zjadło dziennego
-limitu darmowych modeli, dzielonego z nasłuchem newsów.
+Podsumowanie jest WSPÓLNE. Pisze się je tylko w dwóch sytuacjach (decyzja
+ownera z 24.09.2026, żeby nie zjadać limitu darmowych modeli dzielonego
+z nasłuchem newsów):
+* w tle, raz na dobę, dla osób z rankingu — i tylko gdy od ostatniego tekstu
+  przyszła nowa transakcja (`jobs.podsumowania_zawczasu`);
+* gdy ktoś fizycznie kliknie przycisk w profilu — nie częściej niż raz na
+  PONOWNIE_CO sekund na personę.
+Samo wejście w profil NIGDY nie pyta modelu, tylko pokazuje zapisany tekst.
 """
 
 from __future__ import annotations
@@ -128,6 +130,15 @@ def _kw(t: dict) -> str:
     return f"{int(v):,} $".replace(",", " ") if v else "?"
 
 
+def podpis(transakcje: list[dict]) -> str:
+    """Odcisk listy transakcji — zmienia się, gdy dojdzie nowa. Po nim tło poznaje,
+    że stary tekst dalej jest aktualny i nie ma po co pytać modelu."""
+    if not transakcje:
+        return ""
+    t = transakcje[0]
+    return f"{len(transakcje)}|{t.get('uid') or ''}|{t.get('date')}|{t.get('ticker')}"
+
+
 def zapisane(pid: str) -> dict | None:
     """{text, at} ostatniego podsumowania persony, bez względu na wiek."""
     hit = store.kv_get(f"ai:{pid}")
@@ -171,7 +182,7 @@ def podsumowanie(pid: str, nazwa: str, rola: str, transakcje: list[dict],
         czysty = czysty[:koniec + 1]
     if len(czysty) < 40 or not czysty.endswith((".", "!", "?")):
         return {**stare, "fresh": False} if stare else None
-    wpis = {"text": czysty, "at": teraz}
+    wpis = {"text": czysty, "at": teraz, "sig": podpis(transakcje)}
     store.kv_set(f"ai:{pid}", wpis)
     return {**wpis, "fresh": True}
 

@@ -209,29 +209,49 @@ def _petla() -> None:
     log.info("Insiderzy: zegar zatrzymany")
 
 
-AI_ILU = 30                 # tyle najważniejszych person ma podsumowanie gotowe zawczasu
-AI_CO = 3 * 3600
+AI_CO = 3600                # co godzinę sprawdzamy, komu minęła doba — pisze się najwyżej raz na 24 h
+
+
+def _ranking_ids() -> list[str]:
+    """Osoby, które aplikacja pokazuje w rankingu — ze wspólnego panelu.
+    Bez panelu (pierwszy start) bierzemy katalog, żeby najważniejsi mieli tekst."""
+    try:
+        import insiders_api                       # leniwie: moduł API importuje nasz pakiet
+        liderzy = (insiders_api._wspolny_panel() or {}).get("leaders") or []
+        ids = [p["id"] for p in liderzy
+               if (p.get("activity") or {}).get("buys", 0) + (p.get("activity") or {}).get("sells", 0) > 0]
+        if ids:
+            return ids
+    except Exception as e:  # noqa: BLE001
+        log.debug("Ranking do podsumowań: %s", e)
+    return [k["id"] for k in people.KATALOG]
 
 
 def podsumowania_zawczasu() -> dict:
-    """Podsumowania AI najważniejszych person piszemy w tle, zanim ktoś wejdzie
-    w profil. Darmowy model „myśli" do dwóch minut — nie może na to czekać
-    pierwszy odwiedzający. Tekst żyje dobę (`ai.WAZNE_S`), więc odświeżamy te,
-    które mają ponad 20 godzin: około 30 zapytań na dobę z limitu 1000."""
+    """Podsumowania AI piszemy w tle WYŁĄCZNIE dla osób z rankingu i najwyżej raz
+    na dobę na osobę. Wejście w profil niczego nie pisze (patrz `insiders_api`),
+    a osoby spoza rankingu dostają tekst tylko po kliknięciu przycisku.
+
+    Dodatkowo: gdy od ostatniego tekstu nie przyszła ŻADNA nowa transakcja, nie
+    pytamy modelu wcale — stary tekst dalej jest prawdziwy. Politycy zgłaszają
+    transakcje raz na kilka tygodni, więc to ścina większość zapytań."""
     from . import ai, perf
-    n = pominiete = 0
-    for k in people.KATALOG[:AI_ILU]:
+    n = pominiete = bez_zmian = 0
+    for pid in _ranking_ids():
         if _stop.is_set():
             break
-        pid = k["id"]
         stare = ai.zapisane(pid)
-        if stare and time.time() - float(stare.get("at") or 0) < 20 * 3600:
+        if stare and time.time() - float(stare.get("at") or 0) < ai.WAZNE_S:
             pominiete += 1
             continue
         trans = store.trades_for_person(pid, limit=60)
         if not trans:
             continue
+        if stare and stare.get("sig") == ai.podpis(trans):
+            bez_zmian += 1
+            continue
         w = store.people_rows([pid]).get(pid) or {}
+        k = people.BY_ID.get(pid) or {}
         rola = " · ".join(x for x in (w.get("role"), people.skroc_spolke(w.get("org") or "")) if x)
         try:
             if ai.podsumowanie(pid, k.get("name") or w.get("name") or pid, rola, trans,
@@ -239,7 +259,7 @@ def podsumowania_zawczasu() -> dict:
                 n += 1
         except Exception as e:  # noqa: BLE001
             log.debug("Podsumowanie %s: %s", pid, e)
-    return {"napisane": n, "aktualne": pominiete}
+    return {"napisane": n, "aktualne": pominiete, "bez_nowych_transakcji": bez_zmian}
 
 
 def _petla_ai() -> None:
