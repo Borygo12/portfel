@@ -75,7 +75,14 @@ Zasady:
 - Liczby podawaj jako liczby, nie napisy. Przecinek dziesiętny zamień na kropkę.
 - Spacje w liczbach (1 234,56) usuń.
 - Daty przepisz do formatu RRRR-MM-DD niezależnie od tego, jak są w pliku.
-- Jeśli plik zawiera zarówno kupna, jak i sprzedaże, wypisz jedno i drugie.
+- Jeśli plik zawiera zestawienie OTWARTYCH pozycji (obecny stan rachunku, np. arkusz
+  "Open Positions"), wypisz WYŁĄCZNIE te otwarte pozycje jako "kupno" z ceną i datą
+  otwarcia. Pomiń wtedy pozycje zamknięte i historię operacji gotówkowych — chodzi
+  o to, co człowiek ma dziś. Wiersz zbiorczy instrumentu i wiersze poszczególnych
+  transakcji tego samego instrumentu to nie są osobne pozycje: wypisz transakcje,
+  a wiersz zbiorczy pomiń.
+- Gotówkę bierz z podsumowania salda, nie sumuj jej sam z listy operacji.
+- Gdy zestawienia otwartych pozycji nie ma, wypisz kupna i sprzedaże z historii.
 - Jeśli plik w ogóle nie wygląda na raport maklerski, zwróć pustą listę pozycji
   i napisz to w polu "uwagi"."""
 
@@ -213,7 +220,11 @@ def czytaj(tekst: str) -> dict:
             # komunikat o błędzie przy raporcie, który dało się odczytać.
             surowe = analyzer._call(
                 model, SYSTEM, tresc,
-                max_tokens=4000,
+                # Duży zapas: ucięty w połowie JSON to stracony odczyt. `reasoning`
+                # krótkie i wyłączone z odpowiedzi — model „myślący" potrafił zjeść
+                # cały limit na myślenie i oddać pustą treść.
+                max_tokens=16000,
+                extra={"reasoning": {"effort": "low", "exclude": True}},
                 req_timeout=75 if trudnosc["trudny"] else 45,
             )
             wynik = _uporzadkuj(surowe if isinstance(surowe, dict) else {})
@@ -292,12 +303,23 @@ def do_tekstu(dane: bytes, nazwa: str) -> str:
         import openpyxl
         wb = openpyxl.load_workbook(io.BytesIO(dane), data_only=True)
         czesci = []
-        for ws in wb.worksheets:
+        # Arkusz z obecnym stanem idzie pierwszy: przy długim raporcie obcinamy
+        # od końca, a stracić historię wpłat to co innego niż stracić to, co się ma.
+        def waga(ws):
+            t = ws.title.lower()
+            if any(x in t for x in ("open", "otwart", "holding", "portfel", "pozycje")):
+                return 0
+            return 2 if any(x in t for x in ("cash", "gotów", "operac")) else 1
+        for ws in sorted(wb.worksheets, key=waga):
             czesci.append(f"### Arkusz: {ws.title}")
             for wiersz in ws.iter_rows(values_only=True):
-                komorki = ["" if k is None else str(k) for k in wiersz]
-                if any(k.strip() for k in komorki):
-                    czesci.append(" | ".join(komorki))
+                komorki = ["" if k is None else str(k).strip() for k in wiersz]
+                # XTB ciągnie każdy wiersz do ~25 kolumn — puste ogony to połowa
+                # znaków, które inaczej zjadają limit i czas modelu.
+                while komorki and not komorki[-1]:
+                    komorki.pop()
+                if komorki:
+                    czesci.append("|".join(komorki))
         return "\n".join(czesci)
     except Exception as e:  # noqa: BLE001
         raise RuntimeError(f"Nie udało się otworzyć pliku: {e}")
