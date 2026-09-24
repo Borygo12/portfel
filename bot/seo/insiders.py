@@ -915,7 +915,8 @@ def _profil(slug: str) -> str | None:
     osoba_ld = {k2: v for k2, v in osoba_ld.items() if v}
     profil_ld = {"@context": "https://schema.org", "@type": "ProfilePage",
                  "name": tytul, "url": site.absolute(sciezka),
-                 "dateModified": ostatnie_zgloszenie(pid)[:10],
+                 # ProfilePage wymaga pełnego DateTime ze strefą — sama data to błąd w GSC
+                 "dateModified": ostatnie_zgloszenie(pid)[:10] + "T00:00:00+00:00",
                  "inLanguage": "pl-PL", "mainEntity": osoba_ld}
     return render.strona(
         sciezka=sciezka, tytul=tytul + " | Portevo", opis=opis[:300],
