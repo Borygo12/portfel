@@ -274,6 +274,44 @@ def _petla_ai() -> None:
         _stop.wait(AI_CO)
 
 
+WYROZNIONE_CO = 30 * 60
+
+
+def wyroznione_i_narracje() -> dict:
+    """Pasek „Najciekawsze zagrania": przeliczenie listy i notki AI dla nowych pozycji.
+    Notka pisze się RAZ na pozycję (pozycja się nie zmienia), więc przy ~16
+    pozycjach i kilku nowych dziennie to kilka zapytań na dobę."""
+    from . import ai, wyroznione
+    stat = wyroznione.zbuduj(stop=_stop)
+    napisane = 0
+    for p in wyroznione.lista().get("items") or []:
+        if _stop.is_set():
+            break
+        if ai.zapisana_narracja(p["id"]):
+            continue
+        w = store.people_rows([p["person"]]).get(p["person"]) or {}
+        k = people.BY_ID.get(p["person"]) or {}
+        rola = " · ".join(x for x in (w.get("role"), people.skroc_spolke(w.get("org") or ""))
+                          if x and x != "Kongres USA")
+        try:
+            if ai.narracja_wyroznienia(p, k.get("name") or w.get("name") or p["person"], rola):
+                napisane += 1
+        except Exception as e:  # noqa: BLE001 — zostaje narracja z szablonu
+            log.debug("Narracja %s: %s", p["id"], e)
+    return {**stat, "narracje": napisane}
+
+
+def _petla_wyroznione() -> None:
+    _stop.wait(3 * 60)
+    while not _stop.is_set():
+        if store.kv_get("init_done"):
+            try:
+                STAN["ostatnie"]["wyroznione"] = {"at": time.time(), "wynik": wyroznione_i_narracje()}
+            except Exception as e:  # noqa: BLE001
+                _blad("wyroznione", e)
+        _stop.wait(WYROZNIONE_CO)
+
+
 def start() -> bool:
     global _watek
     if not wlaczone():
@@ -285,6 +323,7 @@ def start() -> bool:
     _watek = threading.Thread(target=_petla, name="insiders-clock", daemon=True)
     _watek.start()
     threading.Thread(target=_petla_ai, name="insiders-ai", daemon=True).start()
+    threading.Thread(target=_petla_wyroznione, name="insiders-wyroznione", daemon=True).start()
     return True
 
 

@@ -1254,6 +1254,9 @@ def _rachunek_insiderow(wpisy_bota: list[dict]) -> dict:
             "z_pamieci": sum(1 for x in w if not x["model"]),
             "podsumowan": sum(1 for x in pytania if x["rodzaj"] == "podsumowanie"),
             "raportow": sum(1 for x in pytania if x["rodzaj"] == "ptr"),
+            "wyroznien": sum(1 for x in pytania if x["rodzaj"] == "wyroznienie"),
+            # tylko te zjadają wspólny dzienny limit darmowych
+            "darmowych": sum(1 for x in pytania if x["model"].endswith(":free")),
             "tokeny": sum(x["tok_in"] + x["tok_out"] for x in pytania),
             "usd": round(sum(x["usd"] for x in pytania), 4),
         }
@@ -1264,7 +1267,7 @@ def _rachunek_insiderow(wpisy_bota: list[dict]) -> dict:
     return {
         "okna": okna,
         "limit_darmowych": {"na_dobe": LIMIT_DARMOWYCH_DOBA, "bot_24h": bot_24,
-                            "insiderzy_24h": okna[0]["zapytan"]},
+                            "insiderzy_24h": okna[0]["darmowych"]},
     }
 
 

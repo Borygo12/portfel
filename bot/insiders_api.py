@@ -422,6 +422,97 @@ def person_ai(pid: str, again: int = 0, v: sa.Viewer = Depends(require_premium(F
             "again_in": max(0, int(ai.PONOWNIE_CO - wiek))}
 
 
+# ------------------------------------------------- najciekawsze zagrania
+
+# Kto to jest — bez nazwiska. Tyle widzi konto bez premium: klasa, branża, kwota
+# i powód wyróżnienia („Komisja Rolnictwa"). Kto kupił i co dokładnie — w premium.
+_KTO_ZAMAZANY = {
+    "house": "Członek Izby Reprezentantów", "senat": "Członek Senatu USA",
+    "prezydent": "Prezydent USA", "rzad": "Członek rządu USA", "znani": "Znany inwestor",
+    "prezesi": "Członek zarządu spółki", "rada": "Członek rady dyrektorów",
+    "wlasciciele": "Duży udziałowiec", "gpw": "Insider z GPW", "f13": "Znany fundusz",
+}
+
+
+def _wyr_pelna(p: dict) -> dict:
+    return {k: p.get(k) for k in ("id", "person", "ticker", "side", "source", "date", "filed", "lo",
+                                   "hi", "net", "cur", "tags", "sector", "ret", "n")} | {
+        "asset": _walor(p.get("asset") or ""),
+        "conflict": (p.get("conflicts") or [None])[0],
+    }
+
+
+def _wyr_zamazana(p: dict, osoba: dict) -> dict:
+    kat = osoba.get("cat") or ""
+    kto = _KTO_ZAMAZANY.get(p["source"] if p["source"] in ("house", "senat", "f13") else kat, "Insider")
+    return {
+        "id": hashlib.sha1(f"zam:{p['id']}".encode()).hexdigest()[:14], "locked": True,
+        "side": p["side"], "cur": p.get("cur"), "lo": p.get("lo"), "hi": p.get("hi"),
+        "net": p.get("net"), "tags": p.get("tags") or [], "sector": p.get("sector") or "",
+        "who": kto, "cat": kat, "blur": people.foto_rozmyte(p["person"]), "filed": p.get("filed"),
+    }
+
+
+@router.get("/api/insiders/wyroznione")
+def wyroznione_lista(v: sa.Viewer = Depends(viewer)):
+    """Pasek „Najciekawsze zagrania". Liczony w tle (`jobs._petla_wyroznione`);
+    tu tylko odczyt. Bez premium — zamazane PO STRONIE SERWERA."""
+    from insiders import wyroznione as wyr
+    d = wyr.lista()
+    items = d.get("items") or []
+    wiersze = store.people_rows(list({p["person"] for p in items}))
+    if not v.premium:
+        osoby = {pid: _osoba(pid, wiersze.get(pid)) for pid in {p["person"] for p in items}}
+        return {"locked": True, "at": d.get("at"), "persons": {},
+                "items": [_wyr_zamazana(p, osoby[p["person"]]) for p in items]}
+    return {"locked": False, "at": d.get("at"),
+            "items": [_wyr_pelna(p) for p in items],
+            "persons": {pid: _osoba(pid, wiersze.get(pid)) for pid in {p["person"] for p in items}}}
+
+
+@router.get("/api/insiders/wyroznione/{wid}")
+def wyroznione_szczegoly(wid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
+    """Karta po dotknięciu pozycji: narracja, wykres kursu z punktem transakcji,
+    powody wyróżnienia i wiersze ze zgłoszenia."""
+    import bisect
+    from insiders import ai, perf
+    from insiders import wyroznione as wyr
+
+    p = wyr.pozycja(wid)
+    if not p:
+        raise HTTPException(404, "Tej pozycji nie ma już na liście")
+    osoba = _osoba(p["person"], store.people_rows([p["person"]]).get(p["person"]))
+    rola = " · ".join(x for x in (osoba["role"], osoba["org"]) if x and x != "Kongres USA")
+    tekst_ai = ai.zapisana_narracja(wid)
+    wykres = None
+    try:
+        px = perf.notowania(p["ticker"])
+    except Exception:  # noqa: BLE001
+        px = None
+    if px and px.get("d"):
+        od = (dt.date.fromisoformat(p["date"]) - dt.timedelta(days=150)).isoformat()
+        i0 = bisect.bisect_left(px["d"], od)
+        d, c = px["d"][i0:], px["c"][i0:]
+        krok = max(1, len(d) // 240)
+        d, c = d[::krok], c[::krok]
+        if px["d"][-1] != d[-1]:
+            d, c = d + [px["d"][-1]], c + [px["c"][-1]]
+        wykres = {"d": d, "c": c, "at": max(0, bisect.bisect_right(d, p["date"]) - 1),
+                  "cur": px.get("cur") or "USD"}
+    inne = store._rows("select * from trades where person=? and ticker=? order by date desc limit 25",
+                       (p["person"], p["ticker"]))
+    return {
+        "item": _wyr_pelna(p), "person": osoba,
+        "conflicts": p.get("conflicts") or [], "why": p.get("why") or [],
+        "text": tekst_ai or wyr.narracja_szablon({**p, "asset": _walor(p.get("asset") or "")},
+                                                 osoba["name"], rola),
+        "ai": bool(tekst_ai),
+        "chart": wykres,
+        "trades": [_transakcja(t) for t in store.trades_by_uids(p.get("uids") or [])],
+        "history": [_transakcja(t) for t in inne],
+    }
+
+
 # ------------------------------------------------------------- obserwowanie
 
 

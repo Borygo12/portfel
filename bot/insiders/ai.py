@@ -89,22 +89,33 @@ def _po_polsku(tekst) -> bool:
     return sum(tekst.count(z) for z in "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ") >= 3
 
 
+def model_platny() -> str:
+    """Płatny model do narracji paska „Najciekawsze zagrania" — zmienna
+    `INSIDERS_AI_MODEL` (np. `anthropic/claude-sonnet-5`). Pusta = same darmowe."""
+    import os
+    return (os.environ.get("INSIDERS_AI_MODEL") or "").strip()
+
+
 def _zapytaj(rodzaj: str, system: str, tekst: str, max_tokens: int, json_: bool,
-             sprawdz=None):
-    """Pyta kolejne darmowe modele. Każda próba trafia do `ai_log` — panel dev
-    liczy z niego rachunek i to, ile zjadamy ze wspólnego limitu darmowych."""
+             sprawdz=None, modele: list[str] | None = None):
+    """Pyta kolejne modele (domyślnie darmowe). Każda próba trafia do `ai_log` —
+    panel dev liczy z niego rachunek i to, ile zjadamy ze wspólnego limitu darmowych."""
     import analyzer
     ostatni = None
-    for model in _modele():
+    for model in (modele or _modele()):
         uzycie: dict = {}
+        darmowy = model.endswith(":free")
         try:
             # Wszystkie dzisiejsze darmowe modele „myślą". Bez `reasoning.exclude`
             # część z nich wpisuje rozważania do odpowiedzi; z nim Nemotron Ultra
             # oddaje czysty tekst (sprawdzone 22.09.2026). Myślenie trwa: na 45
             # transakcjach Pelosi 70 s — przy limicie 50 s nie udawało się nigdy.
+            # Płatnym modelom myślenie niepotrzebne — to prosty tekst z gotowych faktów.
             odp = analyzer._call(model, system, tekst, max_tokens=max_tokens,
-                                 req_timeout=110, parse_json=json_, usage_out=uzycie,
-                                 extra={"reasoning": {"effort": "low", "exclude": True}})
+                                 req_timeout=110 if darmowy else 60, parse_json=json_,
+                                 usage_out=uzycie,
+                                 extra={"reasoning": {"effort": "low", "exclude": True}}
+                                 if darmowy else None)
         except Exception as e:  # noqa: BLE001 — następny model
             ostatni = e
             store.ai_log_add(rodzaj, model, ok=False, limit="429" in str(e) or "rate" in str(e).lower())
@@ -216,3 +227,66 @@ def odczytaj_ptr(tekst: str) -> list[dict] | None:
                     "asset": "", "note": "odczyt AI" if typ != "OP" else "opcje · odczyt AI"})
     return out
 
+
+
+SYSTEM_WYROZNIENIE = """Jesteś dziennikarzem rynku piszącym krótkie notki do polskiej aplikacji
+inwestycyjnej. Dostajesz fakty o jednej transakcji ujawnionej w oficjalnym
+zgłoszeniu (Kongres USA, rząd USA, prezes spółki, GPW) i powody, dla których
+trafiła na listę najciekawszych.
+
+Napisz 3–4 zdania po polsku:
+1. kto (imię, nazwisko, funkcja) i co zrobił — spółka, kwota, data;
+2. dlaczego to ciekawe — użyj podanych powodów (komisja, urząd, skala, inni insiderzy);
+3. czym zajmuje się spółka, jednym zdaniem (jeśli wiesz na pewno; inaczej pomiń);
+4. co od tego czasu zrobił kurs, jeśli podano.
+
+Zasady:
+- Tylko fakty z danych i powszechnie znane informacje o spółce. Bez domysłów.
+- Konflikt interesów opisuj rzeczowo („zasiada w komisji, która nadzoruje…"),
+  nigdy nie sugeruj przestępstwa ani wykorzystania informacji poufnych.
+- Nie zgaduj płci z imienia. Unikaj form zależnych od płci: zamiast „kupił/kupiła",
+  „członek/członkini" pisz „ujawnione kupno", „transakcja", „zasiada w komisji".
+- Nazwy komisji i podkomisji podawaj po polsku.
+- Daty pisz słownie („25 sierpnia"), kwoty jak w danych.
+- Bez rad inwestycyjnych, bez markdownu, bez wstępów.
+Odpowiedz samym tekstem, maksymalnie 600 znaków."""
+
+
+def narracja_wyroznienia(p: dict, nazwa: str, rola: str) -> str | None:
+    """Notka AI dla pozycji z paska. Zapisana na stałe pod `wyr:ai:{id}` —
+    pozycja się nie zmienia, więc piszemy ją raz."""
+    from . import wyroznione
+
+    zapis = store.kv_get(f"wyr:ai:{p['id']}")
+    if isinstance(zapis, dict) and zapis.get("sig") == wyroznione.podpis(p) and _po_polsku(zapis.get("text")):
+        return zapis["text"]
+    kw = (wyroznione._kwota_txt(p["lo"], p["hi"], p.get("cur") or "USD") if p.get("net") is None
+          else f"saldo ok. {wyroznione._kwota_txt(abs(p['net']), abs(p['net']))}")
+    fakty = "\n".join([
+        f"Osoba: {nazwa}" + (f" — {rola}" if rola else ""),
+        f"Transakcja: {'KUPNO' if p['side'] == 'buy' else 'SPRZEDAŻ'} {p['asset']} ({p['ticker']}), {kw}",
+        f"Data transakcji: {p['date']}, data ujawnienia: {p['filed']}",
+        f"Branża spółki: {p.get('sector') or 'nieznana'}",
+        "Powody wyróżnienia:",
+        *[f"- {z}" for z in (p.get("why") or [])],
+    ])
+    platny = model_platny()
+    modele = ([platny] if platny else []) + _modele()
+    odp = _zapytaj("wyroznienie", SYSTEM_WYROZNIENIE, fakty, 1500 if not platny else 500,
+                   json_=False, modele=modele,
+                   sprawdz=lambda o: _po_polsku(re.sub(r"\s+", " ", str(o))))
+    if not isinstance(odp, str):
+        return None
+    czysty = re.sub(r"\s+", " ", odp.replace("*", "")).strip()[:800]
+    koniec = max(czysty.rfind(". "), czysty.rfind("! "), czysty.rfind("? "))
+    if not czysty.endswith((".", "!", "?")) and koniec > 0:
+        czysty = czysty[:koniec + 1]
+    if len(czysty) < 60:
+        return None
+    store.kv_set(f"wyr:ai:{p['id']}", {"text": czysty, "at": time.time(), "sig": wyroznione.podpis(p)})
+    return czysty
+
+
+def zapisana_narracja(pid: str) -> str | None:
+    z = store.kv_get(f"wyr:ai:{pid}")
+    return z["text"] if isinstance(z, dict) and _po_polsku(z.get("text")) else None
