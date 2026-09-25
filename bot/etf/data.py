@@ -228,6 +228,22 @@ def _countries(holdings: list[dict]) -> list[dict]:
     return rows[:6]
 
 
+#: poniżej tego udziału dziesięć największych pozycji nie mówi nic o geografii funduszu
+_MIN_COVERAGE_FOR_COUNTRIES = 50.0
+
+
+def _countries_if_representative(holdings: list[dict], top10) -> list[dict]:
+    """Kraje z największych pozycji — tylko gdy te pozycje to większość funduszu.
+
+    W funduszu na cały świat dziesięć gigantów to kilkanaście procent i wszystkie są
+    z USA, więc wyliczenie dawało „USA 100%" dla MSCI World. Lepiej nie pokazać
+    krajów niż pokazać fałszywe.
+    """
+    if top10 is None or float(top10) < _MIN_COVERAGE_FOR_COUNTRIES:
+        return []
+    return _countries([h for h in holdings if not h.get("is_rest")])
+
+
 #: regiony z katalogu, które są jednym krajem — dla nich znamy odpowiedź bez składu
 _SINGLE_COUNTRY_REGION = {"poland": "PL", "usa": "US"}
 
@@ -607,7 +623,7 @@ def detail(symbol: str) -> dict:
         "about": about,
         "top10_pct": top10,
         "sectors": sectors,
-        "countries": _countries([h for h in holdings if not h.get("is_rest")]) or _region_country(meta),
+        "countries": _countries_if_representative(holdings, top10) or _region_country(meta),
 
         "performance": {
             "d1": round((price / prev - 1) * 100, 2) if price and prev else None,
