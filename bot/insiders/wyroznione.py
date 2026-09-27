@@ -52,6 +52,7 @@ from . import people, store
 log = logging.getLogger("insiders.wyroznione")
 
 OKNO_DNI = 30                 # ile dni wstecz patrzymy na daty UJAWNIENIA
+OKNO_POLITYKOW = 45           # Kongres i rząd zgłaszają rzadziej — ich konflikty łapiemy dłużej
 ILE = 16                      # ile pozycji ma pasek
 PLN_USD = 3.7                 # zgrubnie — tylko do porównania kwot między giełdami
 KLUCZ_LISTY = "wyr:lista"
@@ -286,7 +287,7 @@ def _stan(wiersz: dict) -> str:
 
 def sklady(max_wiek: float = 24 * 3600) -> dict[str, list[dict]]:
     """bioguide → komisje i podkomisje z branżami. Pobierane raz na dobę."""
-    hit = store.kv_get("wyr:komisje")
+    hit = store.kv_get("wyr:komisje2")
     if isinstance(hit, dict) and time.time() - float(hit.get("at") or 0) < max_wiek:
         return hit["dane"]
     try:
@@ -306,6 +307,8 @@ def sklady(max_wiek: float = 24 * 3600) -> dict[str, list[dict]]:
         kid, pod = nazwy.get(pelne, (pelne[:4], ""))
         nazwa, sektory = KOMISJE.get(kid, ("", set()))
         if pod:
+            if kid == "HSED":
+                continue                  # „Health, Employment…" to plany pracownicze, nie leki
             dodatkowe = set()
             for wzor, s in _PODKOMISJE:
                 if wzor.search(pod):
@@ -324,7 +327,7 @@ def sklady(max_wiek: float = 24 * 3600) -> dict[str, list[dict]]:
                 "id": pelne, "nazwa": nazwa, "pod": pod, "sektory": sorted(sektory),
                 "funkcja": _FUNKCJE.get(c.get("title") or "", ""),
             })
-    store.kv_set("wyr:komisje", {"at": time.time(), "dane": out})
+    store.kv_set("wyr:komisje2", {"at": time.time(), "dane": out})
     return out
 
 
@@ -432,7 +435,7 @@ def _krotka_komisja(nazwa: str) -> str:
 # ------------------------------------------------------------------- kandydaci
 
 
-def _kandydaci(od: str) -> list[dict]:
+def _kandydaci(od: str, od_polityka: str) -> list[dict]:
     """Świeże zgłoszenia, z których w ogóle warto wybierać. Progi odcinają tysiące
     drobnych sprzedaży prezesów, zanim zaczniemy liczyć cokolwiek droższego."""
     rows = store._rows(
@@ -443,7 +446,10 @@ def _kandydaci(od: str) -> list[dict]:
         "  or (source='gpw' and side='buy' and coalesce(amt_lo,0) >= 150000)"
         "  or (source='gpw' and side='sell' and coalesce(amt_lo,0) >= 2000000)"
         "  or (source='f13' and coalesce(amt_lo,0) >= 20000000)"
-        ")", (od,))
+        ")", (min(od, od_polityka),))
+    # Kongres i rząd — dłuższe okno, reszta — krótsze
+    rows = [r for r in rows if (r.get("filed") or "") >= (
+        od_polityka if r["source"] in ("house", "senat", "oge") else od)]
     return rows
 
 
@@ -544,8 +550,8 @@ def _pierwszy_od_roku(pid: str, ticker: str, dzien: str) -> bool:
 
 
 # który powód stoi na kafelku jako pierwszy (i barwi jego ramkę)
-_KOLEJNOSC_TAGOW = ["konflikt", "klaster", "rekord", "przekonanie", "kwota", "pod_prad",
-                    "znany", "spoznione"]
+_KOLEJNOSC_TAGOW = ["konflikt", "klaster", "rekord", "przekonanie", "powiazanie", "kwota",
+                    "pod_prad", "znany", "spoznione"]
 
 
 def _ranga(pid: str) -> int:
@@ -571,15 +577,20 @@ def ocen(g: dict, osoba: dict, prof: dict, komisje: dict, klastry: dict) -> dict
     pkt += _punkty_kwoty(usd)
     if usd >= 1_000_000:
         tagi.append({"k": "kwota", "l": "Ponad 1 mln $" if usd < 5e6 else
-                     "Ponad 5 mln $" if usd < 25e6 else "Ponad 25 mln $"})
+                     "Ponad 5 mln $" if usd < 25e6 else "Ponad 25 mln $" if usd < 1e8
+                     else "Ponad 100 mln $"})
 
     konf = konflikty(osoba, g["ticker"], prof, komisje, g["saldo"])
     if konf:
         # Konflikt przy zakupie za tysiąc dolarów to ciekawostka, przy milionie —
         # historia. 1 tys. $ → ×0,45, 100 tys. $ → ×0,75, 10 mln $ → ×1.
         skala = max(0.45, min(1.0, 0.45 + 0.15 * math.log10(max(usd, 1000) / 1000)))
-        pkt += min(4.5, konf[0]["waga"] * 3.0 + sum(k["waga"] for k in konf[1:]) * 0.5)             * skala * (1 if kup else 0.7)
-        tagi.insert(0, {"k": "konflikt", "l": konf[0]["etykieta"]})
+        pkt += min(4.5, konf[0]["waga"] * 3.0 + sum(k["waga"] for k in konf[1:]) * 0.5) \
+            * skala * (1 if kup else 0.7)
+        # słabe powiązanie (stan, prezydent) to „powiązanie", nie „konflikt" — stoi
+        # za rekordem i klastrem, żeby nie zasłaniało mocniejszego powodu
+        tagi.insert(0, {"k": "konflikt" if konf[0]["waga"] >= 1.0 else "powiazanie",
+                        "l": konf[0]["etykieta"]})
 
     if kup and g["ticker"] in klastry:
         osoby = _w_klastrze(klastry[g["ticker"]], g["date"])
@@ -588,13 +599,24 @@ def ocen(g: dict, osoba: dict, prof: dict, komisje: dict, klastry: dict) -> dict
             tagi.append({"k": "klaster", "l": f"{len(osoby)} insiderów kupuje", "n": len(osoby)})
 
     k = people.curated(g["person"]) or {}
-    if kat in ("znani", "prezydent") or (k and _ranga(g["person"]) <= 12):
+    if kat in ("znani", "prezydent"):
+        pkt += 2.0                        # Buffett, Musk, Trump — o nich się czyta
+        tagi.append({"k": "znany", "l": "Znana osoba"})
+    elif k and _ranga(g["person"]) <= 12:
         pkt += 1.2
         tagi.append({"k": "znany", "l": "Znana osoba"})
     elif k:
         pkt += 0.4                        # w katalogu, ale nie z pierwszych stron gazet
 
-    if usd >= 50_000 and _rekord(g["person"], g["side"], usd, g["filed"] or g["date"]):
+    # GPW: dziesiątki milionów „od członka zarządu" to zwykle transakcja pakietowa,
+    # wezwanie albo przestawienie akcji między spółkami tej samej grupy — nie zakup
+    # na rynku. Taka pozycja nie dostaje punktów za skalę ani rekord.
+    pakietowa = src == "gpw" and (usd >= 25_000_000 or (
+        usd >= 5_000_000 and any("powiązany" in (t.get("owner") or "") for t in g["trades"])))
+    if pakietowa:
+        pkt -= _punkty_kwoty(usd) + 1.5
+        tagi = [t for t in tagi if t["k"] != "kwota"]
+    if usd >= 50_000 and not pakietowa and _rekord(g["person"], g["side"], usd, g["filed"] or g["date"]):
         pkt += 1.0
         tagi.append({"k": "rekord", "l": "Rekord tej osoby"})
 
@@ -734,7 +756,7 @@ def zbuduj(stop=None) -> dict:
     t0 = time.time()
     dzis = dt.date.today()
     od = (dzis - dt.timedelta(days=OKNO_DNI)).isoformat()
-    grupy = _grupuj(_kandydaci(od))
+    grupy = _grupuj(_kandydaci(od, (dzis - dt.timedelta(days=OKNO_POLITYKOW)).isoformat()))
     osoby = store.people_rows(list({g["person"] for g in grupy}))
     komisje = sklady()
     klastry = _klastry((dzis - dt.timedelta(days=OKNO_DNI + 60)).isoformat())
@@ -761,11 +783,14 @@ def zbuduj(stop=None) -> dict:
         profil(g["ticker"], cik)
 
     ocenione = []
-    for _, g in wstepne[:120]:
+    polit = [x for x in wstepne[120:] if x[1]["source"] in ("house", "senat", "oge")]
+    for _, g in wstepne[:120] + polit:
         prof = profil(g["ticker"], cik, pobierz=False)
         o = osoby.get(g["person"]) or {"id": g["person"], "source": g["source"]}
         wynik = ocen(g, o, prof, komisje, klastry)
-        if wynik["pkt"] < 2.5:
+        # konflikt z komisją/urzędem ma niższy próg — to on jest solą paska
+        mocny_konflikt = wynik["konflikty"] and wynik["konflikty"][0]["waga"] >= 1.0
+        if wynik["pkt"] < (1.5 if mocny_konflikt else 2.5):
             continue
         ocenione.append({**g, **wynik, "prof": prof})
     ocenione.sort(key=lambda p: -p["pkt"])
@@ -780,7 +805,7 @@ def zbuduj(stop=None) -> dict:
         na_osobe[p["person"]] = na_osobe.get(p["person"], 0) + 1
         spolki.add((p["ticker"], p["side"]))
     for p in [p for p in ocenione if p["konflikty"] and p["konflikty"][0]["waga"] >= 1.0]:
-        if len(wybrane) >= 7:
+        if len(wybrane) >= 6:
             break
         if _mozna(p):
             _wez(p)
@@ -789,7 +814,9 @@ def zbuduj(stop=None) -> dict:
             break
         if p not in wybrane and _mozna(p):
             _wez(p)
-    wybrane.sort(key=lambda p: -p["pkt"])
+    # Kolejność na pasku: konflikty idą wyżej, niż wynikałoby z samych punktów —
+    # inaczej lądowały na końcu taśmy, której nikt nie ogląda do końca.
+    wybrane.sort(key=lambda p: -(p["pkt"] + (2.0 if p["konflikty"] and p["konflikty"][0]["waga"] >= 1.0 else 0)))
 
     pozycje = []
     for p in wybrane:
