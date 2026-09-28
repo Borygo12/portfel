@@ -708,6 +708,25 @@ def _dok() -> str:
             '<a class="btn" href="/">Otwórz aplikację</a></div>')
 
 
+def _obecnosc() -> str:
+    """Sygnał „jestem" co minutę — z tego Kokpit liczy, ile osób jest teraz na stronie.
+
+    Ten sam klucz w localStorage co w aplikacji webowej (`src/obecnosc.ts`), więc
+    ktoś, kto przeszedł z podstrony do aplikacji, liczy się jako jedna osoba.
+    Ekran idzie tylko w pierwszym sygnale — to odsłona, a nie minuta na stronie.
+    Wszystko w try: statystyka nie ma prawa zepsuć strony."""
+    return (
+        "<script>(function(){try{var k='portfel.obecnosc_id',v=localStorage.getItem(k);"
+        "if(!v){v=(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)"
+        "+Date.now().toString(36)).replace(/-/g,'');localStorage.setItem(k,v)}"
+        "var s='seo/'+(location.pathname.split('/')[1]||'start'),t=0;"
+        "function p(){if(document.visibilityState!=='visible'||Date.now()-t<30000)return;"
+        "t=Date.now();navigator.sendBeacon('/api/ping',JSON.stringify({v:v,p:'seo',s:s}));s=''}"
+        "p();setInterval(p,60000);document.addEventListener('visibilitychange',p)}catch(e){}})()"
+        "</script>"
+    )
+
+
 def _stopka() -> str:
     kolumny = []
     for tytul, linki in FOOTER:
@@ -816,5 +835,6 @@ def strona(*, sciezka: str, tytul: str, opis: str, h1: str, lead: str,
 </main>
 {_stopka()}
 {_dok()}
+{_obecnosc()}
 </body>
 </html>"""

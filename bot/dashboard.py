@@ -106,6 +106,8 @@ _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 # połączenia telefonu ma własną blokadę „tylko z tego komputera".
 _PUBLIC_PATHS = {"/", "/premium", "/account", "/api/auth/config", "/api/premium/features",
                  "/api/premium/event", "/api/me", "/api/version", "/api/health",
+                 # sygnał obecności — liczymy też gości (patrz `obecnosc.py`)
+                 "/api/ping",
                  "/favicon.ico",
                  # Wizytówka bota — warstwa sprzedażowa musi działać dla kogoś BEZ konta.
                  # Ktoś wchodzi z Google na /analiza-newsow-ai, klika „Otwórz analizy"
@@ -2091,6 +2093,42 @@ def api_version():
 def portfolio_ping():
     """Sprawdzenie połączenia przez apkę mobilną — jeśli odpowiada, token jest OK."""
     return {"ok": True, "app": "news-trader-portfolio", "api": 1}
+
+
+@app.post("/api/ping")
+async def api_ping(request: Request):
+    """Sygnał „jestem" z aplikacji i podstron — z tego Kokpit liczy, kto jest online.
+
+    Publiczny, bo liczymy też gości. Zawsze odpowiada ok: statystyka nie ma prawa
+    wywołać błędu w aplikacji. Podstrony wysyłają go przez `sendBeacon`, który
+    niesie treść jako text/plain — stąd ręczne czytanie JSON-a z surowych bajtów.
+    """
+    import json as _json
+
+    import obecnosc
+    import supabase_auth
+
+    klient = (request.client.host if request.client else "") or ""
+    # Praca na komputerze nie ma nabijać statystyk produkcji.
+    if klient in _LOCAL_HOSTS or obecnosc.robot(request.headers.get("user-agent") or ""):
+        return {"ok": True}
+    try:
+        body = _json.loads((await request.body())[:2000] or b"{}")
+    except ValueError:
+        return {"ok": True}
+    if not isinstance(body, dict):
+        return {"ok": True}
+    uid = ""
+    if request.headers.get("authorization"):
+        try:
+            # sprawdzenie tokenu bywa zapytaniem do Supabase — nie w pętli zdarzeń
+            from starlette.concurrency import run_in_threadpool
+            uid = (await run_in_threadpool(supabase_auth.viewer_from_request, request)).user_id or ""
+        except Exception:  # noqa: BLE001 — nieudane rozpoznanie konta = liczymy jako gościa
+            uid = ""
+    obecnosc.ping(str(body.get("v") or ""), str(body.get("p") or ""),
+                  str(body.get("s") or ""), uid)
+    return {"ok": True}
 
 
 @app.get("/api/health")
