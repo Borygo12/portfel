@@ -664,6 +664,28 @@ def foto(pid: str) -> str:
     return ""
 
 
+def foto_anonim(pid: str) -> str:
+    """Ostre zdjęcie pod adresem, z którego nie da się odczytać osoby — dla konta
+    bez premium (decyzja ownera 28.09.2026: twarz tak, nazwisko nie). Zwykły adres
+    zawiera identyfikator („nancy-pelosi.jpg"), a to już jest nazwisko."""
+    wl, auto = _pliki()
+    if pid in wl or pid in auto:
+        return f"/api/insiders/foto/a/{blur_name(pid)}.jpg?v={wl.get(pid) or auto.get(pid)}"
+    return ""
+
+
+def plik_anonim(nazwa: str) -> str:
+    """Skrót z adresu anonimowego → ścieżka pliku (zdjęcie właściciela wygrywa)."""
+    wl, auto = _pliki()
+    for pid in wl:
+        if blur_name(pid) == nazwa:
+            return os.path.join(_FOTO_DIR, f"{pid}.jpg")
+    for pid in auto:
+        if blur_name(pid) == nazwa:
+            return os.path.join(_katalog_auto(), f"{pid}.jpg")
+    return ""
+
+
 def foto_rozmyte(pid: str) -> str:
     wl, auto = _pliki()
     if pid in wl:

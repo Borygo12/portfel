@@ -135,15 +135,20 @@ def _transakcja(t: dict) -> dict:
 
 
 def _zamazana(t: dict, blur: str) -> dict:
-    """Transakcja dla kogoś bez premium: gdzie i w którą stronę — nic ponad to.
+    """Transakcja dla kogoś bez premium: gdzie, w którą stronę i czyja TWARZ — bez
+    nazwiska i kwoty (od 28.09.2026 twarz jest ostra: ładniejszy wykres, a kto
+    nie zna osoby, i tak nie wie, kto to).
 
     `who` to skrót z solą — pozwala aplikacji nie stawiać na wykresie dwudziestu
-    twarzy tej samej osoby, a nie pozwala ustalić, kim ona jest."""
+    twarzy tej samej osoby, a nie pozwala ustalić, kim ona jest. Zdjęcie idzie
+    pod anonimowym adresem (`people.foto_anonim`), bo zwykły zawiera nazwisko.
+    Pole `blur` niesie to samo zdjęcie — starsze wersje aplikacji czytają tylko je."""
+    foto = people.foto_anonim(t["person"])
     return {
         "uid": hashlib.sha1(f"zam:{t['uid']}".encode()).hexdigest()[:16],
         "who": hashlib.sha1(f"kto:{people.blur_name(t['person'])}".encode()).hexdigest()[:10],
         "side": t["side"], "date": t["date"], "price": t.get("price"),
-        "options": bool(t.get("options")), "locked": True, "blur": blur,
+        "options": bool(t.get("options")), "locked": True, "photo": foto, "blur": foto or blur,
         "cur": t.get("cur") or "USD",
     }
 
@@ -449,7 +454,8 @@ def _wyr_zamazana(p: dict, osoba: dict) -> dict:
         "id": hashlib.sha1(f"zam:{p['id']}".encode()).hexdigest()[:14], "locked": True,
         "side": p["side"], "cur": p.get("cur"), "lo": p.get("lo"), "hi": p.get("hi"),
         "net": p.get("net"), "tags": p.get("tags") or [], "sector": p.get("sector") or "",
-        "who": kto, "cat": kat, "blur": people.foto_rozmyte(p["person"]), "filed": p.get("filed"),
+        "who": kto, "cat": kat, "photo": people.foto_anonim(p["person"]),
+        "blur": people.foto_anonim(p["person"]) or people.foto_rozmyte(p["person"]), "filed": p.get("filed"),
     }
 
 
@@ -565,6 +571,17 @@ def foto(nazwa: str):
     if not _NAZWA_PLIKU.match(nazwa):
         raise HTTPException(404, "Nie ma takiego zdjęcia")
     return _jpg(people.plik_auto(nazwa))
+
+
+@router.get("/api/insiders/foto/a/{nazwa}")
+def foto_anonimowe(nazwa: str):
+    """Ostre zdjęcie pod skrótem zamiast identyfikatora — dla konta bez premium."""
+    if not _NAZWA_PLIKU.match(nazwa):
+        raise HTTPException(404, "Nie ma takiego zdjęcia")
+    sciezka = people.plik_anonim(nazwa[:-4])
+    if not sciezka:
+        raise HTTPException(404, "Nie ma takiego zdjęcia")
+    return _jpg(sciezka)
 
 
 @router.get("/api/insiders/foto/b/{nazwa}")
