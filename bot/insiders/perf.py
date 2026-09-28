@@ -215,7 +215,10 @@ def portfel(pid: str, transakcje: list[dict] | None = None) -> dict:
     from earnings import cache as e_cache
     from . import majatek
 
-    klucz = f"ins-portfel2-{pid}"
+    # klucz zmienia się z nowym raportem rocznym albo nową transakcją — inaczej
+    # wynik policzony przed wczytaniem raportu wisiałby w pamięci 12 godzin
+    ile = store.person_counts([pid]).get(pid, 0)
+    klucz = f"ins-portfel2-{pid}-{len(majatek.raporty(pid))}-{ile}"
     hit = e_cache.get(klucz, 12 * 3600) if transakcje is None else None
     if hit is not None:
         return hit
