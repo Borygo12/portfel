@@ -4,6 +4,7 @@ Uruchamiane RĘCZNIE na komputerze (Pillow jest tu, nie na serwerze):
 
     python bot/insiders/zdjecia_wiki.py            # osoby z katalogu bez zdjęcia
     python bot/insiders/zdjecia_wiki.py --od-nowa  # także te, które już mają
+    python bot/insiders/zdjecia_wiki.py --ranking  # osoby spoza katalogu z rankingu produkcji
 
 Skąd: zdjęcie z artykułu w Wikipedii (angielskiej; dla osób z GPW — polskiej),
 ALE wyłącznie wtedy, gdy plik leży w Wikimedia Commons. Zdjęcia „fair use"
@@ -226,5 +227,82 @@ na tej samej licencji. Portrety członków Kongresu to oficjalne zdjęcia Kongre
         f.write(tresc)
 
 
+_OGOLNE = {"inc", "corp", "corporation", "company", "holdings", "holding", "group", "the", "and",
+           "department", "office", "national", "of", "spolka", "akcyjna", "ltd", "plc", "trust",
+           "partners", "management", "capital", "technologies", "international", "administration"}
+
+
+def _nazwa_artykulu(nazwa: str) -> str:
+    """„Frank J Bisignano" → „Frank Bisignano" — inicjały z formularzy SEC/OGE
+    nie występują w tytułach artykułów."""
+    czesci = [c for c in nazwa.replace(".", "").split() if len(c) > 1]
+    return " ".join(czesci)
+
+
+def _pasuje(streszczenie: str, org: str, zrodlo: str) -> bool:
+    """Artykuł musi mówić o TEJ osobie: wymieniać jej spółkę albo urząd."""
+    # własna normalizacja: `people.slug` ucina tekst, a firma stoi zwykle dalej
+    t = " ".join(re.findall(r"[a-z0-9]+", people._ascii(streszczenie).lower()))
+    slowa = [w for w in re.findall(r"[a-z0-9]+", people._ascii(org).lower())
+             if len(w) > 2 and w not in _OGOLNE]
+    if any(w in t.split() for w in slowa):
+        return True
+    return zrodlo == "oge" and ("united states" in t or "american" in t) and any(
+        x in t for x in ("secretary", "administrator", "director", "commissioner", "adviser",
+                         "advisor", "federal", "trump administration"))
+
+
+def z_rankingu() -> int:
+    """Osoby spoza katalogu, które widać w rankingu i pasku produkcji — bez zdjęcia.
+    Tylko klasy z publicznie znanymi ludźmi (rząd, zarządy, rady, udziałowcy)."""
+    baza = "https://www.portevo.pl"
+    panel = _get(f"{baza}/api/insiders/panel").json()
+    osoby = {p["id"]: p for p in panel.get("leaders") or []}
+    osoby.update(panel.get("persons") or {})
+    try:
+        with open(ZRODLA, encoding="utf-8") as f:
+            zrodla = json.load(f)
+    except (OSError, ValueError):
+        zrodla = {}
+    ok, brak = [], []
+    for pid, p in osoby.items():
+        if p.get("photo") or p.get("firma") or people.curated(pid):
+            continue
+        if p.get("cat") not in ("rzad", "prezesi", "rada", "wlasciciele", "znani"):
+            continue
+        tytul = _nazwa_artykulu(p["name"])
+        r = _get("https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(tytul.replace(" ", "_")))
+        if not r or r.status_code != 200 or r.json().get("type") != "standard":
+            brak.append(f"{pid} {p['name']}: brak artykułu")
+            continue
+        s = r.json()
+        if not _pasuje(f"{s.get('description', '')} {s.get('extract', '')}", p.get("org") or p.get("role") or "",
+                       p.get("source", "")):
+            brak.append(f"{pid} {p['name']}: artykuł o kimś innym? ({s.get('description', '')[:60]})")
+            continue
+        plik = plik_z_artykulu(s.get("title") or tytul, "en")
+        meta = z_commons(plik) if plik else None
+        if not meta or not WOLNE.search(meta["licencja"]) or not meta.get("obraz"):
+            brak.append(f"{pid} {p['name']}: brak wolnego zdjęcia")
+            continue
+        obraz = _get(meta["obraz"])
+        if not obraz or obraz.status_code != 200 or not photos.zapisz(pid, obraz.content, CEL):
+            brak.append(f"{pid} {p['name']}: nie udało się pobrać")
+            continue
+        zrodla[pid] = {k: v for k, v in meta.items() if k != "obraz"} | {"osoba": p["name"]}
+        ok.append(f"{pid} {p['name']}: {meta['licencja']}")
+        time.sleep(0.4)
+    with open(ZRODLA, "w", encoding="utf-8") as f:
+        json.dump(zrodla, f, ensure_ascii=False, indent=1, sort_keys=True)
+    _strona_autorow(zrodla)
+    print(f"Pobrane: {len(ok)}")
+    for x in ok:
+        print("  +", x)
+    print(f"Bez zdjęcia: {len(brak)}")
+    for x in brak:
+        print("  ?", x)
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(z_rankingu() if "--ranking" in sys.argv else main())
