@@ -46,6 +46,39 @@ _FUNDUSZ = re.compile(r"\bFUNDS?\b|\bETF\b|MONEY\s+MARKET|\bPORTFOLIO\b|\bINDEX\
                       r"\bSERIES\b|\bINSTITUTIONAL\b|\bSHARES\b|\bTR\s+UNIT|\bFEDFUND", re.I)
 
 
+# ETF-y: w zgłoszeniach pod nazwami towarzystw („VANGUARD DIVIDEND APPRECIATION
+# INDEX FUND ETF SHARES"), które mapa spółek celowo odrzuca (fundusz ≠ akcje
+# towarzystwa). Bez tej listy zakupy ETF-ów Trumpa po kilka mln $ w ogóle nie
+# trafiały do bazy. Lista z raportu rocznego Trumpa za 2025 (28.09.2026).
+_ETF: list[tuple[str, str]] = [
+    (r"VANGUARD DIVIDEND APPRECIATION", "VIG"), (r"SPDR PORTFOLIO S&P 500", "SPLG"),
+    (r"EXPANDED TECH SECTOR", "IGV"), (r"S&P 500 QUALITY", "SPHQ"), (r"^SPDR S&P 500 ETF", "SPY"),
+    (r"RUSSELL MID ?CAP ETF", "IWR"), (r"VANGUARD GROWTH ETF", "VUG"),
+    (r"FINANCIAL SELECT SECTOR|FINCL SLCT SECTOR", "XLF"),
+    (r"CONSUMER DISCRETIONARY ETF", "VCR"), (r"VANGUARD RUSSELL 2000", "VTWO"),
+    (r"ISHARES SILVER", "SLV"), (r"ISHARES SELECT DIVIDEND", "DVY"), (r"REGIONAL BANKS ETF", "IAT"),
+    (r"SMALLCAP GROWTH ETF", "VBK"), (r"MEGA CAP GROWTH", "MGK"), (r"ISHARES CORE S&P 500", "IVV"),
+    (r"HIGH DIVIDEND YIELD", "VYM"), (r"ISHARES GOLD", "IAU"), (r"TOTAL STOCK MARKET", "VTI"),
+    (r"COMTN SR SLCT SCTR|COMMUNICATION SERVICES SELECT", "XLC"),
+    (r"CNSR STPLS|CONSUMER STAPLES SELECT", "XLP"), (r"CORE MSCI INTRL DVLP|CORE MSCI EAFE", "IEFA"),
+    (r"GSCI CMD DYN", "COMT"), (r"QQQ TRUST", "QQQ"), (r"CONS DSRY SLT|CONSUMER DISCRETIONARY SELECT", "XLY"),
+    (r"TEC SELECT SEC|TECHNOLOGY SELECT SECTOR", "XLK"), (r"INTERNATIONAL TRSRY BND|INTERNATIONAL TREASURY BOND", "IGOV"),
+    (r"HLTH CRE SLT|HEALTH CARE SELECT", "XLV"), (r"FTSE EUROPE", "VGK"),
+    (r"GLOBAL NATURAL RESOURC", "GNR"), (r"CRRNCY HDG MSCI EURZN", "HEZU"), (r"MSCI JAPAN", "EWJ"),
+    (r"CORE MSCI PACIFIC", "IPAC"), (r"ENRGY SLECT|ENERGY SELECT SECTOR", "XLE"),
+    (r"INTERMEDIATE TERM COR", "VCIT"), (r"VANGUARD S&P 500", "VOO"),
+    (r"RUSSELL 1000 ETF", "IWB"), (r"U\.?S\.? TREASURY BOND ETF", "GOVT"),
+    (r"SHORT-TERM BOND INDEX", "BSV"), (r"MSCI COMMUNICATION SERVICES INDEX", "FCOM"),
+]
+_ETF_RE = [(re.compile(w, re.I), t) for w, t in _ETF]
+
+
+
+def etf(opis: str) -> str | None:
+    """Ticker ETF-u po nazwie z formularza albo None."""
+    return next((t for wz, t in _ETF_RE if wz.search(opis or "")), None)
+
+
 def _to_akcja(sym: str) -> bool:
     """Fundusze inwestycyjne (DODFX) i rynku pieniężnego (SWVXX) mają pięcioliterowe
     symbole kończące się na X. To nie są akcje ani ETF-y z giełdy — na wykresie
@@ -141,6 +174,9 @@ class Mapa:
         if podany:
             return podany.upper().replace(".", "-")
         o = (opis or "").strip()
+        e = etf(o)                                   # ETF obligacyjny to też ETF
+        if e:
+            return e
         if not o or _OBLIGACJA.search(o):
             return ""
         t = self.dokladne.get(o.upper())
@@ -148,6 +184,7 @@ class Mapa:
             return t.replace(".", "-")
         if _FUNDUSZ.search(o):
             return ""
+        o = re.sub(r"\bCLASS\s+CLASS\b", "CLASS", o, flags=re.I)     # „ALPHABET INC CLASS CLASS C"
         n = _norm(o)
         if len(n) < 5:
             # Krótkie nazwy („NIKE", „AON", „IAC") tylko przy dokładnej zgodności —
@@ -245,6 +282,9 @@ def wczytaj(wymus: bool = False) -> dict:
 
 def _zapisz(u: dict, dane: dict, mapa: Mapa, stat: dict) -> list[str]:
     slug = u["slug"]
+    # lista formularzy (w tym raportów rocznych) dla majatek.py — żeby nie pobierał
+    # drugi raz pliku, który u Trumpa ma 15 MB
+    store.kv_set(f"oge:filings:{slug}", dane.get("sourceFilings") or [])
     pid = people.for_oge(slug)
     kat = people.curated(pid)
     trump = slug == "trump-donald-j"

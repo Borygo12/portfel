@@ -152,7 +152,7 @@ def przelicz_wyniki(wymus: bool = False) -> dict:
 
 
 def _petla() -> None:
-    from . import f13, gpw, house, kongres, oge, sec, senat
+    from . import f13, gpw, house, kongres, majatek, oge, sec, senat
 
     log.info("Insiderzy: zegar wystartował (baza: %s)", store.path())
     if not store.kv_get("init_done"):
@@ -171,6 +171,15 @@ def _petla() -> None:
             store.kv_set("init_done", time.time())
             log.info("Insiderzy: pierwsze wypełnienie gotowe — %s", store.counts())
 
+    # Jednorazowo po wdrożeniu mapy ETF-ów (28.09.2026): pełne ponowne czytanie
+    # OGE — zakupy ETF-ów były dotąd pomijane, a pliki się nie zmieniły (ETag).
+    if not store.kv_get("oge:etf_v1"):
+        if _zrob("oge_etf", lambda: oge.wczytaj(wymus=True)) is not None:
+            store.kv_set("oge:etf_v1", time.time())
+    if not store.kv_get("majatek:v1"):
+        if _zrob("majatek", lambda: majatek.odswiez(stop=_stop)) is not None:
+            store.kv_set("majatek:v1", time.time())
+
     ost = {"biezace": 0.0, "gpw": 0.0, "izba": time.time(), "oge": time.time(),
            "doba": time.time()}
     while not _stop.is_set():
@@ -188,6 +197,7 @@ def _petla() -> None:
         if teraz - ost["oge"] >= CO_OGE:
             ost["oge"] = teraz
             _zrob("oge", oge.wczytaj)
+            _zrob("majatek", lambda: majatek.odswiez(stop=_stop))
         if teraz - ost["doba"] >= CO_DOBA:
             ost["doba"] = teraz
             _zrob("sec_kwartaly", sec.historia)

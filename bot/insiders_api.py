@@ -402,7 +402,9 @@ def person_portfel(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
     if not store.people_rows([pid]) and not people.curated(pid):
         raise HTTPException(404, "Nie znamy takiej persony")
     wynik = perf.portfel(pid)
-    return {**wynik, "spolki": [{**x, "name": _walor(x.get("name") or "")} for x in wynik.get("spolki") or []]}
+    return {**wynik,
+            "spolki": [{**x, "name": _walor(x.get("name") or "")} for x in wynik.get("spolki") or []],
+            "teraz": [{**x, "name": _walor(x.get("name") or "")} for x in wynik.get("teraz") or []]}
 
 
 @router.get("/api/insiders/person/{pid}/ai")

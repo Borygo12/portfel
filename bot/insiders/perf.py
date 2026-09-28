@@ -186,61 +186,89 @@ def _kwota(t: dict) -> float:
 
 PORTFEL_DNI = 730            # tyle sięgają notowania z Yahoo (range=2y)
 PORTFEL_PUNKTY = 260
+PORTFEL_SPOLEK = 120         # bez raportu rocznego — jak w `policz`
+PORTFEL_SPOLEK_Z_RAPORTEM = 300   # z raportem: Trump ma ~1200 spółek, 300 to ~92% wartości
 
 
 def portfel(pid: str, transakcje: list[dict] | None = None) -> dict:
-    """Portfel odtworzony z ujawnionych transakcji — wycena dzień po dniu z dwóch lat.
+    """Portfel odtworzony z transakcji — wycena dzień po dniu z dwóch lat.
 
-    Zasady te same co w `policz`: zakup = kwota po kursie z dnia (SEC: cena
-    z formularza), sprzedaż zdejmuje akcje kupione wcześniej W OKNIE i zamienia
-    je na gotówkę. Sprzedaży akcji sprzed okna nie rozliczamy (nie znamy ceny
-    zakupu). W każdym dniu:
+    Dwa tryby:
 
-    * `v` — wartość: akcje × kurs zamknięcia + gotówka ze sprzedaży,
-    * `w` — wpłacone: suma zakupów do tego dnia,
-    * zysk = v − w (aplikacja liczy go sama, także dla wybranego okresu).
+    1. **Same transakcje** (Kongres, prezesi): zakup = kwota po kursie z dnia
+       (SEC: cena z formularza), sprzedaż zdejmuje akcje kupione wcześniej
+       W OKNIE i zamienia je na gotówkę. Sprzedaży akcji sprzed okna nie da się
+       rozliczyć — nie znamy ceny zakupu.
+    2. **Raport roczny + transakcje** (prezydent, rząd — `majatek.py`): start od
+       stanu z najstarszego raportu w oknie (każda pozycja wyceniona środkiem
+       przedziału), na to transakcje. Stan startowy liczy się jako „wkład"
+       w dniu raportu, więc zysk pokazuje tylko to, co przyszło potem.
+       Kolejne raporty to punkty kontrolne na wykresie (`raporty`).
 
-    Wynik trafia do pamięci podręcznej na 12 h — pierwsze liczenie osoby
-    z setką spółek to kilkadziesiąt zapytań o notowania.
+    W każdym dniu: `v` — akcje × kurs + gotówka ze sprzedaży, `w` — wkład
+    (start + zakupy). Zysk = v − w liczy aplikacja, także dla wybranego okresu.
+    Dodatkowo: `teraz` (największe pozycje dziś), `spolki` (najlepsze
+    i najgorsze), `miesiace` (kupno i sprzedaż miesiąc po miesiącu).
+
+    Cache 12 h — pierwsze liczenie Trumpa to kilkaset zapytań o notowania.
     """
     from earnings import cache as e_cache
+    from . import majatek
 
-    klucz = f"ins-portfel-{pid}"
+    klucz = f"ins-portfel2-{pid}"
     hit = e_cache.get(klucz, 12 * 3600) if transakcje is None else None
     if hit is not None:
         return hit
     dzis = dt.date.today()
     od = (dzis - dt.timedelta(days=PORTFEL_DNI)).isoformat()
-    wszystkie = transakcje if transakcje is not None else store.trades_for_person(pid, limit=40000)
-    okno = sorted((t for t in wszystkie if t["date"] >= od and t.get("ticker")), key=lambda t: t["date"])
+    wszystkie = transakcje if transakcje is not None else store.trades_for_person(pid, limit=60000)
+
+    # --- raporty roczne: start i punkty kontrolne
+    raporty = [r for r in majatek.raporty(pid) if r.get("pozycje")]
+    start = next((r for r in raporty if r["data"] >= od), None)
+    if start:
+        od = start["data"]
+    okno = sorted((t for t in wszystkie if t["date"] > od and t.get("ticker")) if start else
+                  (t for t in wszystkie if t["date"] >= od and t.get("ticker")), key=lambda t: t["date"])
     kupna = [t for t in okno if t["side"] == "buy"]
+
     wynik: dict = {"d": [], "v": [], "w": [], "cur": "PLN" if any(t.get("cur") == "PLN" for t in okno) else "USD",
-                   "spolki": [], "pokrycie": 0.0, "wycenione": 0, "od": None,
-                   "szacunek": any(t.get("source") != "sec" for t in okno)}
-    if not kupna:
-        e_cache.put(klucz, wynik)
+                   "spolki": [], "teraz": [], "miesiace": _miesiace(okno), "raporty": [],
+                   "pokrycie": 0.0, "wycenione": 0, "od": None, "start": None,
+                   "szacunek": any(t.get("source") != "sec" for t in okno) or bool(start)}
+    if not kupna and not start:
+        _zapisz(e_cache, klucz, wynik, transakcje)
         return wynik
 
+    # --- które spółki wyceniać: największe według startu + zakupów
     wagi: dict[str, float] = {}
+    if start:
+        for sym, (lo, hi) in start["pozycje"].items():
+            wagi[sym] = wagi.get(sym, 0.0) + (lo + hi) / 2
     for t in kupna:
         wagi[t["ticker"]] = wagi.get(t["ticker"], 0.0) + _kwota(t)
-    do_wyceny = [k for k, _ in sorted(wagi.items(), key=lambda x: -x[1])[:MAX_TICKEROW]]
+    limit = PORTFEL_SPOLEK_Z_RAPORTEM if start else PORTFEL_SPOLEK
+    do_wyceny = [k for k, _ in sorted(wagi.items(), key=lambda x: -x[1])[:limit]]
     with ThreadPoolExecutor(max_workers=6) as pool:
         kursy = {k: v for k, v in zip(do_wyceny, pool.map(notowania, do_wyceny)) if v}
-
-    pierwszy = min(t["date"] for t in kupna if t["ticker"] in kursy) if kursy else None
-    if not pierwszy:
-        e_cache.put(klucz, wynik)
-        return wynik
-    # oś czasu: dni sesyjne ze wszystkich wycenionych spółek, od pierwszego zakupu
-    dni = sorted({d for px in kursy.values() for d in px["d"] if d >= pierwszy})
-    if not dni:
-        e_cache.put(klucz, wynik)
+    if not kursy:
+        _zapisz(e_cache, klucz, wynik, transakcje)
         return wynik
 
-    # zdarzenia: (dzień, ticker, zmiana akcji, zmiana wpłat, zmiana gotówki)
+    # --- zdarzenia: (dzień, ticker, zmiana akcji, zmiana wkładu, zmiana gotówki)
     zdarzenia: list[tuple[str, str, float, float, float]] = []
     akcje_teraz: dict[str, float] = {}
+    wartosc_startu = 0.0
+    if start:
+        for sym, (lo, hi) in start["pozycje"].items():
+            px = kursy.get(sym)
+            cena = kurs_z_dnia(px, start["data"]) if px else None
+            if not cena:
+                continue
+            kw = (lo + hi) / 2
+            akcje_teraz[sym] = kw / cena
+            wartosc_startu += kw
+            zdarzenia.append((start["data"], sym, kw / cena, kw, 0.0))
     for t in okno:
         sym = t["ticker"]
         px = kursy.get(sym)
@@ -264,41 +292,56 @@ def portfel(pid: str, transakcje: list[dict] | None = None) -> dict:
             szt = min(akcje_teraz[sym], kw / cena)
             akcje_teraz[sym] -= szt
             zdarzenia.append((t["date"], sym, -szt, 0.0, szt * cena))
-
-    # wycena dzień po dniu — kurs z ostatniej sesji danej spółki (dziury w notowaniach)
-    idx = {sym: 0 for sym in kursy}
-    ostatni = {sym: None for sym in kursy}
-    akcje: dict[str, float] = {}
-    wplacone = gotowka = 0.0
-    j = 0
     zdarzenia.sort(key=lambda z: z[0])
+    if not zdarzenia:
+        _zapisz(e_cache, klucz, wynik, transakcje)
+        return wynik
+
+    # --- wycena dzień po dniu (kurs z ostatniej sesji danej spółki)
+    pierwszy = zdarzenia[0][0]
+    dni = sorted({d for px in kursy.values() for d in px["d"] if d >= pierwszy})
+    idx = {sym: 0 for sym in kursy}
+    ostatni: dict[str, float | None] = {sym: None for sym in kursy}
+    akcje: dict[str, float] = {}
     per_sym = {sym: {"w": 0.0, "g": 0.0} for sym in kursy}
+    wklad = gotowka = 0.0
+    j = 0
+    punkty_kontrolne = {r["data"]: r for r in raporty if r is not start and r["data"] > (pierwszy or "")}
     for d in dni:
         while j < len(zdarzenia) and zdarzenia[j][0] <= d:
             _, sym, szt, kw, got = zdarzenia[j]
             akcje[sym] = akcje.get(sym, 0.0) + szt
-            wplacone += kw
-            gotowka += got
+            # Zakup najpierw zużywa gotówkę ze wcześniejszych sprzedaży — nowe
+            # pieniądze to dopiero nadwyżka. Inaczej konto, które ciągle przestawia
+            # pozycje (Trump), „wpłacałoby" każdą kwotę dwa razy. Zysk (v − w)
+            # się od tego nie zmienia, zmienia się sens „wpłaconych".
+            z_gotowki = min(gotowka, kw)
+            gotowka += got - z_gotowki
+            wklad += kw - z_gotowki
             per_sym[sym]["w"] += kw
             per_sym[sym]["g"] += got
             j += 1
-        wartosc = gotowka
+        w_akcjach = 0.0
         for sym, szt in akcje.items():
-            if szt <= 0:
-                continue
             px = kursy[sym]
             i = idx[sym]
             while i < len(px["d"]) and px["d"][i] <= d:
                 ostatni[sym] = px["c"][i]
                 i += 1
             idx[sym] = i
-            if ostatni[sym]:
-                wartosc += szt * ostatni[sym]
+            if szt > 0 and ostatni[sym]:
+                w_akcjach += szt * ostatni[sym]
         wynik["d"].append(d)
-        wynik["v"].append(round(wartosc, 2))
-        wynik["w"].append(round(wplacone, 2))
+        wynik["v"].append(round(w_akcjach + gotowka, 2))
+        wynik["w"].append(round(wklad, 2))
+        # punkt kontrolny: raport roczny z datą między poprzednią a tą sesją
+        for data_r in [x for x in punkty_kontrolne if x <= d]:
+            r = punkty_kontrolne.pop(data_r)
+            lo = r["kategorie"]["akcje"][0] + r["kategorie"]["etf"][0]
+            hi = r["kategorie"]["akcje"][1] + r["kategorie"]["etf"][1]
+            wynik["raporty"].append({"data": data_r, "lo": lo, "hi": hi,
+                                     "model": round(w_akcjach), "gotowka_modelu": round(gotowka)})
 
-    # zrzedzenie do ~260 punktów, zawsze z ostatnim dniem
     n = len(wynik["d"])
     if n > PORTFEL_PUNKTY:
         krok = n / PORTFEL_PUNKTY
@@ -306,25 +349,52 @@ def portfel(pid: str, transakcje: list[dict] | None = None) -> dict:
         for k in ("d", "v", "w"):
             wynik[k] = [wynik[k][i] for i in ind]
 
-    # na czym zarobił, na czym stracił — wartość dziś pozycji + gotówka z niej − wpłaty
-    spolki = []
+    # --- pozycje: zysk na spółce i co jest w portfelu dziś
     nazwy = {t["ticker"]: t.get("asset") or "" for t in okno}
+    spolki, teraz = [], []
     for sym, sumy in per_sym.items():
         if sumy["w"] <= 0:
             continue
         szt = akcje.get(sym, 0.0)
-        teraz = (szt * kursy[sym]["c"][-1] if szt > 0 else 0.0) + sumy["g"]
+        kurs = kursy[sym]["c"][-1]
+        dzis_w = szt * kurs if szt > 0 else 0.0
         spolki.append({"ticker": sym, "name": nazwy.get(sym, "")[:60], "w": round(sumy["w"], 2),
-                       "z": round(teraz - sumy["w"], 2),
-                       "pct": round((teraz / sumy["w"] - 1) * 100, 1), "trzyma": szt > 0})
+                       "z": round(dzis_w + sumy["g"] - sumy["w"], 2),
+                       "pct": round(((dzis_w + sumy["g"]) / sumy["w"] - 1) * 100, 1), "trzyma": szt > 0})
+        if dzis_w > 0:
+            teraz.append({"ticker": sym, "name": nazwy.get(sym, "")[:60], "v": round(dzis_w, 2)})
     spolki.sort(key=lambda x: -x["z"])
-    kupione = sum(_kwota(t) for t in kupna)
-    wynik.update(spolki=spolki[:6] + [x for x in spolki[-6:] if x["z"] < 0 and x not in spolki[:6]],
-                 pokrycie=round(min(1.0, wplacone / kupione), 3) if kupione else 0.0,
-                 wycenione=len([s for s in per_sym.values() if s["w"] > 0]), od=dni[0])
+    teraz.sort(key=lambda x: -x["v"])
+    w_akcjach_dzis = sum(x["v"] for x in teraz) or 1.0
+    for x in teraz:
+        x["pct"] = round(x["v"] / w_akcjach_dzis * 100, 1)
+    kupione = sum(_kwota(t) for t in kupna) + sum((lo + hi) / 2 for lo, hi in (start or {}).get("pozycje", {}).values())
+    wynik.update(
+        spolki=spolki[:6] + [x for x in spolki[-6:] if x["z"] < 0 and x not in spolki[:6]],
+        teraz=teraz[:12], akcje_dzis=round(sum(x["v"] for x in teraz)), gotowka=round(gotowka),
+        liczba_pozycji=len(teraz),
+        pokrycie=round(min(1.0, sum(z[3] for z in zdarzenia) / kupione), 3) if kupione else 0.0,
+        wycenione=len([s for s in per_sym.values() if s["w"] > 0]), od=dni[0] if dni else None,
+        start={"data": start["data"], "wartosc": round(wartosc_startu)} if start else None,
+        majatek=[{"data": r["data"], "kategorie": r["kategorie"]} for r in raporty],
+    )
+    _zapisz(e_cache, klucz, wynik, transakcje)
+    return wynik
+
+
+def _miesiace(okno: list[dict]) -> list[dict]:
+    """Kupno i sprzedaż miesiąc po miesiącu (kwoty ze środka przedziałów)."""
+    m: dict[str, list[float]] = {}
+    for t in okno:
+        k = t["date"][:7]
+        para = m.setdefault(k, [0.0, 0.0])
+        para[0 if t["side"] == "buy" else 1] += _kwota(t)
+    return [{"m": k, "k": round(a), "s": round(b)} for k, (a, b) in sorted(m.items())]
+
+
+def _zapisz(e_cache, klucz: str, wynik: dict, transakcje) -> None:
     if transakcje is None:
         e_cache.put(klucz, wynik)
-    return wynik
 
 
 def statystyki(pid: str, max_wiek: float = 12 * 3600, wymus: bool = False) -> dict:
