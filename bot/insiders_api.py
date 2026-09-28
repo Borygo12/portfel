@@ -393,6 +393,18 @@ def person(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
     }
 
 
+@router.get("/api/insiders/person/{pid}/portfel")
+def person_portfel(pid: str, v: sa.Viewer = Depends(require_premium(FEATURE))):
+    """Portfel odtworzony z transakcji: wartość i wpłaty dzień po dniu z dwóch lat
+    oraz spółki, na których persona najwięcej zarobiła i straciła (`perf.portfel`).
+    Osobno od profilu — pierwsze liczenie potrafi trwać kilkanaście sekund."""
+    from insiders import perf
+    if not store.people_rows([pid]) and not people.curated(pid):
+        raise HTTPException(404, "Nie znamy takiej persony")
+    wynik = perf.portfel(pid)
+    return {**wynik, "spolki": [{**x, "name": _walor(x.get("name") or "")} for x in wynik.get("spolki") or []]}
+
+
 @router.get("/api/insiders/person/{pid}/ai")
 def person_ai(pid: str, again: int = 0, v: sa.Viewer = Depends(require_premium(FEATURE))):
     """Wspólne podsumowanie persony. Samo otwarcie profilu (`again=0`) tylko CZYTA

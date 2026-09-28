@@ -184,6 +184,149 @@ def _kwota(t: dict) -> float:
     return srodek(t)
 
 
+PORTFEL_DNI = 730            # tyle sięgają notowania z Yahoo (range=2y)
+PORTFEL_PUNKTY = 260
+
+
+def portfel(pid: str, transakcje: list[dict] | None = None) -> dict:
+    """Portfel odtworzony z ujawnionych transakcji — wycena dzień po dniu z dwóch lat.
+
+    Zasady te same co w `policz`: zakup = kwota po kursie z dnia (SEC: cena
+    z formularza), sprzedaż zdejmuje akcje kupione wcześniej W OKNIE i zamienia
+    je na gotówkę. Sprzedaży akcji sprzed okna nie rozliczamy (nie znamy ceny
+    zakupu). W każdym dniu:
+
+    * `v` — wartość: akcje × kurs zamknięcia + gotówka ze sprzedaży,
+    * `w` — wpłacone: suma zakupów do tego dnia,
+    * zysk = v − w (aplikacja liczy go sama, także dla wybranego okresu).
+
+    Wynik trafia do pamięci podręcznej na 12 h — pierwsze liczenie osoby
+    z setką spółek to kilkadziesiąt zapytań o notowania.
+    """
+    from earnings import cache as e_cache
+
+    klucz = f"ins-portfel-{pid}"
+    hit = e_cache.get(klucz, 12 * 3600) if transakcje is None else None
+    if hit is not None:
+        return hit
+    dzis = dt.date.today()
+    od = (dzis - dt.timedelta(days=PORTFEL_DNI)).isoformat()
+    wszystkie = transakcje if transakcje is not None else store.trades_for_person(pid, limit=40000)
+    okno = sorted((t for t in wszystkie if t["date"] >= od and t.get("ticker")), key=lambda t: t["date"])
+    kupna = [t for t in okno if t["side"] == "buy"]
+    wynik: dict = {"d": [], "v": [], "w": [], "cur": "PLN" if any(t.get("cur") == "PLN" for t in okno) else "USD",
+                   "spolki": [], "pokrycie": 0.0, "wycenione": 0, "od": None,
+                   "szacunek": any(t.get("source") != "sec" for t in okno)}
+    if not kupna:
+        e_cache.put(klucz, wynik)
+        return wynik
+
+    wagi: dict[str, float] = {}
+    for t in kupna:
+        wagi[t["ticker"]] = wagi.get(t["ticker"], 0.0) + _kwota(t)
+    do_wyceny = [k for k, _ in sorted(wagi.items(), key=lambda x: -x[1])[:MAX_TICKEROW]]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        kursy = {k: v for k, v in zip(do_wyceny, pool.map(notowania, do_wyceny)) if v}
+
+    pierwszy = min(t["date"] for t in kupna if t["ticker"] in kursy) if kursy else None
+    if not pierwszy:
+        e_cache.put(klucz, wynik)
+        return wynik
+    # oś czasu: dni sesyjne ze wszystkich wycenionych spółek, od pierwszego zakupu
+    dni = sorted({d for px in kursy.values() for d in px["d"] if d >= pierwszy})
+    if not dni:
+        e_cache.put(klucz, wynik)
+        return wynik
+
+    # zdarzenia: (dzień, ticker, zmiana akcji, zmiana wpłat, zmiana gotówki)
+    zdarzenia: list[tuple[str, str, float, float, float]] = []
+    akcje_teraz: dict[str, float] = {}
+    for t in okno:
+        sym = t["ticker"]
+        px = kursy.get(sym)
+        if not px:
+            continue
+        z_wykresu = kurs_z_dnia(px, t["date"])
+        cena = t.get("price") or z_wykresu
+        # Form 4 podaje cenę nominalną, Yahoo — po splitach. Rozjazd ponad 30% to
+        # split (albo literówka w formularzu): wtedy kurs z wykresu, inaczej wycena
+        # po splicie pokazałaby „zysk" kilkuset procent.
+        if cena and z_wykresu and abs(cena / z_wykresu - 1) > 0.3:
+            cena = z_wykresu
+        if not cena:
+            continue
+        kw = _kwota(t)
+        if t["side"] == "buy":
+            szt = kw / cena
+            akcje_teraz[sym] = akcje_teraz.get(sym, 0.0) + szt
+            zdarzenia.append((t["date"], sym, szt, kw, 0.0))
+        elif akcje_teraz.get(sym, 0) > 0:
+            szt = min(akcje_teraz[sym], kw / cena)
+            akcje_teraz[sym] -= szt
+            zdarzenia.append((t["date"], sym, -szt, 0.0, szt * cena))
+
+    # wycena dzień po dniu — kurs z ostatniej sesji danej spółki (dziury w notowaniach)
+    idx = {sym: 0 for sym in kursy}
+    ostatni = {sym: None for sym in kursy}
+    akcje: dict[str, float] = {}
+    wplacone = gotowka = 0.0
+    j = 0
+    zdarzenia.sort(key=lambda z: z[0])
+    per_sym = {sym: {"w": 0.0, "g": 0.0} for sym in kursy}
+    for d in dni:
+        while j < len(zdarzenia) and zdarzenia[j][0] <= d:
+            _, sym, szt, kw, got = zdarzenia[j]
+            akcje[sym] = akcje.get(sym, 0.0) + szt
+            wplacone += kw
+            gotowka += got
+            per_sym[sym]["w"] += kw
+            per_sym[sym]["g"] += got
+            j += 1
+        wartosc = gotowka
+        for sym, szt in akcje.items():
+            if szt <= 0:
+                continue
+            px = kursy[sym]
+            i = idx[sym]
+            while i < len(px["d"]) and px["d"][i] <= d:
+                ostatni[sym] = px["c"][i]
+                i += 1
+            idx[sym] = i
+            if ostatni[sym]:
+                wartosc += szt * ostatni[sym]
+        wynik["d"].append(d)
+        wynik["v"].append(round(wartosc, 2))
+        wynik["w"].append(round(wplacone, 2))
+
+    # zrzedzenie do ~260 punktów, zawsze z ostatnim dniem
+    n = len(wynik["d"])
+    if n > PORTFEL_PUNKTY:
+        krok = n / PORTFEL_PUNKTY
+        ind = sorted({int(i * krok) for i in range(PORTFEL_PUNKTY)} | {n - 1})
+        for k in ("d", "v", "w"):
+            wynik[k] = [wynik[k][i] for i in ind]
+
+    # na czym zarobił, na czym stracił — wartość dziś pozycji + gotówka z niej − wpłaty
+    spolki = []
+    nazwy = {t["ticker"]: t.get("asset") or "" for t in okno}
+    for sym, sumy in per_sym.items():
+        if sumy["w"] <= 0:
+            continue
+        szt = akcje.get(sym, 0.0)
+        teraz = (szt * kursy[sym]["c"][-1] if szt > 0 else 0.0) + sumy["g"]
+        spolki.append({"ticker": sym, "name": nazwy.get(sym, "")[:60], "w": round(sumy["w"], 2),
+                       "z": round(teraz - sumy["w"], 2),
+                       "pct": round((teraz / sumy["w"] - 1) * 100, 1), "trzyma": szt > 0})
+    spolki.sort(key=lambda x: -x["z"])
+    kupione = sum(_kwota(t) for t in kupna)
+    wynik.update(spolki=spolki[:6] + [x for x in spolki[-6:] if x["z"] < 0 and x not in spolki[:6]],
+                 pokrycie=round(min(1.0, wplacone / kupione), 3) if kupione else 0.0,
+                 wycenione=len([s for s in per_sym.values() if s["w"] > 0]), od=dni[0])
+    if transakcje is None:
+        e_cache.put(klucz, wynik)
+    return wynik
+
+
 def statystyki(pid: str, max_wiek: float = 12 * 3600, wymus: bool = False) -> dict:
     if not wymus:
         hit = store.stats_get(pid, max_wiek)
