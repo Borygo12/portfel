@@ -353,6 +353,37 @@ async def contact(request: Request, v: sa.Viewer = Depends(require_login)):
     return {"ok": True, "delivered": delivered}
 
 
+@router.post("/api/app-rating")
+async def app_rating(request: Request, v: sa.Viewer = Depends(require_login)):
+    """Odpowiedź z okienka „Podoba Ci się Portevo?" w aplikacji na telefon.
+
+    Każda odpowiedź idzie do dziennika zdarzeń (`app_rating`), żeby w Kokpicie
+    było widać, ilu ludzi zapytaliśmy i co odpowiedzieli. Uwaga przy „nie"
+    trafia jak wiadomość kontaktowa — na skrzynkę i do kopii — ale BEZ bramki
+    premium: to my prosimy o zdanie, więc nie wolno go blokować.
+    """
+    import mailer
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    answer = str(body.get("answer") or "").strip().lower()
+    if answer not in ("tak", "nie", "pozniej", "ocena"):
+        raise HTTPException(400, "Nieznana odpowiedź")
+    message = str(body.get("message") or "").strip()[:2000]
+    platform = str(body.get("platform") or "mobile")[:20]
+
+    delivered = None
+    if message:
+        topic = "Opinia z aplikacji (nie podoba się)" if answer == "nie" else "Opinia z aplikacji"
+        mailer.store_feedback(v.user_id, v.email, topic, message)
+        delivered = mailer.send_contact(v.email, topic, message)
+    sync.log_event(v.user_id or None, "app_rating", answer, platform,
+                   {"has_message": bool(message), "delivered": delivered})
+    return {"ok": True}
+
+
 # ----------------------------------------------------------- kody polecające
 #
 # Logika i uzasadnienia są w `polecenia.py`. Tu tylko wejście: kto pyta i skąd.
