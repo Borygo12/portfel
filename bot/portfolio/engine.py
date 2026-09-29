@@ -413,6 +413,7 @@ def _compute_now(key: str) -> dict:
     cash_list = [(a, parsed["accounts"][a], cash_step[a].at(today))
                  for a in parsed["accounts"] if a in cash_step]
     paid = fees.measure(parsed["ops"], parsed["accounts"], to_pln)
+    dividends = _dividends_received(parsed["ops"], parsed["accounts"], to_pln, today)
     exit_cost = fees.exit_costs(
         positions, cash_list, pos_account, cfg,
         lambda ccy: fx_step.get(ccy, fx_step["PLN"]).at(today))
@@ -465,11 +466,61 @@ def _compute_now(key: str) -> dict:
             "value_net": value_net,
             "profit_net": round(value_net - (deposits - withdrawals), 2),
             "fees_paid": paid["total_pln"],
+            # dywidendy, które REALNIE wpłynęły na rachunek (z historii operacji)
+            "dividends_gross": dividends["gross"],
+            "dividends_tax": dividends["tax"],
+            "dividends_net": dividends["net"],
+            "dividends_net_12m": dividends["net_12m"],
+            "dividends_count": dividends["count"],
         },
         "computed_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
         "quotes": _quotes_freshness(quotes, positions),
     }
     return _zapisz_memo(key, data)
+
+
+def _is_dividend(typ: str) -> bool:
+    t = (typ or "").lower()
+    return "dividend" in t or "dywidend" in t
+
+
+def _is_dividend_tax(typ: str) -> bool:
+    # XTB księguje podatek u źródła jako osobną operację „Withholding tax" tuż
+    # obok wypłaty. „Free funds interest tax" to podatek od odsetek — nie nasz.
+    t = (typ or "").lower()
+    return "withholding" in t or ("tax" in t and ("dividend" in t or "dywidend" in t))
+
+
+def _dividends_received(ops: list, accounts: dict, to_pln, today: str) -> dict:
+    """Dywidendy, które wpłynęły na rachunek: brutto, podatek u źródła i netto w PLN.
+
+    Liczymy z operacji w walucie konta po kursie z dnia wpłaty — tak, jak te
+    pieniądze realnie zasiliły gotówkę. Podatek w Polsce (dopłata do 19%)
+    rozlicza się dopiero w PIT-38, więc tu go nie ma: „netto" to kwota,
+    która faktycznie leży na koncie.
+    """
+    rok_temu = (datetime.date.fromisoformat(today) - datetime.timedelta(days=365)).isoformat()
+    gross = tax = net_12m = 0.0
+    count = 0
+    for op in ops:
+        typ = op["type"]
+        if _is_dividend_tax(typ):
+            kind = "tax"
+        elif _is_dividend(typ):
+            kind = "div"
+        else:
+            continue
+        d = _dstr(op["time"])
+        pln = to_pln(op["amount"], accounts.get(op["account"], "PLN"), d)
+        if kind == "div":
+            gross += pln
+            count += 1
+        else:
+            tax += -pln
+        if d >= rok_temu:
+            net_12m += pln
+    return {"gross": round(gross, 2), "tax": round(tax, 2), "net": round(gross - tax, 2),
+            "net_12m": round(net_12m, 2), "count": count}
 
 
 def holdings(days: list) -> dict:

@@ -586,8 +586,18 @@ def portfolio(_v=Depends(require_premium("tools.dividends"))):
         [x for x in pozycje if isinstance(x["dni_do_ex"], int) and x["dni_do_ex"] >= 0],
         key=lambda x: x["dni_do_ex"])[:6]
 
+    sm = d.get("summary") or {}
     return {
         "empty": False,
+        # Co już REALNIE wpłynęło na rachunek — z historii operacji brokera,
+        # a nie z wyliczeń. Obok prognozy to jedyna liczba nie do podważenia.
+        "otrzymane": {
+            "brutto": sm.get("dividends_gross", 0.0),
+            "podatek": sm.get("dividends_tax", 0.0),
+            "netto": sm.get("dividends_net", 0.0),
+            "netto_12m": sm.get("dividends_net_12m", 0.0),
+            "wyplat": sm.get("dividends_count", 0),
+        },
         "pozycje": pozycje,
         "bez_dywidendy": bez_dywidendy,
         "poza_katalogiem": poza_katalogiem,
@@ -606,6 +616,149 @@ def portfolio(_v=Depends(require_premium("tools.dividends"))):
             "pozycji_bez": len(bez_dywidendy),
         },
         "najblizsze_wyplaty": najblizsze,
+    }
+
+
+def _kurs_pln(waluta: str) -> float | None:
+    """Dzisiejszy kurs waluty do złotego. None, gdy nie umiemy go ustalić."""
+    waluta = (waluta or "PLN").upper()
+    if waluta == "PLN":
+        return 1.0
+    try:
+        from portfolio import prices
+        lfx = prices.live_fx({waluta}).get(waluta)
+        if lfx and lfx.get("price"):
+            return float(lfx["price"])
+        seria = prices.fx_series(waluta, (dt.date.today() - dt.timedelta(days=14)).isoformat())
+        if seria:
+            return float(seria[max(seria)])
+    except Exception as e:  # noqa: BLE001
+        log.warning("Kurs %s: %s", waluta, e)
+    return None
+
+
+@router.get("/api/dividends/my-calendar")
+def my_calendar(dni: int = 365, _v=Depends(require_premium("tools.dividends"))):
+    """Kalendarz wypłat tylko dla spółek z portfela: kiedy i ile przyjdzie.
+
+    **To jest prognoza z historii, nie zapowiedź.** Spółki ogłaszają dywidendę
+    na jeden termin naprzód, więc cały rok da się tylko przewidzieć: bierzemy
+    wypłaty z ostatnich dwunastu miesięcy i przesuwamy je o rok. Gdy spółka
+    ogłosiła już najbliższy termin, podmieniamy nim ten przewidziany — i ten
+    jeden wpis oznaczamy jako potwierdzony.
+
+    Kwota = liczba akcji, które masz DZIŚ, razy wypłata na akcję z ostatniego
+    razu, po dzisiejszym kursie walut. Daty z Yahoo to dni bez dywidendy —
+    przelew przychodzi zwykle od kilku dni do kilku tygodni później.
+    """
+    pary, _ = _pozycje_z_katalogiem()
+    if not pary:
+        return {"empty": True}
+
+    dni = max(30, min(int(dni or 365), 400))
+    dzis = dt.date.today()
+    koniec = dzis + dt.timedelta(days=dni)
+    rok_temu = dzis - dt.timedelta(days=365)
+    kursy: dict[str, float | None] = {}
+
+    wydarzenia, bez_danych = [], []
+    for p, s, w in pary:
+        if s is None or w is None:
+            continue
+        akcje = float(p.get("shares") or 0)
+        if akcje <= 0:
+            continue
+        waluta = (w.get("waluta") or p.get("currency") or "PLN").upper()
+        if waluta not in kursy:
+            kursy[waluta] = _kurs_pln(waluta)
+        kurs = kursy[waluta]
+        historia = lab.historia(w["symbol"]) or []
+        ostatnie = [h for h in historia if dt.date.fromisoformat(h["data"]) > rok_temu]
+        if not ostatnie or kurs is None:
+            bez_danych.append({"symbol": w["symbol"], "nazwa": w["nazwa"]})
+            continue
+
+        # Terminy pewne: ogłoszone, czyli leżące już w przyszłości — Yahoo potrafi
+        # mieć najbliższy w historii, a moduł SEO trzyma go osobno.
+        pewne = {}
+        for h in ostatnie:
+            d0 = dt.date.fromisoformat(h["data"])
+            if d0 >= dzis:
+                pewne[d0] = h["kwota"]
+        ogloszony = w.get("bez_dywidendy")
+        if ogloszony and isinstance(w.get("dni_do_ex"), int) and w["dni_do_ex"] >= 0:
+            d_og = dt.date.fromisoformat(ogloszony)
+            if not any(abs((d - d_og).days) <= 3 for d in pewne):
+                pewne[d_og] = None        # kwotę weźmiemy z tego samego terminu rok temu
+
+        # Terminy przewidziane: każda przeszła wypłata z ostatniego roku przesunięta
+        # o rok. Taka, która wypada blisko ogłoszonej (±45 dni), to ta sama wypłata
+        # — ustępuje jej miejsca i oddaje jej swoją kwotę, gdy ogłoszona jej nie ma.
+        terminy = [{"data": d, "na_akcje": k, "pewne": True} for d, k in pewne.items()]
+        # Przy wypłatach regularnych (co kwartał, co miesiąc) liczy się OSTATNIA
+        # stawka — spółka, która podniosła dywidendę, nie wraca do starej. Przy
+        # rocznych i półrocznych kwoty bywają różne z natury, więc zostają swoje.
+        przeszle = [h for h in ostatnie if dt.date.fromisoformat(h["data"]) < dzis]
+        regularne = len(przeszle) >= 3
+        for h in ostatnie:
+            d0 = dt.date.fromisoformat(h["data"])
+            if d0 >= dzis:
+                continue
+            try:
+                d1 = d0.replace(year=d0.year + 1)
+            except ValueError:            # 29 lutego
+                d1 = d0 + dt.timedelta(days=365)
+            bliska = next((t for t in terminy if t["pewne"]
+                           and abs((t["data"] - d1).days) <= 45), None)
+            if bliska:
+                if bliska["na_akcje"] is None:
+                    bliska["na_akcje"] = h["kwota"]
+                continue
+            kwota = przeszle[-1]["kwota"] if regularne else h["kwota"]
+            terminy.append({"data": d1, "na_akcje": kwota, "pewne": False})
+        for t in terminy:
+            if t["na_akcje"] is None:
+                t["na_akcje"] = ostatnie[-1]["kwota"]
+
+        for t in terminy:
+            if not (dzis <= t["data"] <= koniec):
+                continue
+            brutto = akcje * t["na_akcje"] * kurs
+            podatek = lab.po_podatku(brutto, w["rynek"])
+            wydarzenia.append({
+                "symbol": w["symbol"],
+                "ticker": w["ticker"],
+                "nazwa": w["nazwa"],
+                "rynek": w["rynek"],
+                "data": t["data"].isoformat(),
+                "dni": (t["data"] - dzis).days,
+                "pewne": t["pewne"],
+                "akcje": round(akcje, 4),
+                "na_akcje": round(t["na_akcje"], 4),
+                "waluta": waluta,
+                "brutto": round(brutto, 2),
+                "netto": podatek["netto"],
+            })
+
+    wydarzenia.sort(key=lambda x: (x["data"], -x["brutto"]))
+    miesiace: dict[str, dict] = {}
+    for e in wydarzenia:
+        m = miesiace.setdefault(e["data"][:7], {"miesiac": e["data"][:7], "brutto": 0.0,
+                                                 "netto": 0.0, "pozycje": []})
+        m["brutto"] = round(m["brutto"] + e["brutto"], 2)
+        m["netto"] = round(m["netto"] + e["netto"], 2)
+        m["pozycje"].append(e)
+
+    return {
+        "empty": False,
+        "od": dzis.isoformat(),
+        "dni": dni,
+        "razem": len(wydarzenia),
+        "brutto": round(sum(e["brutto"] for e in wydarzenia), 2),
+        "netto": round(sum(e["netto"] for e in wydarzenia), 2),
+        "spolek": len({e["symbol"] for e in wydarzenia}),
+        "miesiace": [miesiace[k] for k in sorted(miesiace)],
+        "bez_danych": bez_danych,
     }
 
 
