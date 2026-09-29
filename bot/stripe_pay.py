@@ -417,6 +417,14 @@ def handle_event(event: dict) -> bool:
                 # Zakup BLIK-iem nie tworzy faktury, więc `invoice.paid` po nim
                 # nie przyjdzie — ślad zakupu musi powstać tutaj.
                 meta = obiekt.get("metadata") or {}
+                # BLIK zatwierdzony od ręki przysyła OBA zdarzenia (`completed`
+                # i `async_payment_succeeded`) jako opłacone — bez tego sprawdzenia
+                # każdy zakup zapisywał się dwa razy i Kokpit pokazywał podwójne wpływy.
+                import supabase_auth as sa
+                if sa._service_get("premium_events", {
+                        "event": "eq.purchase", "meta->>sesja": f"eq.{obiekt.get('id')}",
+                        "select": "id", "limit": "1"}):
+                    return zapisane
                 _slad(str(meta.get("user_id") or ""), "purchase", {
                     "plan": meta.get("plan"), "metoda": "blik",
                     "kwota": obiekt.get("amount_total"), "waluta": obiekt.get("currency"),
