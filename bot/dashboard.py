@@ -2139,6 +2139,7 @@ def api_health():
     czy proces żyje i czy baza odpowiada.
     """
     import db
+    import memstat
     import paths
     dbs = db.healthy()
     return {
@@ -2150,6 +2151,8 @@ def api_health():
         # powód odmowy) są w /api/dev/status, czyli za kontem właściciela.
         "storage": "zapasowy" if paths.PROBLEM else "ok",
         "started_at": _STARTED_AT,
+        # zajęta pamięć — to za nią hosting liczy najwięcej (patrz `memstat.py`)
+        "rss_mb": memstat.rss_mb(),
         "api": API_VERSION,
     }
 

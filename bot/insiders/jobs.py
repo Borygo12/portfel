@@ -24,6 +24,8 @@ import os
 import threading
 import time
 
+import memstat
+
 from . import follow, moje_spolki, people, store
 
 log = logging.getLogger("insiders.jobs")
@@ -95,11 +97,22 @@ def _po_przyroscie(uidy: list[str]) -> None:
             _blad(nazwa, e)
 
 
+def _z_pomiarem(nazwa: str, funkcja, przed: float | None):
+    """Zadanie, po którym pamięć wraca do systemu — także gdy się wywróci.
+    Paczki SEC i PDF-y urzędów potrafią na chwilę nabrać setek MB; bez zwrotu
+    proces trzymałby je do restartu, a hosting liczy pamięć co do minuty."""
+    try:
+        return funkcja()
+    finally:
+        STAN["rss_mb"] = memstat.po_zadaniu(nazwa, przed)
+
+
 def _zrob(nazwa: str, funkcja):
     STAN["etap"] = nazwa
     t0 = time.time()
+    przed = memstat.rss_mb()
     try:
-        wynik = funkcja()
+        wynik = _z_pomiarem(nazwa, funkcja, przed)
     except Exception as e:  # noqa: BLE001 — jedno źródło nie może zatrzymać reszty
         from . import sec
         if isinstance(e, sec.Zablokowane):
@@ -278,7 +291,8 @@ def _petla_ai() -> None:
     _stop.wait(5 * 60)                      # po starcie najpierw dane, potem teksty
     while not _stop.is_set():
         try:
-            STAN["ostatnie"]["ai_zawczasu"] = {"at": time.time(), "wynik": podsumowania_zawczasu()}
+            STAN["ostatnie"]["ai_zawczasu"] = {"at": time.time(), "wynik": _z_pomiarem(
+                "ai_zawczasu", podsumowania_zawczasu, memstat.rss_mb())}
         except Exception as e:  # noqa: BLE001
             _blad("ai_zawczasu", e)
         _stop.wait(AI_CO)
@@ -316,7 +330,8 @@ def _petla_wyroznione() -> None:
     while not _stop.is_set():
         if store.kv_get("init_done"):
             try:
-                STAN["ostatnie"]["wyroznione"] = {"at": time.time(), "wynik": wyroznione_i_narracje()}
+                STAN["ostatnie"]["wyroznione"] = {"at": time.time(), "wynik": _z_pomiarem(
+                    "wyroznione", wyroznione_i_narracje, memstat.rss_mb())}
             except Exception as e:  # noqa: BLE001
                 _blad("wyroznione", e)
         _stop.wait(WYROZNIONE_CO)

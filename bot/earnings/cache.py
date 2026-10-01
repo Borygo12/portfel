@@ -44,8 +44,35 @@ def _katalog_cache() -> str:
 
 
 _DIR = _katalog_cache()
-_mem: dict = {}
 _lock = threading.Lock()
+
+# Pamięć ma LIMIT — dysk nie. Bez limitu każdy klucz, o który ktokolwiek zapytał,
+# zostawał w procesie do restartu: notowania z dwóch lat dla każdej spółki, którą
+# tknął jakiś insider, to kilka tysięcy wpisów po ~50 KB, czyli setki MB RAM-u,
+# za które hosting liczy co do minuty. Trzymamy więc tylko ostatnio używane
+# (słownik zachowuje kolejność — trafiony wpis idzie na koniec, wypadają
+# z początku); reszta wraca z pliku w milisekundę.
+#
+# Rozmiar wpisu liczymy długością jego JSON-a. W pamięci Pythona to samo zajmuje
+# 3–5 razy więcej, więc 24 MB tekstu to około 100 MB procesu.
+_MEM_LIMIT = int(float(os.environ.get("EARNINGS_CACHE_MEM_MB", "24")) * 1024 * 1024)
+_mem: dict = {}                 # klucz -> (czas, dane, rozmiar)
+_mem_rozmiar = 0
+
+
+def _zapamietaj(key: str, at: float, data, rozmiar: int) -> None:
+    """Wstawia wpis na koniec kolejki i wyrzuca najdawniej używane ponad limit.
+    Wołać z `_lock`."""
+    global _mem_rozmiar
+    stary = _mem.pop(key, None)
+    if stary:
+        _mem_rozmiar -= stary[2]
+    if rozmiar > _MEM_LIMIT // 4:
+        return                          # olbrzym wypchnąłby wszystko inne — zostaje na dysku
+    _mem[key] = (at, data, rozmiar)
+    _mem_rozmiar += rozmiar
+    while _mem_rozmiar > _MEM_LIMIT and _mem:
+        _mem_rozmiar -= _mem.pop(next(iter(_mem)))[2]
 
 UA = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -65,17 +92,23 @@ def _path(key: str) -> str:
 
 def get(key: str, ttl: int):
     """Świeży wpis albo None. Najpierw pamięć, potem dysk."""
+    global _mem_rozmiar
     now = time.time()
     with _lock:
         hit = _mem.get(key)
-    if hit and now - hit[0] < ttl:
-        return hit[1]
+        if hit:
+            if now - hit[0] < ttl:
+                _mem[key] = _mem.pop(key)       # trafiony = ostatnio używany
+                return hit[1]
+            # przeterminowany wpis nie ma po co leżeć w pamięci
+            _mem_rozmiar -= _mem.pop(key)[2]
     try:
         with open(_path(key), encoding="utf-8") as f:
-            saved = json.load(f)
+            tekst = f.read()
+        saved = json.loads(tekst)
         if now - saved.get("at", 0) < ttl:
             with _lock:
-                _mem[key] = (saved["at"], saved["data"])
+                _zapamietaj(key, saved["at"], saved["data"], len(tekst))
             return saved["data"]
     except (OSError, ValueError):
         pass
@@ -84,13 +117,21 @@ def get(key: str, ttl: int):
 
 def put(key: str, data) -> None:
     now = time.time()
+    try:
+        tekst = json.dumps({"at": now, "data": data}, ensure_ascii=False)
+    except (TypeError, ValueError) as e:
+        # danych nie da się zapisać — zostają tylko w pamięci, jak dotąd
+        log.debug("Cache zapis %s: %s", key, e)
+        with _lock:
+            _zapamietaj(key, now, data, 4096)
+        return
     with _lock:
-        _mem[key] = (now, data)
+        _zapamietaj(key, now, data, len(tekst))
     try:
         os.makedirs(_DIR, exist_ok=True)
         tmp = _path(key) + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"at": now, "data": data}, f, ensure_ascii=False)
+            f.write(tekst)
         os.replace(tmp, _path(key))
     except OSError as e:
         log.debug("Cache zapis %s: %s", key, e)

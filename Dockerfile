@@ -13,7 +13,14 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PORTEVO_CLOUD=1 \
-    PORTEVO_DATA_DIR=/data
+    PORTEVO_DATA_DIR=/data \
+    MALLOC_ARENA_MAX=2
+
+# MALLOC_ARENA_MAX: serwer ma kilkadziesiąt wątków tła, a glibc domyślnie daje
+# każdemu własną pulę pamięci (do 8 na rdzeń). Zwolniona pamięć zostaje wtedy
+# rozsiana po pulach i nie wraca do systemu — proces „puchnie", choć Python
+# niczego już nie trzyma. Hosting liczy pamięć co do minuty, więc dwie pule
+# zamiast kilkudziesięciu to realnie niższy rachunek; na szybkość nie wpływa.
 
 WORKDIR /app
 
