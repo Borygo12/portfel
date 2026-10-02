@@ -54,6 +54,7 @@ Odpowiedz WYŁĄCZNIE obiektem JSON o dokładnie takiej budowie:
 {
   "broker": "nazwa biura maklerskiego, jeśli da się rozpoznać, inaczej null",
   "waluta_konta": "kod waluty rachunku, np. PLN, jeśli widoczna, inaczej null",
+  "typ_konta": "ike | ikze | oki | zwykle — rodzaj rachunku, którego dotyczy plik, inaczej null",
   "pozycje": [
     {
       "walor": "nazwa lub ticker instrumentu, dokładnie jak w pliku",
@@ -63,7 +64,8 @@ Odpowiedz WYŁĄCZNIE obiektem JSON o dokładnie takiej budowie:
       "cena": cena jednostkowa jako liczba albo null,
       "waluta": "kod waluty ceny albo null",
       "data": "RRRR-MM-DD daty zakupu albo null",
-      "kierunek": "kupno | sprzedaz"
+      "kierunek": "kupno | sprzedaz",
+      "konto": "ike | ikze | oki | zwykle — na jakim rachunku leży TA pozycja, inaczej null"
     }
   ],
   "gotowka": [{"waluta": "PLN", "kwota": liczba}],
@@ -82,6 +84,12 @@ Zasady:
   transakcji tego samego instrumentu to nie są osobne pozycje: wypisz transakcje,
   a wiersz zbiorczy pomiń.
 - Gotówkę bierz z podsumowania salda, nie sumuj jej sam z listy operacji.
+- Konta emerytalne: IKE (Indywidualne Konto Emerytalne), IKZE (Indywidualne Konto
+  Zabezpieczenia Emerytalnego) i OKI (Osobiste Konto Inwestycyjne) to osobne
+  rachunki. Rozpoznaj je po nagłówku, nazwie rachunku, nazwie pliku albo zakładki
+  („Rachunek IKE", „IKZE", „Konto emerytalne", „IKE Deposit"). Gdy plik obejmuje
+  kilka rachunków, wpisz rodzaj przy KAŻDEJ pozycji w polu "konto". Gdy nic na
+  konto emerytalne nie wskazuje, wpisz "zwykle" — nie zgaduj.
 - Gdy zestawienia otwartych pozycji nie ma, wypisz kupna i sprzedaże z historii.
 - Jeśli plik w ogóle nie wygląda na raport maklerski, zwróć pustą listę pozycji
   i napisz to w polu "uwagi"."""
@@ -149,6 +157,12 @@ def _liczba(v):
         return None
 
 
+def _typ_konta(v) -> str:
+    """'ike' / 'ikze' / 'oki' albo '' — z tego, co wpisał model."""
+    s = str(v or "").strip().lower()
+    return s if s in ("ike", "ikze", "oki") else ""
+
+
 def _uporzadkuj(surowe: dict) -> dict:
     """Sprowadza odpowiedź modelu do kształtu, na którym można polegać.
 
@@ -156,6 +170,7 @@ def _uporzadkuj(surowe: dict) -> dict:
     doda swoje. Ten krok jest tańszy niż obrona przed tym w dziesięciu miejscach
     dalej — i sprawia, że reszta kodu może zakładać poprawne typy.
     """
+    typ_pliku = _typ_konta(surowe.get("typ_konta"))
     poz = []
     for p in (surowe.get("pozycje") or []):
         if not isinstance(p, dict):
@@ -174,6 +189,8 @@ def _uporzadkuj(surowe: dict) -> dict:
             "waluta": ((p.get("waluta") or "").strip().upper() or None),
             "data": (p.get("data") or "")[:10] or None,
             "kierunek": "sprzedaz" if p.get("kierunek") == "sprzedaz" else "kupno",
+            # rodzaj konta: z pozycji, a gdy model go tam nie wpisał — z całego pliku
+            "konto": _typ_konta(p.get("konto")) or typ_pliku,
         })
 
     gotowka = []
@@ -189,6 +206,7 @@ def _uporzadkuj(surowe: dict) -> dict:
     return {
         "broker": (surowe.get("broker") or "").strip()[:60] or None,
         "waluta_konta": ((surowe.get("waluta_konta") or "").strip().upper() or None),
+        "typ_konta": typ_pliku or None,
         "pozycje": poz,
         "gotowka": gotowka,
         "uwagi": (surowe.get("uwagi") or "").strip()[:400],
@@ -329,8 +347,14 @@ def zbierz(pozycje: list[dict]) -> list[dict]:
         klucz = _rdzen(p.get("ticker") or p.get("walor") or "")
         if not klucz:
             continue
-        g = grupy.setdefault(klucz, {
-            "klucz": klucz, "walor": p.get("walor") or klucz, "ticker": p.get("ticker"),
+        # Ten sam walor na IKE i na zwykłym rachunku to dwie osobne pozycje —
+        # zlane w jedną nie dałoby się ich potem rozdzielić między konta.
+        konto = p.get("konto") or ""
+        g = grupy.setdefault(f"{klucz}|{konto}", {
+            # `klucz` identyfikuje wiersz na liście w aplikacji, `rdzen` służy
+            # do porównania z tym, co konto już ma
+            "klucz": f"{klucz}·{konto}" if konto else klucz, "rdzen": klucz, "konto": konto,
+            "walor": p.get("walor") or klucz, "ticker": p.get("ticker"),
             "typ": p.get("typ") or "inne", "waluta": p.get("waluta"), "ilosc": 0.0,
             "_kup_il": 0.0, "_kup_kw": 0.0, "data": p.get("data"), "transakcji": 0})
         g["transakcji"] += 1

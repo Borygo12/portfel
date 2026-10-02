@@ -192,6 +192,33 @@ FEATURES: list[dict] = [
     },
 
     {
+        "id": "tools.retirement",
+        "group": "tools",
+        "screen": "tools",
+        "status": "live",
+        "icon": "emerytura",
+        "title": "Konta emerytalne: IKE, IKZE i OKI",
+        "tagline": "Ile podatku już Ci nie zabrano — i co się stanie, gdy wypłacisz dziś",
+        "pitch": (
+            "IKE i IKZE to najtańszy legalny sposób na niepłacenie podatku od inwestycji, "
+            "ale broker pokazuje je jak każdy inny rachunek. Tu każde konto ma własny wykres, "
+            "licznik zaoszczędzonego podatku i licznik limitu wpłat z odliczaniem do końca "
+            "roku. Do tego symulacja wypłaty: ile dostaniesz na rękę dziś, a ile po "
+            "spełnieniu warunków — policzone na Twoich pieniądzach, nie na przykładzie "
+            "z poradnika."
+        ),
+        "bullets": [
+            "Licznik zaoszczędzonego podatku Belki i zwrotu z PIT za wpłaty na IKZE",
+            "Limit wpłat na ten rok: ile zostało, ile dni i ile odkładać miesięcznie",
+            "„Co, jeśli wypłacę teraz?” — podatek i kwota na rękę dla IKE i IKZE",
+            "Osobny wykres wartości i wpłat każdego konta",
+            "Prognoza do emerytury na tle zwykłego rachunku",
+            "Automatyczne rozpoznanie IKE i IKZE w raporcie — także przez AI u innych brokerów",
+        ],
+        "free_hint": ("Bez premium czytasz wszystkie zasady i limity, a liczby "
+                      "widzisz na przykładowym koncie."),
+    },
+    {
         "id": "tools.ai_report",
         "group": "tools",
         "screen": "overview",
@@ -524,26 +551,6 @@ FEATURES: list[dict] = [
         "free_hint": "",
     },
 
-    {
-        "id": "portfolio.ike",
-        "group": "portfolio",
-        "screen": "more",
-        "status": "soon",
-        "icon": "teczka",
-        "title": "IKE i IKZE pod kontrolą",
-        "tagline": "Ile limitu zostało i ile podatku dzięki temu nie zapłacisz",
-        "pitch": (
-            "Oznaczasz rachunek jako IKE albo IKZE, a Portevo pilnuje reszty: ile wpłaciłeś "
-            "w tym roku, ile zostało do limitu i ile dni do końca grudnia. Do tego kwota, "
-            "którą odzyskasz w PIT dzięki IKZE, i podatek Belki, którego nie zapłacisz na IKE."
-        ),
-        "bullets": [
-            "Licznik wpłat względem tegorocznego limitu",
-            "Przypomnienie przed końcem roku, gdy limit nie jest wykorzystany",
-            "Zaoszczędzony podatek policzony na Twoich pozycjach",
-        ],
-        "free_hint": "",
-    },
     {
         "id": "portfolio.bonds",
         "group": "portfolio",

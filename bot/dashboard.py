@@ -437,6 +437,12 @@ app.include_router(notify_api.router)
 import insiders_api                              # noqa: E402
 app.include_router(insiders_api.router)
 
+# Konta emerytalne: IKE, IKZE i OKI — limity, tarcza podatkowa, symulacja wypłaty.
+# Zasady (`/meta`) są publiczne, liczby na rachunkach wymagają premium.
+import retirement_api                            # noqa: E402
+app.include_router(retirement_api.router)
+_PUBLIC_PATHS.add("/api/retirement/meta")
+
 
 @app.on_event("startup")
 def _rozgrzej_seo():
@@ -2136,7 +2142,7 @@ def portfolio_closed_summary():
 # Numer podbijamy przy KAŻDYM dołożeniu endpointu, którego używa aplikacja.
 # Telefon porównuje go z własnym wymaganiem i potrafi wtedy powiedzieć wprost
 # „panel na komputerze jest starszy", zamiast pokazywać gołe 404 z serwera.
-API_VERSION = 11
+API_VERSION = 12
 
 
 @app.get("/api/version")
@@ -2144,7 +2150,7 @@ def api_version():
     return {
         "api": API_VERSION,
         "features": ["premium", "accounts", "sync", "allocation_pro", "etf", "legal", "contact",
-                     "apple_iap", "notifications", "referral", "insiders"],
+                     "apple_iap", "notifications", "referral", "insiders", "retirement"],
         "started_at": _STARTED_AT,
     }
 
@@ -2291,10 +2297,18 @@ def portfolio_accounts():
         """SELECT a.account, a.currency, a.imported_at, a.broker, a.fees,
                   COUNT(o.op_id) AS ops, MIN(o.time) AS first_op, MAX(o.time) AS last_op
            FROM accounts a LEFT JOIN cash_ops o ON o.account = a.account
-           GROUP BY a.account ORDER BY a.account""")
+           GROUP BY a.account, a.currency, a.imported_at, a.broker, a.fees
+           ORDER BY a.account""")
+    # Rodzaj rachunku (IKE/IKZE/OKI) osobnym zapytaniem: kolumna przychodzi
+    # z migracji 0011 i lista kont ma działać także przed jej uruchomieniem.
+    try:
+        rodzaje = {k["konto"]: k["typ"] for k in retirement_api.retirement.konta()}
+    except Exception:  # noqa: BLE001
+        rodzaje = {}
     for r in rows:
         prof = pf_fees.profile(r.get("broker"), r.pop("fees", None))
         r["broker_label"] = prof["label"]
+        r["kind"] = rodzaje.get(r["account"], "")
     return rows
 
 

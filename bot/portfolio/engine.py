@@ -71,6 +71,24 @@ def _memo_key() -> str:
     return db.current_user() or "?"
 
 
+def _flow_type(typ: str) -> str:
+    """Wpłata albo wypłata po nazwie operacji — "Deposit", "Withdrawal" albo "".
+
+    Rachunki emerytalne mają u brokera własne nazwy wpłat („IKE Deposit",
+    „IKZE Deposit"). Czytane dosłownie jako „Deposit" nie liczyły się do wpłat
+    wcale: gotówka na koncie rosła, a wpłacony kapitał nie — i cała wpłata
+    wychodziła na zysk.
+    """
+    slowa = set(re.findall(r"[a-z]+", (typ or "").lower()))
+    if not slowa or not slowa <= {"ike", "ikze", "oki", "deposit", "withdrawal", "withdraw"}:
+        return ""
+    if "deposit" in slowa:
+        return "Deposit"
+    if slowa & {"withdrawal", "withdraw"}:
+        return "Withdrawal"
+    return ""
+
+
 def _flight_lock_for(key: str) -> threading.Lock:
     with _flight_lock:
         lk = _flight_locks.get(key)
@@ -119,8 +137,12 @@ def _from_memo(key: str, after_gen: int = -1):
 
 def invalidate() -> None:
     """Kasuje memo zalogowanego użytkownika (cudzych nie ruszamy)."""
+    klucz = _memo_key()
     with _memo_lock:
-        _memo.pop(_memo_key(), None)
+        _memo.pop(klucz, None)
+        # przeliczenia podzbioru rachunków (konta emerytalne) — patrz `compute_subset`
+        for k in [k for k in _memo if k.startswith(klucz + "|")]:
+            _memo.pop(k, None)
     intraday_invalidate(_memo_key())
 
 
@@ -153,10 +175,18 @@ class _Step:
         return self.vals[i - 1] if i else self.default
 
 
-def _parse_ops():
-    """Grupuje operacje: salda gotówki per konto, wolumeny per ticker, przepływy zewn."""
+def _parse_ops(only=None):
+    """Grupuje operacje: salda gotówki per konto, wolumeny per ticker, przepływy zewn.
+
+    `only` zawęża wszystko do wskazanych rachunków. Przelew z rachunku spoza
+    zbioru staje się wtedy przepływem zewnętrznym — dokładnie tak, jak ma być,
+    gdy liczymy samo IKE: pieniądze przyszły do niego z zewnątrz.
+    """
     ops = store.query("SELECT * FROM cash_ops ORDER BY time")
     accounts = {a["account"]: a["currency"] for a in store.query("SELECT * FROM accounts")}
+    if only is not None:
+        ops = [o for o in ops if o["account"] in only]
+        accounts = {a: c for a, c in accounts.items() if a in only}
     if not ops:
         return None
 
@@ -200,9 +230,9 @@ def _parse_ops():
                     left -= take
                     if lot[0] <= 1e-12:
                         lots[tick].pop(0)
-        elif typ in ("Deposit", "Withdrawal"):
+        elif _flow_type(typ):
             flows.append({"date": d, "amount": amt, "currency": accounts.get(acct, "PLN"),
-                          "type": typ, "comment": op["comment"]})
+                          "type": _flow_type(typ), "comment": op["comment"]})
         elif typ == "Transfer":
             pair = _transfer_accounts(op["comment"])
             other = None
@@ -256,8 +286,29 @@ def compute(force: bool = False) -> dict:
         return _compute_now(key)
 
 
-def _compute_now(key: str) -> dict:
-    parsed = _parse_ops()
+def compute_subset(accounts) -> dict:
+    """Ten sam przelicz co `compute`, ale wyłącznie dla wskazanych rachunków.
+
+    Służy kontom emerytalnym: IKE ma mieć własny wykres, własne wpłaty i własny
+    zysk, a nie udział w zbiorczych liczbach całego portfela. Wynik ma tę samą
+    budowę co pełny przelicz, więc reszta kodu nie musi go rozróżniać.
+    """
+    wybrane = frozenset(str(a) for a in accounts)
+    if not wybrane:
+        return {"empty": True}
+    key = _memo_key() + "|" + ",".join(sorted(wybrane))
+    gotowe = _from_memo(key)
+    if gotowe is not None:
+        return gotowe
+    with _flight_lock_for(key):
+        gotowe = _from_memo(key)
+        if gotowe is not None:
+            return gotowe
+        return _compute_now(key, wybrane)
+
+
+def _compute_now(key: str, only=None) -> dict:
+    parsed = _parse_ops(only)
     if not parsed:
         return _zapisz_memo(key, {"empty": True})
 
@@ -447,6 +498,8 @@ def _compute_now(key: str) -> dict:
             {"account": a, "currency": c,
              "cash": (round(cash_step[a].at(today), 2) or 0.0) if a in cash_step else 0.0,
              "broker": (acct_rows.get(a) or {}).get("broker") or "",
+             # '' = zwykły rachunek, 'ike' / 'ikze' / 'oki' = konto emerytalne
+             "kind": (acct_rows.get(a) or {}).get("kind") or "",
              "broker_label": cfg[a]["label"] if a in cfg else "",
              "fees_custom": bool(cfg.get(a, {}).get("custom"))}
             for a, c in parsed["accounts"].items()

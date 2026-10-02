@@ -42,7 +42,36 @@ def executemany(sql: str, rows: list) -> None:
 # ---------- pomocnicze zapisy ----------
 
 def upsert_account(account: str, currency: str, date_from: str, date_to: str,
-                   imported_at: str, broker: str = "") -> None:
+                   imported_at: str, broker: str = "", kind: str = "") -> None:
+    _upsert_account(account, currency, date_from, date_to, imported_at, broker)
+    if kind:
+        set_account_kind(account, kind, "auto")
+
+
+def set_account_kind(account: str, kind: str, source: str = "user") -> bool:
+    """Rodzaj rachunku: '' zwykły, 'ike', 'ikze', 'oki'.
+
+    Wykrycie z raportu (`source='auto'`) nigdy nie nadpisuje tego, co człowiek
+    ustawił ręcznie — raport wgrany drugi raz nie może cofnąć jego poprawki.
+    Zwraca False, gdy baza nie ma jeszcze tych kolumn (migracja 0011): import
+    raportu ma wtedy przejść normalnie, tylko bez oznaczenia.
+    """
+    kind = kind if kind in ("", "ike", "ikze", "oki") else ""
+    try:
+        if source == "auto":
+            execute("UPDATE accounts SET kind=%s, kind_source='auto' "
+                    "WHERE account=%s AND COALESCE(kind_source,'') != 'user'",
+                    (kind, account))
+        else:
+            execute("UPDATE accounts SET kind=%s, kind_source='user' WHERE account=%s",
+                    (kind, account))
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _upsert_account(account: str, currency: str, date_from: str, date_to: str,
+                    imported_at: str, broker: str = "") -> None:
     execute(
         """INSERT INTO accounts(account, currency, date_from, date_to, imported_at, broker)
            VALUES(%s,%s,%s,%s,%s,%s)

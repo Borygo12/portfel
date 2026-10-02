@@ -190,6 +190,59 @@ def detect_broker(sheet_names, cols_seen: set) -> str:
     return ""
 
 
+# Rodzaj rachunku emerytalnego. Granice słów pilnują, żeby „IKE" nie trafiło
+# w środek „IKZE" ani w „Nike"; kolejność sprawdzania ma znaczenie tylko wtedy,
+# gdy raport IKZE wspomina przy okazji o IKE.
+_KIND_RE = re.compile(r"(?<![A-Za-z])(IKZE|IKE|OKI)(?![A-Za-z])", re.IGNORECASE)
+
+
+def _kind_in(text) -> str:
+    znalezione = {m.lower() for m in _KIND_RE.findall(str(text or ""))}
+    for k in ("ikze", "ike", "oki"):
+        if k in znalezione:
+            return k
+    return ""
+
+
+def detect_kind(filename: str, sheets: list) -> str:
+    """'ike' / 'ikze' / 'oki' albo '' — po nazwie pliku, zakładek i metryczce.
+
+    Broker prowadzi konto emerytalne jako osobny rachunek z osobnym raportem,
+    więc szukamy podpisu tam, gdzie raport mówi o sobie: w nazwie pliku
+    (także katalogu w paczce zip), w nazwach zakładek i w wierszach NAD tabelą.
+    Do samej tabeli tu nie zaglądamy — spółka z „IKE" w nazwie nie może zrobić
+    z rachunku konta emerytalnego.
+    """
+    k = _kind_in(re.sub(r"[_\-./\\0-9]+", " ", filename or ""))
+    if k:
+        return k
+    for name, rows in sheets:
+        k = _kind_in(name)
+        if k:
+            return k
+        i, _ = _find_table(rows, _OPS_COLS)
+        if i < 0:
+            i, _ = _find_table(rows, _CLOSED_COLS)
+        for row in rows[:max(i, 0) or 8]:
+            for cell in row or ():
+                if isinstance(cell, str) and len(cell) < 120:
+                    k = _kind_in(cell)
+                    if k:
+                        return k
+    return ""
+
+
+def _kind_from_ops(ops: list) -> str:
+    """Rodzaj rachunku z nazw operacji wpłaty („IKE Deposit") i ich komentarzy."""
+    for op in ops:
+        typ, comment = str(op[2] or ""), str(op[7] or "")
+        if "deposit" in typ.lower() or "wpłat" in typ.lower():
+            k = _kind_in(typ) or _kind_in(comment)
+            if k:
+                return k
+    return ""
+
+
 # ---------------- odczyt tabel ----------------
 
 def _rows_of_sheet(ws) -> list:
@@ -327,6 +380,7 @@ def _parse_sheets(sheets: list, filename: str) -> dict:
             "do Excela i wgraj plik bez zmian.")
 
     broker = detect_broker([n for n, _ in sheets], cols_seen)
+    kind = detect_kind(filename, sheets)
 
     # Numer konta: metryczka nad tabelą, a gdy jej nie ma — nazwa pliku.
     base_rows, base_i = (ops_hit or closed_hit)[1], (ops_hit or closed_hit)[2]
@@ -356,6 +410,8 @@ def _parse_sheets(sheets: list, filename: str) -> dict:
 
     if not currency:
         currency = _guess_currency(account, ops)
+    if not kind:
+        kind = _kind_from_ops(ops)
 
     store.init()
     new_ops = store.insert_cash_ops(ops)
@@ -364,11 +420,11 @@ def _parse_sheets(sheets: list, filename: str) -> dict:
         account, currency,
         meta.get("date_from", ""), meta.get("date_to", ""),
         datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
-        broker,
+        broker, kind,
     )
     return {
         "file": filename.split("/")[-1].split("\\")[-1],
-        "account": account, "currency": currency, "broker": broker,
+        "account": account, "currency": currency, "broker": broker, "kind": kind,
         "ops_total": len(ops), "ops_new": new_ops,
         "closed_total": len(closed), "closed_new": new_closed,
     }

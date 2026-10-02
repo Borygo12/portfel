@@ -293,7 +293,7 @@ def _porownaj(wynik: dict) -> list[dict]:
 
     out = []
     for g in report_ai.zbierz(wynik.get("pozycje") or []):
-        mam = posiadane.get(g["klucz"])
+        mam = posiadane.get(g.get("rdzen") or g["klucz"])
         if g["ilosc"] <= 1e-9:
             stan = "sprzedana"
         elif mam is None:
@@ -452,7 +452,13 @@ async def ai_report_dodaj(request: Request, _v=Depends(require_login)):
             }
             if not symbol and cena:
                 dane["wartosc"] = round(ilosc * cena, 2)
-            dodane.append(wealth.dodaj_aktywo(dane)["id"])
+            aid = wealth.dodaj_aktywo(dane)["id"]
+            dodane.append(aid)
+            # pozycja z IKE/IKZE trafia od razu do narzędzia kont emerytalnych
+            konto = str(p.get("konto") or body.get("konto") or "").lower()
+            if konto in ("ike", "ikze", "oki"):
+                import retirement
+                retirement.ustaw_typ_aktywa(aid, konto)
         except Exception as e:  # noqa: BLE001
             bledy.append({"walor": p.get("walor"), "blad": str(e)[:160]})
     return {"dodane": len(dodane), "bledy": bledy}
