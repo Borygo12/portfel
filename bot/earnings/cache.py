@@ -115,6 +115,24 @@ def get(key: str, ttl: int):
     return None
 
 
+def saved_at(key: str):
+    """Kiedy wpis został zapisany (czas uniksowy) albo None, gdy go nie ma.
+
+    Potrzebne tam, gdzie sam wiek wpisu nie wystarcza: dzień z kalendarza wyników
+    zapisany W TRAKCIE tego dnia nie ma jeszcze wyników spółek raportujących
+    wieczorem, więc nie wolno go traktować jak zamkniętej przeszłości.
+    """
+    with _lock:
+        hit = _mem.get(key)
+        if hit:
+            return hit[0]
+    try:
+        with open(_path(key), encoding="utf-8") as f:
+            return json.load(f).get("at")
+    except (OSError, ValueError):
+        return None
+
+
 def put(key: str, data) -> None:
     now = time.time()
     try:

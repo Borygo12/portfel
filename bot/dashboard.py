@@ -1384,6 +1384,10 @@ import re as _re                                 # noqa: E402
 from earnings import calendar as earn_cal        # noqa: E402
 from earnings import econ as earn_econ           # noqa: E402
 from earnings import report as earn_report       # noqa: E402
+from earnings import results as earn_results     # noqa: E402
+from earnings import impact as earn_impact       # noqa: E402
+from earnings import predict as earn_predict     # noqa: E402
+from earnings import glossary as earn_glossary   # noqa: E402
 from fastapi import Request                      # noqa: E402
 from portfolio import benchmarks as pf_bench     # noqa: E402
 from portfolio import classify as pf_classify    # noqa: E402
@@ -1820,7 +1824,7 @@ def earnings_calendar(start: str, end: str, filter: str = "popular",
             "matched": len(rows),
             "hidden": max(0, len(rows) - len(shown)),
             "mine_count": sum(1 for r in rows if r["owned"] or r["watched"]),
-            "events": ev_days.get(date, []),
+            "events": [earn_glossary.annotate(dict(e)) for e in ev_days.get(date, [])],
             # dzień jeszcze się dociąga w tle — interfejs pokazuje to, co ma,
             # i sam wróci po resztę
             "pending": date in waiting,
@@ -1849,11 +1853,67 @@ def earnings_company(symbol: str):
 
 
 @app.get("/api/earnings/event")
-def earnings_event(event_id: str, country: str = "US", history: bool = True):
+def earnings_event(event_id: str, country: str = "US", history: bool = True,
+                   name: str = ""):
     """Szczegóły wydarzenia ekonomicznego wraz z poprzednimi odczytami."""
-    out = earn_econ.detail(event_id)
-    out["history"] = earn_econ.history(event_id, country) if history else []
+    out = dict(earn_econ.detail(event_id))
+    out["history"] = [earn_glossary.annotate(dict(e))
+                      for e in earn_econ.history(event_id, country)] if history else []
+    # objaśnienie po polsku — z ręcznie pisanego słownika, bez żadnego zapytania
+    out["glossary"] = earn_glossary.lookup(name) if name else None
     return out
+
+
+@app.get("/api/earnings/event-impact")
+def earnings_event_impact(event_id: str, country: str = "US", name: str = "",
+                          ts: int = 0, date: str = ""):
+    """Rynek wokół wydarzenia makro: reakcja na ten odczyt, jak bywało wcześniej
+    i co obstawiają rynki predykcyjne.
+
+    Osobno od `/event`, bo pierwsze wejście potrafi trwać kilka sekund (trzy lata
+    kalendarza i notowania indeksów) — opis i wykres historii nie powinny na to czekać.
+    Każda z trzech części jest niezależna: awaria jednej nie zabiera pozostałych.
+    """
+    out = {"reaction": None, "impact": None, "predictions": []}
+    past = bool(ts and ts <= time.time()) or bool(
+        not ts and date and date < _dt.date.today().isoformat())
+    if past:
+        try:
+            out["reaction"] = earn_impact.reaction(ts or None, date, country) or None
+        except Exception as e:  # noqa: BLE001
+            log.warning("Reakcja rynku na %s: %s", event_id, e)
+    else:
+        try:
+            out["predictions"] = earn_predict.markets(name, country, ts)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Rynki predykcyjne %s: %s", name, e)
+    try:
+        out["impact"] = earn_impact.history(event_id, country)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Historia reakcji %s: %s", event_id, e)
+    return out
+
+
+@app.get("/api/earnings/result")
+def earnings_result(symbol: str, date: str, time_of_day: str = "tbd"):
+    """Reakcja kursu na raport z danego dnia: ruch poza sesją, sama sesja i razem."""
+    sym = (pf_market.resolve(symbol) or symbol or "").upper()
+    return earn_results.reaction(sym, date, time_of_day)
+
+
+@app.get("/api/earnings/reactions")
+def earnings_reactions(date: str, symbols: str = ""):
+    """Reakcje kursu dla kafli minionego dnia. `symbols` = „AAPL:amc,MSFT:tbd"."""
+    items = []
+    for part in symbols.split(","):
+        sym, _, when = part.strip().partition(":")
+        if sym:
+            items.append((sym.upper(), when or "tbd"))
+    try:
+        _dt.date.fromisoformat(date)
+    except ValueError:
+        return {"date": date, "reactions": {}}
+    return {"date": date, "reactions": earn_results.reactions(date, items)}
 
 
 @app.get("/api/portfolio/benchmarks")

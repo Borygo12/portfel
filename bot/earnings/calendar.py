@@ -103,20 +103,56 @@ def _row(raw: dict) -> dict | None:
         "last_year_eps": _money(raw.get("lastYearEPS")),
         "last_year_date": (raw.get("lastYearRptDt") or "").replace("N/A", ""),
         "fiscal_quarter": (raw.get("fiscalQuarterEnding") or "").replace("N/A", ""),
+        # po publikacji Nasdaq dopisuje do tego samego wiersza wynik i zaskoczenie —
+        # przed publikacją obu pól po prostu nie ma
+        "eps_actual": _money(raw.get("eps")),
+        "surprise_pct": _money(raw.get("surprise")),
         "market": "US",
         "currency": "USD",
     }
 
 
+def _settled_ts(date: str) -> float:
+    """Chwila, od której dzień uznajemy za zamknięty: 14:00 UTC następnego dnia.
+
+    Spółki raportujące po sesji w USA publikują około 20–21 UTC, a Nasdaq dopisuje
+    ich wyniki do kalendarza dopiero w nocy. Wpis zapisany wcześniej jest więc
+    niepełny, choć dotyczy „przeszłości".
+    """
+    day = dt.datetime.fromisoformat(date).replace(tzinfo=dt.timezone.utc)
+    return (day + dt.timedelta(days=1, hours=14)).timestamp()
+
+
 def _ttl_for(date: str) -> int:
     today = dt.date.today().isoformat()
     if date < today:
+        at = cache.saved_at(_day_key(date))
+        if at is not None and at < _settled_ts(date):
+            # zapisany, zanim wyniki spłynęły — odświeżamy, aż trafi się pełny
+            return 1800
         return TTL_PAST
     return TTL_TODAY if date == today else TTL_FUTURE
 
 
 def _day_key(date: str) -> str:
-    return f"nasdaq-earnings-{date}"
+    # v2: wiersze niosą wynik i zaskoczenie (`eps_actual`, `surprise_pct`)
+    return f"nasdaq-earnings-v2-{date}"
+
+
+def _known_times(date: str) -> dict:
+    """Pory sesji zapamiętane, zanim dzień minął.
+
+    Dla dat przeszłych Nasdaq oddaje wszędzie `time-not-supplied`, choć dzień
+    wcześniej wiedział, kto raportuje przed sesją, a kto po. Bez tej pory nie da
+    się powiedzieć, czy reakcja kursu to ruch przed otwarciem, czy po zamknięciu —
+    więc przenosimy ją ze starego wpisu, póki jeszcze leży na dysku.
+    """
+    out = {}
+    for key in (f"nasdaq-earnings-{date}", _day_key(date)):
+        for r in cache.get(key, 10 ** 9) or []:
+            if r.get("time") in ("bmo", "amc"):
+                out[r["symbol"]] = r["time"]
+    return out
 
 
 def fetch_day(date: str) -> list:
@@ -127,6 +163,10 @@ def fetch_day(date: str) -> list:
         data = (r.json() or {}).get("data") or {}
         rows = data.get("rows") or []
         out = [x for x in (_row(it) for it in rows) if x]
+        known = _known_times(date)
+        for x in out:
+            if x["time"] == "tbd" and x["symbol"] in known:
+                x["time"] = known[x["symbol"]]
         # Nasdaq zwraca `rows: null` dla weekendów, świąt i dat dalszych niż ~6 tygodni
         # (terminy nie są jeszcze ogłoszone). Pusta lista jest wtedy poprawną
         # odpowiedzią, nie błędem, więc zapisujemy ją do cache.
