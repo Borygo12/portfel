@@ -183,11 +183,35 @@ FEATURES: list[dict] = [
             "Twarze insiderów na wykresie każdej spółki — kto, kiedy i za ile",
             "Zarządy spółek z GPW, Nancy Pelosi, Donald Trump, Kongres i prezesi w jednym rankingu",
             "Wynik zakupów każdej persony za ostatnie 12 miesięcy",
+            "Najciekawsze zagrania — także te, w których polityk kupuje branżę, którą sam nadzoruje",
             "Profil ze strukturą zakupów i podsumowaniem AI",
             "Powiadomienie, gdy obserwowana osoba coś kupi albo sprzeda",
         ],
         "free_hint": ("Bez premium widzisz ranking i znaczniki na wykresach, a o transakcjach "
                       "w swoich spółkach dostajesz zapowiedź — bez nazwisk i kwot."),
+    },
+
+    {
+        "id": "tools.ai_report",
+        "group": "tools",
+        "screen": "overview",
+        "status": "live",
+        "icon": "broker",
+        "title": "Import od dowolnego brokera przez AI",
+        "tagline": "Wrzuć raport albo zrzut ekranu — portfel uzupełni się sam",
+        "pitch": (
+            "Nie każdy ma rachunek w XTB. Wgrywasz plik z historii swojego brokera albo "
+            "zwykły zrzut ekranu z pozycjami, a model odczytuje z niego walory, liczbę "
+            "sztuk, ceny i daty. Niczego nie liczy sam — wyceny i stopy zwrotu robi ten "
+            "sam silnik co zawsze — i nic nie trafia do portfela, dopóki tego nie zatwierdzisz."
+        ),
+        "bullets": [
+            "Raporty z plików oraz zdjęcia i zrzuty ekranu",
+            "Dopasowanie pozycji do tickerów z prawdziwymi notowaniami",
+            "Podgląd odczytu przed zapisaniem — poprawiasz, zanim wejdzie do portfela",
+            "Bez limitu odczytów",
+        ],
+        "free_hint": "Bez premium masz jeden odczyt na próbę.",
     },
 
     # ------------------------------------------------------------ bot newsowy
@@ -218,7 +242,7 @@ FEATURES: list[dict] = [
         "group": "bot",
         "screen": "bot",
         "status": "live",
-        "icon": "antena",
+        "icon": "dzwonek",
         "title": "Powiadomienia o Twoich spółkach",
         "tagline": "Telefon odezwie się wtedy, gdy dzieje się coś u Ciebie",
         "pitch": (
@@ -297,26 +321,6 @@ FEATURES: list[dict] = [
         ],
         "free_hint": "Bez premium widzisz kalendarz wydarzeń, ale bez transkrypcji i analiz.",
     },
-    {
-        "id": "bot.alerts",
-        "group": "bot",
-        "screen": "bot",
-        "status": "soon",
-        "icon": "dzwonek",
-        "title": "Alerty push z newsów",
-        "tagline": "Telefon zawibruje, gdy pojawi się mocny sygnał dla Twojej spółki",
-        "pitch": (
-            "Powiadomienie na telefon w momencie, w którym bot wykryje mocny sygnał dotyczący "
-            "spółki z Twojego portfela albo listy obserwowanych. Z progiem siły, żeby nie "
-            "dzwoniło przy każdej pierdole."
-        ),
-        "bullets": [
-            "Próg siły sygnału — decydujesz, co jest warte wybudzenia",
-            "Filtr: tylko moje spółki / tylko obserwowane / wszystko",
-            "Cisza nocna i limit powiadomień na godzinę",
-        ],
-        "free_hint": "",
-    },
 
     # ------------------------------------------------------- alokacja i ryzyko
     {
@@ -358,6 +362,46 @@ FEATURES: list[dict] = [
             "Macierz korelacji z podświetleniem par powyżej 0,8",
             "Średnia korelacja portfela — jedna liczba mówiąca o dywersyfikacji",
             "Wskazanie pozycji, których dołożenie najbardziej ją obniży",
+        ],
+        "free_hint": "",
+    },
+    {
+        "id": "alloc.whatif",
+        "group": "alloc",
+        "screen": "allocation",
+        "status": "soon",
+        "icon": "suwaki",
+        "title": "Symulator „co jeśli”",
+        "tagline": "Sprawdź zakup, zanim wydasz na niego pieniądze",
+        "pitch": (
+            "Wpisujesz, co chcesz dokupić albo sprzedać, i od razu widzisz portfel po tej "
+            "zmianie: czy ryzyko rośnie, czy maleje, jak zmienia się koncentracja i ile "
+            "nowa pozycja naprawdę wnosi dywersyfikacji. Bez ruszania prawdziwych pieniędzy."
+        ),
+        "bullets": [
+            "Zmienność, koncentracja i ekspozycja walutowa — przed i po",
+            "Porównanie kilku pomysłów na te same pieniądze",
+            "Odpowiedź na pytanie „czy to coś zmienia, czy dokładam to samo”",
+        ],
+        "free_hint": "",
+    },
+    {
+        "id": "alloc.stress",
+        "group": "alloc",
+        "screen": "allocation",
+        "status": "soon",
+        "icon": "uwaga",
+        "title": "Test kryzysowy portfela",
+        "tagline": "Ile byś stracił w 2008, w 2020 i w 2022 — z dzisiejszym składem",
+        "pitch": (
+            "Przepuszczamy Twój obecny portfel przez prawdziwe załamania rynku: kryzys "
+            "finansowy, pandemię, bessę po podwyżkach stóp. Dostajesz kwotę w złotówkach, "
+            "nie procent z podręcznika — i listę pozycji, które bolałyby najbardziej."
+        ),
+        "bullets": [
+            "Historyczne scenariusze liczone na Twoich wagach",
+            "Strata w złotówkach i czas potrzebny na odrobienie",
+            "Własny scenariusz: dolar −15%, technologia −30%",
         ],
         "free_hint": "",
     },
@@ -426,9 +470,9 @@ FEATURES: list[dict] = [
         "id": "portfolio.benchmark",
         "group": "portfolio",
         "screen": "overview",
-        "status": "live",
+        "status": "soon",
         "icon": "meta",
-        "title": "Pełne porównanie z rynkiem",
+        "title": "Miary wyniku na tle rynku",
         "tagline": "Zarabiasz, czy tylko rynek rósł razem z Tobą",
         "pitch": (
             "Twoja krzywa na tle indeksów, ale z liczbami, które coś znaczą: alfa (ile dołożyłeś "
@@ -440,7 +484,7 @@ FEATURES: list[dict] = [
             "Sharpe, Sortino i maksymalne obsunięcie",
             "Najlepszy i najgorszy miesiąc, seria zysków i strat",
         ],
-        "free_hint": "Bez premium porównasz krzywe, ale bez miar ryzyka.",
+        "free_hint": "",
     },
     {
         "id": "portfolio.tax",
@@ -480,7 +524,70 @@ FEATURES: list[dict] = [
         "free_hint": "",
     },
 
+    {
+        "id": "portfolio.ike",
+        "group": "portfolio",
+        "screen": "more",
+        "status": "soon",
+        "icon": "teczka",
+        "title": "IKE i IKZE pod kontrolą",
+        "tagline": "Ile limitu zostało i ile podatku dzięki temu nie zapłacisz",
+        "pitch": (
+            "Oznaczasz rachunek jako IKE albo IKZE, a Portevo pilnuje reszty: ile wpłaciłeś "
+            "w tym roku, ile zostało do limitu i ile dni do końca grudnia. Do tego kwota, "
+            "którą odzyskasz w PIT dzięki IKZE, i podatek Belki, którego nie zapłacisz na IKE."
+        ),
+        "bullets": [
+            "Licznik wpłat względem tegorocznego limitu",
+            "Przypomnienie przed końcem roku, gdy limit nie jest wykorzystany",
+            "Zaoszczędzony podatek policzony na Twoich pozycjach",
+        ],
+        "free_hint": "",
+    },
+    {
+        "id": "portfolio.bonds",
+        "group": "portfolio",
+        "screen": "overview",
+        "status": "soon",
+        "icon": "obligacje",
+        "title": "Obligacje skarbowe z automatyczną wyceną",
+        "tagline": "Wpisujesz serię i liczbę sztuk — odsetki liczą się same",
+        "pitch": (
+            "EDO, COI, ROS, TOS: podajesz serię i datę zakupu, a Portevo samo nalicza "
+            "odsetki dzień po dniu — z inflacją GUS i marżą Twojej serii. Widzisz bieżącą "
+            "wartość, oprocentowanie w kolejnym okresie i to, ile zostałoby po "
+            "przedterminowym wykupie."
+        ),
+        "bullets": [
+            "Wycena na dziś bez przepisywania tabel odsetkowych",
+            "Kalendarz wykupów i wypłat odsetek",
+            "Realny zysk po inflacji i po podatku",
+        ],
+        "free_hint": "",
+    },
+
     # --------------------------------------------------------- rynek i spółki
+    {
+        "id": "market.earnings_ai",
+        "group": "market",
+        "screen": "company",
+        "status": "soon",
+        "icon": "earnings",
+        "title": "Wyniki kwartalne w pigułce",
+        "tagline": "Raport wyszedł o 22:00 — o 22:05 wiesz, co w nim jest",
+        "pitch": (
+            "Gdy spółka z Twojego portfela publikuje wyniki, dostajesz krótkie omówienie "
+            "po polsku: co wyszło lepiej, a co gorzej od oczekiwań, co zarząd powiedział "
+            "o kolejnych kwartałach i jak kurs zareagował. Zamiast czytać czterdzieści "
+            "stron po angielsku."
+        ),
+        "bullets": [
+            "Wynik na tle konsensusu — zysk, przychody, prognozy",
+            "Najważniejsze zdania z konferencji z analitykami",
+            "Powiadomienie od razu po publikacji",
+        ],
+        "free_hint": "",
+    },
     {
         "id": "market.screener",
         "group": "market",
@@ -507,16 +614,16 @@ FEATURES: list[dict] = [
         "screen": "company",
         "status": "soon",
         "icon": "zegar",
-        "title": "Alerty cenowe i wynikowe",
+        "title": "Alerty cenowe",
         "tagline": "Nie musisz sprawdzać kursu — to on odezwie się do Ciebie",
         "pitch": (
-            "Ustaw próg ceny, zmianę dzienną albo termin publikacji wyników i dostaniesz "
-            "powiadomienie. Alerty jadą przez konto, więc ustawione na telefonie działają "
-            "też, gdy siedzisz przy panelu."
+            "Ustaw próg ceny albo dzienną zmianę i dostaniesz powiadomienie, gdy kurs go "
+            "przetnie. Alerty jadą przez konto, więc ustawione na telefonie działają też, "
+            "gdy siedzisz przy panelu."
         ),
         "bullets": [
             "Progi cenowe w górę i w dół, zmiana dzienna",
-            "Przypomnienie o wynikach spółek z portfela",
+            "Alert przy powrocie do Twojej ceny zakupu",
             "Wspólne dla telefonu i panelu web",
         ],
         "free_hint": "",
