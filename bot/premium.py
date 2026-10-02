@@ -214,6 +214,9 @@ FEATURES: list[dict] = [
             "Osobny wykres wartości i wpłat każdego konta",
             "Prognoza do emerytury na tle zwykłego rachunku",
             "Automatyczne rozpoznanie IKE i IKZE w raporcie — także przez AI u innych brokerów",
+            "Przypomnienie przed końcem roku, gdy limit nie jest wykorzystany",
+            "Konto małżonka z osobnym limitem, PPK i PPE, IKE-Obligacje wpisywane ręcznie",
+            "Podpowiedzi z Twoich liczb, kwota do PIT/O i plan wypłat na emeryturze",
         ],
         "free_hint": ("Bez premium czytasz wszystkie zasady i limity, a liczby "
                       "widzisz na przykładowym koncie."),

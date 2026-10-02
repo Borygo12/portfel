@@ -35,6 +35,9 @@ GODZINA_DZIENNA = 8
 # Przegląd tygodnia w poniedziałek, kwadrans wcześniej — żeby dwa powiadomienia
 # nie przyszły w tej samej minucie.
 GODZINA_TYGODNIOWA = 7
+# Przypomnienie o limicie IKE/IKZE — godzinę po wynikach, żeby nie zlało się
+# z nimi w jeden dźwięk. Samo zadanie sprawdza, czy dziś jest jeden z terminów.
+GODZINA_EMERYTALNA = 9
 
 _watek: threading.Thread | None = None
 _stop = threading.Event()
@@ -57,6 +60,7 @@ def _odpal(nazwa: str, dzien: str, funkcja) -> None:
 
 def _petla() -> None:
     from . import earnings
+    from . import retirement as emerytura
 
     log.info("Zegar powiadomień wystartował (strefa: %s)",
              STREFA or "systemowa")
@@ -70,6 +74,9 @@ def _petla() -> None:
 
             if teraz.hour == GODZINA_DZIENNA and teraz.weekday() < 5:
                 _odpal("dzien", dzien, earnings.dzisiejsze)
+
+            if teraz.hour == GODZINA_EMERYTALNA and emerytura.czy_dzis(teraz.date()):
+                _odpal("emerytura", dzien, emerytura.przypomnij)
 
         except Exception as e:  # noqa: BLE001
             log.warning("Zegar powiadomień potknął się: %s", e)

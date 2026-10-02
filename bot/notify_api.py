@@ -177,4 +177,8 @@ def run_job_owner(job: str, request: Request):
         return {"sent": notify_earnings.dzisiejsze()}
     if job == "tydzien":
         return {"sent": notify_earnings.tydzien()}
-    raise HTTPException(400, "Nieznane zadanie — 'dzien' albo 'tydzien'")
+    if job == "emerytura":
+        # poza terminami z kalendarza — po to jest ręczne odpalenie
+        from notify import retirement as notify_retirement
+        return {"sent": notify_retirement.przypomnij(wymus=True)}
+    raise HTTPException(400, "Nieznane zadanie — 'dzien', 'tydzien' albo 'emerytura'")

@@ -29,6 +29,7 @@ DOMYSLNE = {
     "email_enabled": False,
     "email_asked": False,
     "insider_holdings": True,
+    "retirement_limit": True,
 }
 
 TRYBY = ("off", "all", "strong")
@@ -46,6 +47,8 @@ def _wiersz_na_ustawienia(r: dict | None) -> dict:
         "email_asked": r.get("email_asked_at") is not None,
         # kolumna z migracji 0008 — przed nią wiersz jej nie ma, a domyślnie włączone
         "insider_holdings": bool(r.get("insider_holdings", True)),
+        # kolumna z migracji 0012 — przypomnienie o limicie IKE/IKZE
+        "retirement_limit": bool(r.get("retirement_limit", True)),
     }
 
 
@@ -68,7 +71,8 @@ def zapisz_moje(zmiany: dict) -> dict:
     """Zapisuje zmienione pola zalogowanego. Nieznane klucze pomijamy."""
     pola, wartosci = [], []
     for klucz in ("news_mode", "earnings_daily", "earnings_weekly",
-                  "push_enabled", "email_enabled", "insider_holdings"):
+                  "push_enabled", "email_enabled", "insider_holdings",
+                  "retirement_limit"):
         if klucz in zmiany:
             pola.append(klucz)
             wartosci.append(zmiany[klucz])

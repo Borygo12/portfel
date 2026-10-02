@@ -63,6 +63,15 @@ def overview(_v=Depends(require_login)):
               "broker": r["broker"] or "", "etykieta": r["label"] or "",
               "portfel_id": str(r["portfolio_id"]) if r["portfolio_id"] else None}
              for r in konta]
+    # Rodzaj rachunku (IKE/IKZE) osobno — kolumna przychodzi z późniejszej
+    # migracji, a ekran majątku ma działać także bez niej.
+    try:
+        import retirement
+        rodzaje = {k["konto"]: k["typ"] for k in retirement.konta()}
+    except Exception:  # noqa: BLE001
+        rodzaje = {}
+    for k in konta:
+        k["typ"] = rodzaje.get(k["konto"], "")
 
     # Wartość rachunków bierzemy z silnika portfela. Gdy nie ma czego liczyć
     # (nikt nic nie wgrał), po prostu jej nie ma — majątek ręczny ma działać
